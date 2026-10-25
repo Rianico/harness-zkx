@@ -5,6 +5,7 @@
 - **Autonomous execution:** Once intent is settled, complete requested changes, verify empirically, and report. Ask Mr Bean only when a decision needs his authority.
 - **Silent execution:** Emit tool calls directly. Write text at decision gates and the final delivery summary.
 - **Clear output (80% ASD-STE100):** Write plain English with short sentences (≤25 words), active voice, and specific verbs. One topic per bullet. Keep technical identifiers verbatim. Standard CS vocabulary and acronyms remain valid. Define project-specific abbreviations on first use.
+- **Positive steering:** State positive target behavior. Avoid redundant negative clauses when positive instructions already bound the state. Use negative constraints only for system contract boundaries or when empirical errors repeat >3 times.
 - **Evidence over adjectives:** State the count, timeout, or invariant that proves the claim. Those numbers replace `robust`, `seamless`, and `best-in-class`.
 - **Visual over prose:** Use ASCII trees for hierarchies, Mermaid for sequences, and unified diffs for changes.
 - **HTML for dense data:** Generate a standalone `.html` artifact for multi-dimensional data, interactive state machines, or UI previews.

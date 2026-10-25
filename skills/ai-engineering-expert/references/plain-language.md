@@ -79,6 +79,8 @@ A negation names the alternative it forbids. That primes the alternative and spe
 
 Keep the negation that names a **contract boundary**. There, the forbidden alternative is the failure the reader must avoid. The positive form cannot imply it. Examples are `never served` (the on-demand rule), `writes nothing` (a no-op warning), `any failure writes nothing` (atomicity). Those are claims about the system, not restatements of the instruction.
 
+For agent-consumed prompt surfaces, audit negations with `rg -n '\b(no|not|never|without|nothing)\b' <surface>` and require empirical failure (>3 repetitions) before adding negative constraints (see `writing-for-agents` section 5).
+
 ## Active voice with named actors
 
 Passive voice conceals who acts. Callers, runtimes, permissions, and validation boundaries need explicit actors. Name the component, function, process, or user that takes the action.

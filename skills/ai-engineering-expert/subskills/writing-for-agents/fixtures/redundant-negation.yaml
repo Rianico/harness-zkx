@@ -1,0 +1,83 @@
+---
+version: 1
+description: >-
+  Canonical fragments for the redundant-negation audit in writing-for-agents
+  section 5. Redundant fragments carry the positive form that replaces the
+  deleted clause. Contract boundary fragments carry the decision rule the
+  negation protects, so a reviewer can fail a reintroduced "no footer" without
+  trusting the author. Deleting a contract boundary loses a decision rule, not
+  a restatement.
+fragments:
+  - id: REDUNDANT-1
+    text: >-
+      Each page header states the file's own total and the range shown: … .
+      There is no footer.
+    classification: redundant
+    decision: delete_clause
+    reason: >-
+      The header sentence already says what the reader gets. The footer never
+      enters the decision.
+    positive_form: "Delete the second sentence."
+  - id: REDUNDANT-2
+    text: "file is the text file, never a directory."
+    classification: redundant
+    decision: delete_clause
+    reason: >-
+      The schema rejects a directory at admission. The model has no directory
+      choice to avoid.
+    positive_form: "file is the text file."
+  - id: REDUNDANT-3
+    text: >-
+      A [MODEL] line that presents Current range (fresh read): is not a blind
+      retry. Decide from those rows.
+    classification: redundant
+    decision: positive_rewrite
+    reason: >-
+      It frames the forbidden retry; the positive instruction is the second
+      sentence.
+    positive_form: "… shows the current rows. Decide from them."
+  - id: REDUNDANT-4
+    text: "A - diff row's hash is not served."
+    classification: redundant
+    decision: positive_rewrite
+    reason: "The positive inventory already excludes it."
+    positive_form: "The diff serves context and + rows."
+  - id: REDUNDANT-5
+    text: >-
+      Copy the 4 chars before │ in this file's served rows, never │ or
+      content.
+    classification: redundant
+    decision: delete_clause
+    reason: "The copy instruction is complete."
+    positive_form: >-
+      Delete `never │ or content` (and the snippet's `(never copy │)`).
+  - id: BOUNDARY-1
+    text: "never served"
+    classification: contract_boundary
+    decision: keep
+    reason: "The on-demand rule."
+  - id: BOUNDARY-2
+    text: "writes nothing"
+    classification: contract_boundary
+    decision: keep
+    reason: "A no-op warning (`W_NOOP_INSERT`)."
+  - id: BOUNDARY-3
+    text: "any failure writes nothing"
+    classification: contract_boundary
+    decision: keep
+    reason: "Batch atomicity."
+  - id: BOUNDARY-4
+    text: "is not capped"
+    classification: contract_boundary
+    decision: keep
+    reason: "A capability boundary."
+  - id: BOUNDARY-5
+    text: "when you will not edit"
+    classification: contract_boundary
+    decision: keep
+    reason: "A branch condition."
+  - id: BOUNDARY-6
+    text: "no anchors"
+    classification: contract_boundary
+    decision: keep
+    reason: "What verbatim output is."

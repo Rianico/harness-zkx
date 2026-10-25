@@ -65,7 +65,13 @@ Every procedural step must conclude with a checkable, falsifiable **completion c
 
 - **Recruit pretraining priors:** Use established, compact domain concepts (`tight`, `red`, `tracer bullets`, `idempotent`). Never coin custom jargon when standard software engineering terms already activate pre-trained behaviors.
 - **Prompt positive target behavior:** Negation ("Do not write multi-line comments") primes the forbidden tokens. State the action ("Write single-line comments").
-- **Keep only contract-boundary negations.** Delete one when the positive sentence already excludes the alternative. Example: "no footer" after "the header states the range". Keep it when the alternative is the choice the reader must not make. Examples are "never served" and "writes nothing". State the consequence. Test: delete the negation. If no instruction is lost, it was redundant.
+- **Redundant Negation Audit:** Review draft prompt surfaces and skill docs using the 3-step audit instrument:
+  1. **Scan:** Run `rg -n '\b(no|not|never|without|nothing)\b' <surface>`. Read every match. Never rely on word counts.
+  2. **Classify:** Apply the 3-tier semantic decision rubric:
+     - **Tier 1 (Contract Boundary):** System invariants, atomicity guarantees, and on-demand rules (`writes nothing`, `never served`). Keep and state the consequence.
+     - **Tier 2 (Empirical Gotcha):** Model repeated the failure >3 times under the positive instruction alone. Keep in a dedicated gotcha block with a positive recovery action.
+     - **Tier 3 (Redundant Restatement):** Speculative exclusions where the positive form already bounds the state. Delete the clause or convert to a positive inventory.
+  3. **Calibrate:** Compare decisions against canonical fixtures in `fixtures/redundant-negation.yaml`.
 
 ## 6. Pruning Discipline
 
