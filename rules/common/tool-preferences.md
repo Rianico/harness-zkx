@@ -6,7 +6,11 @@
 - **Search:** Prefer `rg` over `grep` or `grep -r`. Ripgrep respects `.gitignore` rules and supports fast scoped queries with `--glob`, `-g`, or `--type`.
 - **File discovery:** Prefer `fd` over `find`. It respects ignore files and provides simple syntax (`fd <pattern> <path>`). Use `fd --type f` or `fd --type d`.
 - **Listing:** Prefer `eza` over `ls` or `tree` (`eza -la` or `eza --tree`). Fall back to `ls` or `tree` when `eza` is unavailable.
-- **Skill paths:** The `$SKILL_DIR` token represents the directory that contains the active `SKILL.md`. For a subskill document, use the subskill directory rather than the parent root. When identical skill names exist globally and locally, prefer the repository-local copy whenever the working directory is that repository.
+- **Skill paths & `$SKILL_DIR`:** The system prompt's `<skills>` block defines the skill directory as `parent of SKILL.md / dirname of the path`. In skill instructions, `$SKILL_DIR` refers to this directory.
+  - **Bash substitution:** Bash does not export `$SKILL_DIR` by default. Replace `$SKILL_DIR` with the resolved absolute path in shell commands. An unexpanded `$SKILL_DIR/scripts/x` evaluates to `/scripts/x` and crashes.
+  - **Top-level skill:** Read `<location>` from the system prompt's `<skill>` XML block. `$SKILL_DIR` is `dirname(<location>)` (e.g. `<location>/path/to/foo/SKILL.md</location>` → `/path/to/foo`).
+  - **Subskill:** For a subskill loaded dynamically (e.g. `.../subskills/bar/SKILL.md`), `$SKILL_DIR` is its own directory (`.../subskills/bar`), not the parent root.
+  - **Reference file:** A file in `.../references/doc.md` is not a `SKILL.md`. It inherits `$SKILL_DIR` from its nearest ancestor `SKILL.md` (the directory above `references/`).
 
 ## Runtimes — Native Tool Governs Dependencies and Versions
 
