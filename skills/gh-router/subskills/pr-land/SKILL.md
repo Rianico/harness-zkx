@@ -2,7 +2,6 @@
 name: pr-land
 description: >-
   Create PR, watch verification checks, and squash-merge via gh api. Use when opening pull requests, monitoring CI check-runs, or merging approved PRs.
-arguments: title_or_branch
 argument-hint: |-
   "[--title '…'] [--body '…' | --body-file FILE] [--base main] [--head BRANCH] [--check] [--status] [--json] [--out LEAF] [--force-scaffold] [--watch] [--verbose] [--merge] [--draft] [--no-stamp] [--squash-message '…' | --squash-message-file FILE]"
 metadata:
@@ -11,7 +10,7 @@ metadata:
 
 # PR — Create → Watch → Squash-Merge
 
-Deterministic GitHub PR lifecycle via `gh api` (avoids `gh pr create` GQL `Head sha blank`). Owns the `POST pulls` → `poll every check` → `PUT merge squash` loop. `pr.py` is the only writer. Run it once per phase, starting with `--check` (see [Draft Phase](#draft-phase)). Never hand-roll `gh` calls. Never invent a squash message.
+Deterministic GitHub PR lifecycle via `gh api` (avoids `gh pr create` GQL `Head sha blank`). Owns the `POST pulls` → `poll every check` → `PUT merge squash` loop. `pr.py` is the only writer. Run it once per phase: `--status` first, then `--check` (see [Flow](#flow)). Never hand-roll `gh` calls. Never invent a squash message.
 
 **Ledger.** The PR carries curated entries under `## [Unreleased]` in `CHANGELOG.md` per `rules/common/git-convention.md` §5. The checks live in `scripts/changelog-gate.py`. Invoke them, never restate them.
 
@@ -40,7 +39,7 @@ uv run $SKILL_DIR/scripts/pr.py --title '…' --watch --merge --body-file .lsz/g
 | `--no-stamp` | Skip auto-stamping `(#NUM)` into `CHANGELOG.md`. The ready flip still runs. |
 | `--check` | Run drafting preflight: gates plus facts on stdout. See [Draft Phase](#draft-phase). |
 | `--status` / `--json` | Read-only landing state: predicates, failure states, artifact, title facts, squash preview, `refusals[]`, `transitions[]`. `--status` never refuses (exit 0); `--json` prints the pinned schema. |
-| `--out LEAF` | Scaffold leaf under `.lsz/gh-router/` (default `<head-slug>.md`). A body-less `--check` writes it only when absent. |
+| `--out LEAF` | Scaffold leaf under `.lsz/gh-router/` (default `<head-slug>.md`; see [Draft Phase](#draft-phase)). |
 | `--force-scaffold` | With a body-less `--check`, regenerate the leaf over an existing file. Otherwise the tool writes nothing and reports path + `stale`. |
 
 ## Draft Phase
@@ -58,12 +57,12 @@ Without a supplied body, the leaf is a candidate scaffold: the installed templat
 
 A with-body `--check` prints `commits: N`, `trailers: N`, the title facts (`derived`, length, budget), the `squash_body_preview`, and one `hint:` line. A body-less run prints the counts, the leaf path, the hint, and the scaffold payload itself. The hint splits the two duties: the PR body keeps the repo's installed template shape (see `install-template.sh`; prose owned by `pr-enhance`), while the squash overview — never the PR body — is the artifact under the curation spec. An open PR already carries its description: a body-less `--check` gates on the fetched PR body and persists nothing.
 
-`--status` is the machine-readable landing state: predicates (`branch_pushed`, `pr_state`, `body_state`, `checks`, `mergeable`, …), failure states (`diverged`, `head_stale`, `stamp_failed`), the artifact path plus `stale`, title facts, the squash preview, advisory `refusals[]`, and the legal `transitions[]` (each with its command, preconditions, and `mutation`). It never refuses and always exits 0.
+`--status` is the machine-readable landing state: predicates (`branch_pushed`, `pr_state`, `body_state`, `checks`, `mergeable`, …), failure states (`diverged`, `head_stale`, `stamp_failed`, `base_unresolvable`), the artifact path plus `stale`, title facts, the squash preview, advisory `refusals[]`, and the legal `transitions[]` (each with its command, preconditions, and `mutation`). It never refuses and always exits 0.
 Curate the scaffold leaf before passing it to the create phase as `--body-file`, in the repo's installed PR template shape (Summary · Root Cause for fixes · Blast Radius & Safety · Evidence · Checklist). It keeps the authored body as supplied or fetched, including human-facing Mermaid diagrams and `<details>` blocks; a merge appends `Co-authored-by` trailers itself.
 
 Author prose from the git-diff-digest brief with `pr-enhance`. The PR body is the reviewer's artifact, not the commit message. Author the squash overview as a separate file (at most 5 bullets and 15 lines). Pass that file to `--merge` with `--squash-message-file`. The merge operation never falls back to the PR body. A message that reproduces the scaffold leaf (`.lsz/gh-router/<slug>.md`) is refused.
 
-Exit: `0` gates passed · `1` a gate refused (see below) · `2` usage error, or no body supplied while no PR exists for the head.
+Exit: `0` gates passed · `1` a gate refused (see below) · `2` usage error, or a body-less `--check` with no open PR (scaffold path).
 
 ## Invariants & Gates
 
@@ -88,7 +87,7 @@ The Title Shape gate matches the type case-insensitively (`FEAT:` passes) and ke
 - **Squash Body Hygiene.** Every path to `commit_message` runs `clean_squash_body`. It strips HTML comments and fenced Mermaid blocks (3+ backticks or tildes). It strips line-anchored `<details>…</details>` blocks. Inline `<details>` tags remain untouched. It strips review-only `## Architecture` and `## Verification Evidence` sections. It also removes `## Checklist` items, `Landing:`/`Ledger-Waiver:` directives, checkboxes, and empty headings. Unclosed fences stop at the next heading, `Closes` keyword, or trailer line. It preserves `## Summary`, `## What Changed`, `## Blast Radius & Safety`, `## Evidence`, standalone `Closes #NN` lines, and `Co-authored-by` trailers. Trailers append automatically. The operation is idempotent: the merge path cleans twice.
 - **Squash Shape.** The PR body and squash message are separate artifacts. The body keeps full reviewer detail (Mermaid, `<details>`, evidence). The squash message is a curated overview of contract sections only, at most 5 bullets and 15 lines. Both `--check` (preview) and `--merge` (explicit message) run the cleaned shape gate.
 
-  Core sections are required on every path. Root is required only for a `fix` title. Non-`fix` types never need it. Blast Radius, Evidence, and Links are validated only when present. A prose-only body passes with Core alone. When declared, Blast Radius requires a `Door:` line (or the template's `**Rollback / containment:**` label) plus a rollback statement. Evidence requires a before -> after demonstration. Links requires the PR link once the PR exists (see [Draft Phase](#draft-phase)). Each `Closes #NN` line must name exactly one issue.
+  Core is the `## Summary` section (`What Changed` and `Core` are aliases; leading prose counts). Core is required on every path. Root is required only for a `fix` title. Non-`fix` types never need it. Blast Radius, Evidence, and Links are validated only when present. A prose-only body passes with Core alone. When declared, Blast Radius requires a `Door:` line (or the template's `**Rollback / containment:**` label) plus a rollback statement. Evidence requires a before -> after demonstration. Links requires the PR link once the PR exists (see [Draft Phase](#draft-phase)). Each `Closes #NN` line must name exactly one issue.
 
   The explicit merge path **refuses** shape-gate violations. It refuses non-contract headings (including flush `##Heading`), checkboxes (bare or ordered), Mermaid fences (3+ backticks or tildes), raw `CODE_AUTHORS` block tokens, and line or bullet caps. It also refuses any message that reproduces the body via the copy detector. The copy detector folds case and `-`/`_`, drops `Co-authored-by` lines, and evaluates 5-token shingles. It refuses above 0.80 on either Jaccard similarity or body coverage, with a 25-token floor.
 

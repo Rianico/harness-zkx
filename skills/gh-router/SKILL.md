@@ -1,7 +1,7 @@
 ---
 name: gh-router
 description: >-
-  GitHub delivery router for PR lifecycle, branch state, and releases. Reconciles merge/rebase conflicts, creates and merges PRs, watches CI, and dispatches releases. Use when a PR needs submitting, watching, or merging, a branch has conflicts or needs orienting, CI fails, or cutting a release.
+  GitHub delivery router for PR lifecycle, branch state, and releases. Reconciles merge/rebase conflicts, creates and merges PRs, watches CI, and dispatches releases. Use when a PR needs submitting, watching, or merging, a branch has conflicts or needs orienting, CI fails, or a release needs cutting.
 argument-hint: |-
   gh-release [--dry-run] -- changelog and publish via dispatch
   pr-conflict [--file PATH] [--all] [--json] -- extract conflict hunks and commit intent
@@ -62,5 +62,5 @@ Read `$SKILL_DIR/subskills/<name>/SKILL.md` for the deep flow: flags, title limi
 ## Conventions
 
 - Scripts beat raw `gh`: same queries, one call, brief output, deterministic exit codes.
-- Exit codes: `0` ok · `1` failed check / verification · `2` usage · `3` missing tool.
+- Exit codes: `0` ok · `1` failed check / verification · `2` usage · `3` missing tool; `git-diff-digest` uses `3` for range refusals.
 - `GH_RELEASE_QUIET=1` drops informational lines. `NO_COLOR` disables ANSI.
