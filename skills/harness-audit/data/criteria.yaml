@@ -1,0 +1,44 @@
+version: 1
+description: >-
+  Modular criteria for the skill-patterns workload. audit_skill_patterns.py
+  renders these into the cross-read subagent prompt. Evolve criteria here,
+  never in SKILL.md or the script.
+corpus:
+  default: ~/.agents/skills
+  note: >-
+    Scan the installed skill farm, or the directories passed via --paths.
+    The farm unions repo skills through symlinks. Never special-case a repo tree.
+promotion_bar:
+  - id: corroboration
+    rule: The principle appears in two or more separate skills.
+    reject: Found in one skill only. It stays in that skill.
+  - id: actionable
+    rule: State the principle as "do X" or "do not do Y". Behavior, not importance.
+    reject: '"X is important" is a topic, not a pattern.'
+  - id: violation_risk
+    rule: Name what goes wrong when the principle is ignored, in one sentence.
+    reject: No failure mode means no rule.
+  - id: novelty
+    rule: Check rules/common and every skill for the same behavior in different words.
+    reject: Different wording with the same behavior counts as covered.
+verdicts:
+  - id: promote_to_rule
+    signal: A cross-cutting principle, corroborated in 2+ skills, absent from rules.
+    treatment: Append to or revise one rules/common file. Land through repo gates.
+  - id: refactor_skill
+    signal: One skill restates what another skill owns.
+    treatment: Edit the owning skill. Point the other at it by skill name.
+  - id: merge_skills
+    signal: Two skills teach one workflow with no seam between them.
+    treatment: Propose a merge. Name the surviving skill and the retired one.
+  - id: already_covered
+    signal: An existing rule or skill states the behavior.
+    treatment: Cite the covering artifact. Change nothing.
+  - id: too_specific
+    signal: The principle serves one skill's domain only.
+    treatment: Keep it inside the skill. Change nothing.
+discipline:
+  - A mechanical violation earns a deterministic check - a linter rule, a hook, or a CI step. Never a prose rule.
+  - One concept keeps one canonical home. Reference it by name. Never copy it.
+  - A pattern the base model follows by default is a no-op. Do not promote it.
+  - Third-party skills listed in skills-lock.json are evidence sources. Promote their patterns into rules. Never edit or merge the skills themselves.
