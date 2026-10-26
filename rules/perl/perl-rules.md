@@ -10,18 +10,19 @@ paths:
 
 # Perl Rules
 
-You are operating in a Perl codebase. Before proceeding with your task, review and apply these rules.
+You are operating in a Perl codebase.
 
 ## Core Perl Standards (80% Base)
-- **Strict & Warnings:** EVERY file must have `use strict;` and `use warnings;` or `use v5.36;` (which implies both).
-- **Modern Dialect:** Assume Perl 5.36+ features are available unless specified otherwise.
-- **Lexical Scope:** Always use `my` to declare variables. Avoid global `our` or package variables unless explicitly required.
 
-## Expertise Routing (Use `Skill` tool)
-If your task requires modern object orientation, secure system interactions, or testing, you MUST pause and invoke the `Skill` tool for `perl-expert` to retrieve the deep methodology:
+- **Strict & warnings:** every file must carry `use strict;` and `use warnings;`, or `use v5.36;` (which implies both).
+- **Modern dialect:** assume Perl 5.36+ features are available unless specified otherwise.
+- **Lexical scope:** declare variables with `my`. Avoid global `our` or package variables unless explicitly required.
 
-- **Code Review & Patterns:** Invoke `Skill(skill="perl-expert", args="patterns")`.
-- **Security & Taint:** Invoke `Skill(skill="perl-expert", args="security")`.
-- **Testing:** Invoke `Skill(skill="perl-expert", args="testing")`.
+## Expertise Routing (Use `Read` tool)
 
-**CRITICAL INSTRUCTION:** Do not write legacy Perl 4 style code. Retrieve the expert skill methodology to use modern Perl 5 idioms.
+`perl-expert` is a managed subskill of the `programming-expert` router. Subskills are hidden from discovery (`managed-by`) — do not invoke them through the `Skill` tool. Read the file directly:
+
+- `skills/programming-expert/subskills/perl-expert/SKILL.md` — modern patterns (signatures, Moo), security (taint, safe execution), testing (Test2, prove)
+- `skills/programming-expert/subskills/perl-expert/references/` — Perl patterns, security deep dive, testing workflow
+
+**CRITICAL:** Do not write legacy Perl 4 style code. Read the expert methodology for modern Perl 5 idioms first.

@@ -6,19 +6,20 @@ paths:
 
 # PHP Rules
 
-You are operating in a PHP/Laravel codebase. Before proceeding with your task, review and apply these rules.
+You are operating in a PHP/Laravel codebase.
 
 ## Core PHP Standards (80% Base)
-- **Typing:** Use strict typing (`declare(strict_types=1);` at the top of files).
-- **Type Hints:** ALWAYS use parameter type hints and return type declarations (`public function doSomething(string $param): bool`).
-- **Formatting:** Follow PSR-12 coding standards.
-- **Dependencies:** Use Composer for dependency management. Do not require libraries globally.
 
-## Expertise Routing (Use `Skill` tool)
-If your task requires Laravel architecture, complex Eloquent queries, security review, or TDD, you MUST pause and invoke the `Skill` tool for `php-expert` to retrieve the deep methodology:
+- **Typing:** use strict typing (`declare(strict_types=1);` at the top of files).
+- **Type hints:** always declare parameter type hints and return types (`public function doSomething(string $param): bool`).
+- **Formatting:** follow PSR-12 coding standards.
+- **Dependencies:** use Composer for dependency management. Do not require libraries globally.
 
-- **Laravel Architecture:** Invoke `Skill(skill="php-expert", args="patterns")`.
-- **Security:** Invoke `Skill(skill="php-expert", args="security")`.
-- **Testing:** Invoke `Skill(skill="php-expert", args="testing")`.
+## Expertise Routing (Use `Read` tool)
 
-**CRITICAL INSTRUCTION:** Do not write legacy procedural PHP or raw SQL queries. Retrieve the expert skill methodology to use modern framework features.
+`php-expert` is a managed subskill of the `programming-expert` router. Subskills are hidden from discovery (`managed-by`) — do not invoke them through the `Skill` tool. Read the file directly:
+
+- `skills/programming-expert/subskills/php-expert/SKILL.md` — Laravel architecture, Eloquent, security (policies, mass assignment), Pest/PHPUnit testing
+- `skills/programming-expert/subskills/php-expert/references/` — Laravel patterns, security hardening, TDD workflow, verification phases
+
+**CRITICAL:** Do not write legacy procedural PHP or raw SQL queries. Read the expert methodology for modern framework features first.

@@ -137,4 +137,4 @@ When `reportUnknownVariableType` fires: hover → go-to-definition → find call
 ## Sources
 
 - `plugins/python-development/skills/python-type-safety/SKILL.md` + `references/details.md` (wshobson/agents)
-- `skills/programming-expert/subskills/basedpyright-expert` for checker knobs
+- The `basedpyright-expert` skill for checker knobs

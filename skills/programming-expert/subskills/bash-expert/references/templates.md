@@ -1,7 +1,99 @@
 # Templates Library — Production Shell Scripts
 
-> Copy-paste templates for common automation tasks. All templates assume `set -Eeuo pipefail` + quoted vars + trap cleanup from `SKILL.md` §10.
+> Copy-paste templates for common automation tasks. All templates build on the base template below: `set -Eeuo pipefail`, quoted vars, trap cleanup.
 > Sources: `sickn33/agentic-awesome-skills/linux-shell-scripting` (7 phases) + `sickn33/agentic-awesome-skills/skills/os-scripting` (7 phases).
+
+## Base Production Script Template
+
+Copy-paste starter — covers 80% of production needs:
+
+```bash
+#!/usr/bin/env bash
+set -Eeuo pipefail
+shopt -s inherit_errexit 2>/dev/null || true
+IFS=$'\n\t'
+
+readonly SCRIPT_NAME="$(basename -- "${BASH_SOURCE[0]}")"
+readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+readonly VERSION="0.1.0"
+
+# --- globals ---
+VERBOSE=false
+DRY_RUN=false
+OUTPUT=""
+
+# --- logging ---
+log()  { printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >&2; }
+info() { log "INFO: $*"; }
+warn() { log "WARN: $*" >&2; }
+die()  { log "ERROR: $*"; exit 1; }
+debug() { [[ $VERBOSE == true ]] && log "DEBUG: $*"; }
+
+cleanup() { rm -rf -- "${TMPDIR:-}" 2>/dev/null || true; }
+trap cleanup EXIT
+trap 'die "Error at ${BASH_SOURCE[0]}:${LINENO} (exit $?)"' ERR
+
+# --- usage ---
+usage() {
+  cat <<EOF
+Usage: $SCRIPT_NAME [OPTIONS] <input>
+
+Options:
+  -v, --verbose   Verbose output
+  -d, --dry-run   Preview without changes
+  -o, --output FILE  Output file
+  -h, --help      Show help
+  --version       Show version
+  --trace         Enable bash trace
+
+Examples:
+  $SCRIPT_NAME -v -o out.txt input.txt
+  $SCRIPT_NAME --dry-run input.txt
+EOF
+  exit "${1:-0}"
+}
+
+# --- validation ---
+validate_input() {
+  local -r file="$1"
+  [[ -f "$file" ]] || die "File not found: $file"
+  [[ -r "$file" ]] || die "Not readable: $file"
+}
+
+# --- main ---
+main() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -v|--verbose) VERBOSE=true; shift ;;
+      -d|--dry-run) DRY_RUN=true; shift ;;
+      -o|--output) OUTPUT="$2"; shift 2 ;;
+      -h|--help) usage 0 ;;
+      --version) printf '%s %s\n' "$SCRIPT_NAME" "$VERSION"; exit 0 ;;
+      --trace) set -x; shift ;;
+      --) shift; break ;;
+      -*) die "Unknown option: $1" ;;
+      *) break ;;
+    esac
+  done
+
+  [[ $# -ge 1 ]] || { usage 2; }
+  local -r input="$1"
+  validate_input "$input"
+
+  info "Starting $SCRIPT_NAME"
+  if [[ $DRY_RUN == true ]]; then
+    info "[dry-run] Would process $input -> ${OUTPUT:-stdout}"
+    return 0
+  fi
+
+  # TMPDIR for work
+  TMPDIR="$(mktemp -d)" || die "mktemp failed"
+  # ... core logic ...
+  info "Done"
+}
+
+main "$@"
+```
 
 ## Backup — Directory + Rotation + Remote
 

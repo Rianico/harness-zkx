@@ -21,6 +21,8 @@ Basedpyright is a Python static type checker forked from pyright with stricter d
 1. Use `# pyright: ignore[ruleName]` for line-level suppression (preferred over `# type: ignore`)
 2. Prefer `Sequence`, `Mapping`, `Container` over `list`, `dict`, `set` for covariant type parameters
 3. Use `reveal_type(expr)` to debug inferred types during development
+4. Add type annotations at boundaries. Internal code can rely on inference.
+5. Run `basedpyright --verifytypes` for library packages
 
 ## Quick Start
 
@@ -227,16 +229,9 @@ Read `$SKILL_DIR/references/basedpyright-expert-raw/` when:
 - **Prose text:** Use `$SKILL_DIR/references/...` -- cwd is unknown to the reader
 - **Markdown links:** Use relative paths like `[text](references/getting-started.md)` -- standard relative-to-file convention
 
-## When Writing Code
-
-1. Prefer `# pyright: ignore[ruleName]` with explicit rule over bare `# pyright: ignore`
-2. Use immutable container types (Sequence, Mapping) for covariant parameters
-3. Add type annotations at boundaries; internal code can rely on inference
-4. Run `basedpyright --verifytypes` for library packages
-
 ## When Answering Questions
 
-1. Answer from patterns and tables above first
-2. If the question involves deeper details, read `$SKILL_DIR/references/<module>.md`
-3. For edge cases, read `$SKILL_DIR/references/basedpyright-expert-raw/`
-4. If still insufficient, inform user and answer from built-in knowledge
+1. Answer from the patterns and tables above first.
+2. If the question needs deeper detail, read `$SKILL_DIR/references/<module>.md`.
+3. If the curated references lack the answer, read `$SKILL_DIR/references/basedpyright-expert-raw/`.
+4. If still insufficient, say so and answer from built-in knowledge.

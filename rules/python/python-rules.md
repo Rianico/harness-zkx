@@ -8,17 +8,17 @@ paths:
 
 # Python Rules
 
-You are operating in a Python codebase. Before proceeding, review and apply these rules.
+You are operating in a Python codebase.
 
 ## Core Python Standards
 
-- **Tooling:** `uv` for all Python workflows (`uv run`, `uv add`, `uv sync`; never call `python`, `pip`, or `venv` directly).
+- **Tooling:** `uv` for all Python workflows (`uv run`, `uv add`, `uv sync`). Never call `python`, `pip`, or `venv` directly.
   - Standalone scripts: use PEP 723 inline script metadata (`# /// script`) and execute with `uv run script.py`.
-  - Format & lint: `ruff` (target Python 3.12+, 120 line length; replaces black, isort, flake8).
+  - Format & lint: `ruff` — target Python 3.12+, 120 line length. It replaces black, isort, and flake8.
   - Type checking: `basedpyright` as default LSP and type checker. If diagnostics contradict edited files, reload the language server.
   - Testing: `uv run pytest -q` (quiet by default).
-  - Project config: default to `pyproject.toml`; avoid legacy `setup.py`.
-- **Formatting & Style:** PEP 8 — `snake_case` functions/variables, `PascalCase` classes, `SCREAMING_SNAKE` constants; absolute imports (`stdlib → third-party → local`).
+  - Project config: default to `pyproject.toml`. Avoid legacy `setup.py`.
+- **Formatting & Style:** PEP 8 — `snake_case` functions/variables, `PascalCase` classes, `SCREAMING_SNAKE` constants. Use absolute imports (`stdlib → third-party → local`).
 - **Modern Syntax (3.12+):**
   - Built-in generics: `list[str]`, `dict[str, int]`, `str | None` (never legacy `List`, `Dict`, `Optional`, `Union`).
   - PEP 695 type parameter syntax: `class Repository[T: BaseModel]:`, `def get[T](id: str) -> T | None:`.
@@ -26,8 +26,8 @@ You are operating in a Python codebase. Before proceeding, review and apply thes
 - **Typed Boundaries (Pydantic-First):**
   - Admission boundary validates external `object` via `BaseModel.model_validate` into typed `model.field`.
   - Serialize via `model_dump()` strictly at transport/IPC/file boundaries, never internally.
-  - `object` forces validation; `Any` silences checkers — prefer `object` at untrusted boundaries.
-  - Use `Pydantic BaseModel` for domain models and boundary validation; use `dataclasses` only for unvalidated internal data holders.
+  - `object` forces validation. `Any` silences checkers — prefer `object` at untrusted boundaries.
+  - Use `Pydantic BaseModel` for domain models and boundary validation. Use `dataclasses` only for unvalidated internal data holders.
 
 ## Critical Cruxes
 

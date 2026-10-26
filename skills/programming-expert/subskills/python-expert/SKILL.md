@@ -16,29 +16,31 @@ Domain knowledge for production Python — typed, observable, resilient, well-st
 
 ## When to Use — Trigger Matrix
 
-| Trigger in your task                                                           | Load this section         | Source skills                                                                                          |
-| ------------------------------------------------------------------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------ |
-| type hints, generics, `Protocol`, `TypeVar`, `TypeAlias`, `Pydantic`, `strict` | §1 Type Safety            | python-type-safety                                                                                     |
-| `BaseSettings`, `.env`, secrets, env vars, config validation                   | §2 Configuration          | python-configuration                                                                                   |
-| `async`/`await`, `asyncio`, `TaskGroup`, `Semaphore`, `ContextVar`             | §3 Async                  | async-python-patterns                                                                                  |
-| `Celery`, `RQ`, task queue, job state, idempotency, webhook                    | §4 Background Jobs        | python-background-jobs                                                                                 |
-| `with`/`async with`, `__enter__`/`__exit__`, `contextmanager`, `ExitStack`     | §5 Resources              | python-resource-management                                                                             |
-| `try`/`except`, `ValidationError`, `HttpError`, retries, backoff, `tenacity`   | §6 Errors & Resilience    | python-error-handling, python-resilience                                                               |
-| `structlog`, JSON logs, metrics, tracing, correlation ID, Prometheus           | §7 Observability          | python-observability                                                                                   |
-| `pytest`, fixtures, `conftest`, mocking, `freezegun`, coverage, TDD            | §8 Testing                | python-testing-patterns, temporal-python-testing                                                       |
-| SRP, composition, KISS, DDD, layering, dependency injection                    | §9 Design & Structure     | python-design-patterns, python-project-structure                                                       |
-| `ruff`, `mypy`/`pyright`, PEP 8, docstrings, naming, imports                   | §10 Style & Anti-patterns | python-code-style, python-anti-patterns                                                                |
-| `pyproject.toml`, `src/` layout, `py.typed`, `wheel`, `pip`/`uv` publish       | §11 Packaging             | python-packaging                                                                                       |
-| singleton client, batch/OData, chunked upload, audit trail, production         | §12 Production            | dataverse-python-production-code, dataverse-python-advanced-patterns, dataverse-python-usecase-builder |
-| pre-commit gate, ruff check, typecheck, pytest verification                    | §13 Verification          | —                                                                                                      |
+| Trigger in your task                                                           | Load this section         |
+| ------------------------------------------------------------------------------ | ------------------------- |
+| type hints, generics, `Protocol`, `TypeVar`, `TypeAlias`, `Pydantic`, `strict` | §1 Type Safety            |
+| `BaseSettings`, `.env`, secrets, env vars, config validation                   | §2 Configuration          |
+| `async`/`await`, `asyncio`, `TaskGroup`, `Semaphore`, `ContextVar`             | §3 Async                  |
+| `Celery`, `RQ`, task queue, job state, idempotency, webhook                    | §4 Background Jobs        |
+| `with`/`async with`, `__enter__`/`__exit__`, `contextmanager`, `ExitStack`     | §5 Resources              |
+| `try`/`except`, `ValidationError`, `HttpError`, retries, backoff, `tenacity`   | §6 Errors & Resilience    |
+| `structlog`, JSON logs, metrics, tracing, correlation ID, Prometheus           | §7 Observability          |
+| `pytest`, fixtures, `conftest`, mocking, `freezegun`, coverage, TDD            | §8 Testing                |
+| SRP, composition, KISS, DDD, layering, dependency injection                    | §9 Design & Structure     |
+| `ruff`, `mypy`/`pyright`, PEP 8, docstrings, naming, imports                   | §10 Style & Anti-patterns |
+| `pyproject.toml`, `src/` layout, `py.typed`, `wheel`, `pip`/`uv` publish       | §11 Packaging             |
+| singleton client, batch/OData, chunked upload, audit trail, production         | §12 Production            |
+| pre-commit gate, ruff check, typecheck, pytest verification                    | §13 Verification          |
 
 If your task matches two rows, read both sections plus `references/` for the overlapping pattern.
+
+Upstream synthesis: python-type-safety, python-configuration, async-python-patterns, python-background-jobs, python-resource-management, python-error-handling, python-resilience, python-observability, python-testing-patterns, temporal-python-testing, python-design-patterns, python-project-structure, python-code-style, python-anti-patterns, python-packaging, dataverse-python-production-code, dataverse-python-advanced-patterns, dataverse-python-usecase-builder.
 
 ## 1. Type Safety with Pydantic — Most Important
 
 > Read this section on every invocation. The other sections degrade without it.
 
-**Rule: validate once at admission, trust inside.** External `object` → Pydantic `model_validate` → typed model → internal code never calls `dict.get` or `getattr` on untyped data. Serialize only at transport/IPC/file boundaries (`model_dump` there, nowhere else).
+**Rule: validate once at admission, trust inside.** External `object` → Pydantic `model_validate` → typed model. Internal code never calls `dict.get` or `getattr` on untyped data. Serialize only at transport/IPC/file boundaries (`model_dump` there, nowhere else).
 
 ### 1.1 Annotate all public signatures
 
@@ -80,7 +82,7 @@ user = User.from_input(validated)  # typed throughout
 ```
 
 - Anti-pattern: `data: dict[str, object] = model.model_dump(); langs = data.get("languages")` — loses types that `model.languages.items()` preserves.
-- `Any` at boundaries silences the checker; `object` forces validation. Reserve `Any` for truly dynamic data or designated Any zones (transport/IPC).
+- `Any` at boundaries silences the checker. `object` forces validation. Reserve `Any` for truly dynamic data or designated Any zones (transport/IPC).
 - Never mutable default arguments: use `x: list[T] | None = None` sentinel in functions or `Field(default_factory=list)` in Pydantic.
 
 ### 1.3 Modern type vocabulary
@@ -115,7 +117,7 @@ print(user.name)  # User, not User | None
 valid = [x for x in items if x is not None]  # list[Item] narrowed
 ```
 
-See `[type-safety-patterns.md](references/type-safety-pydantic.md)` for `TypeVar` bounds, `@overload`, `Callable`/`Awaitable` protocols, generic `Result[T,E]`, and the strict-mode checklist. For checker knobs and suppression ladder, use **basedpyright-expert**.
+See [type-safety-pydantic.md](references/type-safety-pydantic.md) for `TypeVar` bounds, `@overload`, `Callable`/`Awaitable` protocols, generic `Result[T,E]`, and the strict-mode checklist. For layering violations, premature `model_dump`, and `Any` vs `object` patterns, see [type-safety-patterns.md](references/type-safety-patterns.md). For checker knobs and the suppression ladder, use **basedpyright-expert**.
 
 ## 2. Configuration — Typed Settings, Fail Fast
 
@@ -138,9 +140,9 @@ except ValidationError as e:
     sys.exit(1)
 ```
 
-- Externalize every env-specific value; `model_validate` at boot catches missing config before a request does.
+- Externalize every env-specific value. Validating at boot catches missing config before a request does.
 - Use `alias` for `SCREAMING_SNAKE` env vars while keeping `snake_case` fields. Provide defaults only for safe local-dev values.
-- Keep secrets out of code/logs/errors; load from env or secret manager.
+- Keep secrets out of code, logs, and errors. Load them from env or a secret manager.
 
 See `[configuration.md](references/configuration.md)`.
 
@@ -174,7 +176,7 @@ request_id: ContextVar[str] = ContextVar("request_id")
 ## 4. Background Jobs & Task Queues
 
 - **Pattern:** `POST /jobs` → persist `Job(status=pending)` → enqueue task → return `202 {job_id, poll_url}` immediately → worker updates state (`running → succeeded|failed`).
-- **Idempotency & at-least-once delivery:** Worker failures trigger retries; design all tasks to be safe for duplicate execution using deduplication keys or idempotency tokens.
+- **Idempotency & at-least-once delivery:** worker failures trigger retries. Design every task for duplicate execution, using deduplication keys or idempotency tokens.
 - **Engines:** Celery (`task_acks_late=True`, `task_reject_on_worker_lost=True`), RQ, Dramatiq, or `asyncio.Queue` for in-process backgrounding.
 
 See full Celery worker setup, failure recovery, and idempotency recipes in `[background-jobs.md](references/background-jobs.md)`.
@@ -205,7 +207,7 @@ async with AsyncExitStack() as stack:
     tmp = stack.enter_context(tempfile.TemporaryDirectory())
 ```
 
-- `__exit__` always runs — put cleanup there; return `False` to propagate, `True` only to suppress intentionally.
+- `__exit__` always runs — put cleanup there. Return `False` to propagate. Return `True` only to suppress intentionally.
 - Streaming with accumulated state: yield chunks, finalize in `finally`/`__exit__`.
 
 See `[resource-management.md](references/resource-management.md)`.
@@ -250,9 +252,9 @@ RETRYABLE = (ConnectionError, TimeoutError)
 def fetch(url: str) -> dict[str, object]: ...
 ```
 
-- Never retry `ValueError`/`TypeError`/auth failures; do retry `429`, `502`, `503`, `504` and transient network errors.
-- Add jitter to backoff to avoid thundering herd; cap attempts _and_ total wall time.
-- For HTTP status retries, inspect `response.status_code`; for mixed exception+status, combine `retry_if_exception_type` + `retry_if_result`.
+- Never retry `ValueError`, `TypeError`, or auth failures. Do retry `429`, `502`, `503`, `504`, and transient network errors.
+- Add jitter to backoff to avoid the thundering herd. Cap attempts *and* total wall time.
+- For HTTP status retries, inspect `response.status_code`. For mixed exception+status, combine `retry_if_exception_type` with `retry_if_result`.
 
 ### 6.5 Partial failures in batches
 
@@ -283,10 +285,10 @@ logger = structlog.get_logger()
 logger.info("request.completed", correlation_id=cid.get(), status=200, duration_ms=42)
 ```
 
-- Emit JSON in prod (`TimeStamper` + `JSONRenderer`); human-readable locally is fine.
+- Emit JSON in prod (`TimeStamper` + `JSONRenderer`). Human-readable logs are fine locally.
 - Every log carries `correlation_id` (via `ContextVar`) + `method`/`path`/`status_code` — enables end-to-end trace.
 - Levels: `DEBUG` dev only, `INFO` lifecycle, `WARNING` recoverable, `ERROR` needs attention.
-- Metrics: Prometheus with bounded label cardinality (never `user_id` as label); trace with `trace_id` propagated via context.
+- Metrics: Prometheus with bounded label cardinality — a `user_id` label is banned. Trace with `trace_id` propagated via context.
 - Golden signals: latency, traffic, errors, saturation per boundary.
 
 See `[observability.md](references/observability.md)`.
@@ -327,10 +329,10 @@ async def test_fetch_with_timeout(): ...
 # pytest --cov=myapp --cov-fail-under=80 --cov-report=term-missing
 ```
 
-- Prefer real DB/queue in containers (`responses` for HTTP); minimize mocks to contracts.
+- Prefer real DB/queue in containers (`responses` for HTTP). Minimize mocks to contracts.
 - Temporal workflows: `WorkflowEnvironment.start_time_skipping()` for unit, mock activities for integration, replay histories for determinism — see `[temporal-testing.md](references/temporal-testing.md)`.
 - Details: parametrization, `monkeypatch`, `freezegun` for time, property-based tests in `[testing-patterns.md](references/testing-patterns.md)`.
-- **Refutation by counterexample & small-input oracle tests:** When debugging or reviewing algorithmic or state-machine logic, supply a concrete minimal failing input (`input -> expected vs observed`). Test combinatorial logic or state machines with minimal exhaustive oracle tables or property-based tests (`hypothesis`).
+- **Refutation by counterexample & small-input oracle tests:** supply concrete evidence for algorithmic or state-machine defects. When debugging or reviewing, produce a minimal failing input (`input -> expected vs observed`). Test combinatorial logic with exhaustive oracle tables or property-based tests (`hypothesis`).
 
 ## 9. Design & Project Structure
 
@@ -349,14 +351,14 @@ myapp/
 
 **Core rules:**
 
-- **KISS + SRP** — one reason to change; delete before you abstract; Rule of Three for premature abstraction.
+- **KISS + SRP** — one reason to change. Delete before you abstract. Apply the Rule of Three against premature abstraction.
 - **Deep modules over classitis** — Python functions and modules are first-class namespaces. Do not introduce classes solely to wrap a single function or create 5-line DTO mappers. A module with an explicit `__all__` should present a narrow, ergonomic interface while absorbing internal complexity (validation, atomic DB transactions, caching, error translation).
-- **Design deepening vs. scope creep** — decomposing monolithic files into private internal submodules (`_submodule.py` or `_internal/`) to cure Divergent Change or God modules is permitted design deepening. Add architectural regression tests (`tests/test_arch.py`) to enforce layering and boundary invariants. Never widen `__all__` or public exports without mandate.
-- **Transactional atomicity (`BEGIN IMMEDIATE`)** — multi-step state mutations across multiple models/tables must execute inside a single atomic transaction (`async with session.begin():`), never fragmented across loose commits. Hybrid disk+DB operations must report desyncs explicitly.
-- **Composition over inheritance** — combine behaviors; Protocols define the seam when you need polymorphism.
-- **Dependency injection** — constructor injection for testability; if `__init__` has 7+ params, the class is too large — split it.
-- **Explicit public API** — every package defines `__all__`; consumers import from the package, not internals.
-- **Flat over deep** — `project/services/user_service.py` beats `project/core/internal/services/impl/user/`; absolute imports only.
+- **Design deepening vs. scope creep** — decomposing monolithic files into private submodules (`_submodule.py`, `_internal/`) cures Divergent Change and God modules. That decomposition is permitted design deepening. Add architectural regression tests (`tests/test_arch.py`) to enforce layering and boundary invariants. Never widen `__all__` or public exports without mandate.
+- **Transactional atomicity (`BEGIN IMMEDIATE`)** — multi-step mutations across multiple models or tables run in one atomic transaction (`async with session.begin():`). Fragmenting them across loose commits is a defect. Hybrid disk+DB operations must report desyncs explicitly.
+- **Composition over inheritance** — combine behaviors. Protocols define the seam when you need polymorphism.
+- **Dependency injection** — constructor injection for testability. A class with 7+ `__init__` params is too large. Split it.
+- **Explicit public API** — every package defines `__all__`. Consumers import from the package, never its internals.
+- **Flat over deep** — `project/services/user_service.py` beats `project/core/internal/services/impl/user/`. Use absolute imports only.
 
 See `[design-patterns.md](references/design-patterns.md)` and `[project-structure.md](references/project-structure.md)`.
 
@@ -382,11 +384,24 @@ warn_return_any = true
 ruff check --fix . && ruff format . && basedpyright
 ```
 
-**Style:** snake_case modules, `PascalCase` classes, `SCREAMING_SNAKE_CASE` constants; absolute imports; Google-style docstrings on every public API; 120-char lines with explicit breaks.
+**Style:** snake_case modules, `PascalCase` classes, `SCREAMING_SNAKE_CASE` constants. Use absolute imports. Write Google-style docstrings on every public API. Keep 120-char lines with explicit breaks. Naming and import detail: [code-style.md](references/code-style.md).
 
-**Anti-patterns checklist** (scan before merge):
+**Anti-patterns** (scan before merge):
 
-- Classitis & shallow pass-through wrappers (classes wrapping a single function or 5-line DTO mapping layers), mutable defaults (`def f(x=[])` prohibited; use `None` sentinel or `Field(default_factory=list)`), late-binding closures in loops (`lambda i=i:` or `functools.partial`), unchained exceptions (`raise ... from e`), scattered timeout/retry, double retry, hardcoded secrets, leaking ORM models to API, mixed I/O+logic, bare `except Exception: pass`, aborted batches, unclosed resources, blocking sync calls in `async`, missing type hints, untyped collections — see `[anti-patterns.md](references/anti-patterns.md)`.
+- Classitis and shallow pass-through wrappers — single-function classes, 5-line DTO mapping layers.
+- Mutable defaults (`def f(x=[])`). Use a `None` sentinel or `Field(default_factory=list)`.
+- Late-binding closures in loops (`lambda i=i:`, `functools.partial`).
+- Unchained exceptions — `raise ... from e` missing.
+- Scattered or doubled timeout/retry logic.
+- Hardcoded secrets.
+- ORM models leaking to the API.
+- Mixed I/O and logic.
+- Bare `except Exception: pass`.
+- Aborted batches and unclosed resources.
+- Blocking sync calls in `async`.
+- Missing type hints and untyped collections.
+
+Full checklist with recovery actions: [anti-patterns.md](references/anti-patterns.md).
 
 ## 11. Packaging — `src` Layout, `pyproject.toml`, Distribution
 
@@ -415,46 +430,21 @@ dev = ["pytest>=9", "ruff", "basedpyright"]
 where = ["src"]
 ```
 
-- Prefer `src/` layout (prevents accidental `import src`), `hatchling`/`setuptools>=61`, PEP 621 `pyproject.toml`; include `py.typed` marker for typed libraries.
-- Build `python -m build`; publish `twine upload --repository testpypi` then `pypi`.
+- Prefer the `src/` layout (prevents accidental `import src`), `hatchling` or `setuptools>=61`, and PEP 621 `pyproject.toml`. Include the `py.typed` marker for typed libraries.
+- Build with `python -m build`. Publish with `twine upload --repository testpypi`, then `pypi`.
 
 See `[packaging.md](references/packaging.md)`.
 
 ## 12. Production Readiness
 
-SDK and service integrations require production hygiene: singleton client management, retry loops with exponential backoff for transient errors (`429`, `503`, timeouts), server-side query filtering (`filter`, `select`, `top`), chunked uploads (4 MiB), and metadata cache invalidation.
+SDK and service integrations require production hygiene. Manage singleton clients. Retry transient errors (`429`, `503`, timeouts) with exponential backoff. Filter server-side (`filter`, `select`, `top`). Chunk uploads (4 MiB). Invalidate metadata caches.
 
-- For full singleton client patterns, OData/batch architectures, and retry hierarchies, see `[production-patterns.md](references/production-patterns.md)`.
-- Legacy Django/PyTorch deep dives remain in `[django-patterns.md](references/django-patterns.md)` / `[pytorch-patterns.md](references/pytorch-patterns.md)` — use only when those frameworks apply.
-
-## References — Progressive Disclosure
-
-| File                                                            | When to follow the pointer                                                                                                                                                            |
-| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [type-safety-pydantic.md](references/type-safety-pydantic.md)   | `TypeVar` bounds, generic `Repository[T,ID]`, `Protocol`/`@runtime_checkable`, `TypeAlias` vs `type`, `Callable`/`Awaitable`, `Result[T,E]`, strict-mode checklist, tracing `Unknown` |
-| [type-safety-patterns.md](references/type-safety-patterns.md)   | Premature `model_dump`, layering violation, `Any` vs `object`, IPC `@overload` registry                                                                                               |
-| [configuration.md](references/configuration.md)                 | `BaseSettings` env files, local defaults, secret handling, env-specific overrides                                                                                                     |
-| [async-patterns.md](references/async-patterns.md)               | `gather`, `Semaphore` rate limiting, producer/consumer `Queue`, `async for`/`async with`, locks, scraping                                                                             |
-| [background-jobs.md](references/background-jobs.md)             | Job state machine, Celery config, idempotency, at-least-once handling                                                                                                                 |
-| [resource-management.md](references/resource-management.md)     | `__aenter__`/`__aexit__`, `ExitStack`/`AsyncExitStack`, nested cleanup, streaming                                                                                                     |
-| [error-handling.md](references/error-handling.md)               | Custom `ApiError` hierarchy, `ValidationError` mapping, partial-failure `BatchResult`                                                                                                 |
-| [resilience.md](references/resilience.md)                       | `tenacity` recipes, exception vs status retry, jitter, circuit breaker                                                                                                                |
-| [observability.md](references/observability.md)                 | `structlog` JSON setup, consistent fields, Prometheus labels, correlation propagation                                                                                                 |
-| [testing-patterns.md](references/testing-patterns.md)           | Fixture design, `monkeypatch`, `freezegun`, parametrization, property-based                                                                                                           |
-| [temporal-testing.md](references/temporal-testing.md)           | Temporal `WorkflowEnvironment`, activity mocking, replay, time-skipping                                                                                                               |
-| [design-patterns.md](references/design-patterns.md)             | KISS/SRP/composition deep patterns, DI, god-class split heuristics                                                                                                                    |
-| [project-structure.md](references/project-structure.md)         | `__all__` APIs, flat vs domain-driven layout, layering violations                                                                                                                     |
-| [anti-patterns.md](references/anti-patterns.md)                 | Full checklist — timeout/double-retry/secrets/ORM-leak/ bare `except`/blocking-in-async                                                                                               |
-| [packaging.md](references/packaging.md)                         | `src` vs flat, multi-package, `py.typed`, build backends                                                                                                                              |
-| [production-patterns.md](references/production-patterns.md)     | Batch, OData, cache flush, chunked files, `PandasODataClient`, use-case builder                                                                                                       |
-| [diagnostic-resolution.md](references/diagnostic-resolution.md) | `basedpyright` ignore ladder and category thinking                                                                                                                                    |
-| [stub-files.md](references/stub-files.md)                       | `.pyi` authoring                                                                                                                                                                      |
-| [django-patterns.md](references/django-patterns.md)             | Django ORM/N+1/security (legacy)                                                                                                                                                      |
-| [pytorch-patterns.md](references/pytorch-patterns.md)           | PyTorch device/grad/inference (legacy)                                                                                                                                                |
+- For full singleton client patterns, OData/batch architectures, and retry hierarchies, see [production-patterns.md](references/production-patterns.md).
+- Legacy Django deep dives: [django-patterns.md](references/django-patterns.md), [django-security.md](references/django-security.md), [django-tdd.md](references/django-tdd.md), [django-verification.md](references/django-verification.md). PyTorch: [pytorch-patterns.md](references/pytorch-patterns.md). Use only when those frameworks apply.
 
 ## Type Checker Routing
 
-For `basedpyright`/`pyright` config, `typeCheckingMode`, `baseline.json`, `report*` diagnostics, `py.typed`, and migration from `mypy`, use **basedpyright-expert** directly — do not duplicate that material here.
+For `basedpyright`/`pyright` config, `typeCheckingMode`, `baseline.json`, `report*` diagnostics, `py.typed`, and mypy migration, use **basedpyright-expert** directly. That material stays out of this skill. Local deep dives: [diagnostic-resolution.md](references/diagnostic-resolution.md) — decision framework for basedpyright and ruff warnings. [stub-files.md](references/stub-files.md) — `.pyi` authoring guide.
 
 ## 13. Verification
 
@@ -464,5 +454,5 @@ uv run ruff check . && uv run basedpyright && uv run pytest
 uv run python -m basedpyright --stats
 ```
 
-- **Fix > suppress.** Suppression ladder: 1 fix code → 2 line `# pyright: ignore[rule]` + reason → 3 file-level → 4 config category → never global disable.
+- **Fix > suppress.** Suppression ladder: 1) fix the code. 2) line `# pyright: ignore[rule]` + reason. 3) file-level. 4) config category. Global disable is banned.
 - Designated Any zones: `rg "# pyright: ignore" src/` must only hit transport/IPC bottom layers.

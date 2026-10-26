@@ -9,27 +9,21 @@ paths:
 
 # JVM (Kotlin/Java) Rules
 
-You are operating in a Kotlin or Java codebase. Before proceeding with your task, review and apply these rules.
+You are operating in a Kotlin or Java codebase.
 
 ## Core JVM Standards (80% Base)
-- **Null Safety:** In Kotlin, strictly leverage the nullable type system (`?`). Do not use `!!` unless mathematically proven safe. In Java, use `Optional` or `@Nullable`/`@NotNull` annotations.
-- **Immutability:** In Kotlin, prefer `val` over `var` and immutable collections (`listOf`).
-- **Data/Records:** Use Kotlin `data class` or Java 14+ `record` for DTOs and value objects.
-- **Dependency Injection:** Favor constructor injection over field/setter injection.
 
-## Expertise Routing (Use `Skill` tool)
-If your task requires framework architecture, Coroutines, or complex build resolution, you MUST pause and invoke the `Skill` tool. 
+- **Null safety:** in Kotlin, use the nullable type system (`?`) strictly. `!!` requires mathematical proof of safety. In Java, use `Optional` or `@Nullable`/`@NotNull` annotations.
+- **Immutability:** in Kotlin, prefer `val` over `var` and immutable collections (`listOf`).
+- **Data/records:** use Kotlin `data class` or Java 14+ `record` for DTOs and value objects.
+- **Dependency injection:** favor constructor injection over field/setter injection.
 
-First, determine if you are primarily working with Kotlin or Java, then invoke the appropriate expert skill:
+## Expertise Routing (Use `Read` tool)
 
-**If working in Java (Spring Boot):**
-- **Frameworks:** Invoke `Skill(skill="java-expert", args="frameworks")`.
-- **Security:** Invoke `Skill(skill="java-expert", args="security")`.
-- **Testing:** Invoke `Skill(skill="java-expert", args="testing")`.
+`java-expert` and `kotlin-expert` are managed subskills of the `programming-expert` router. Subskills are hidden from discovery (`managed-by`) — do not invoke them through the `Skill` tool. Read the file that matches your language directly:
 
-**If working in Kotlin (Ktor, Android, Coroutines):**
-- **Frameworks:** Invoke `Skill(skill="kotlin-expert", args="frameworks")`.
-- **Coroutines:** Invoke `Skill(skill="kotlin-expert", args="coroutines")`.
-- **Testing:** Invoke `Skill(skill="kotlin-expert", args="testing")`.
+- `skills/programming-expert/subskills/java-expert/SKILL.md` — Spring Boot layers, security, JUnit 5/Mockito testing, verification phases
+- `skills/programming-expert/subskills/kotlin-expert/SKILL.md` — coroutines/Flow, Ktor, Exposed, Compose, MockK/runTest testing
+- Both carry deeper material under their `references/` directories.
 
-**CRITICAL INSTRUCTION:** Do not randomly guess Spring Boot annotations or Coroutine scopes without loading the expert methodology first.
+**CRITICAL:** Do not randomly guess Spring Boot annotations or Coroutine scopes. Read the expert methodology first.
