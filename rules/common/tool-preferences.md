@@ -1,6 +1,7 @@
 # Tool Preferences
 
 - **Reading:** Use `read` for files you intend to edit instead of `cat` or `bat`.
+- **Line endings & non-printing characters:** Never assume GNU `cat -A` on macOS. BSD `cat` rejects `-A`. Use `cat -vet`, `gcat -A` (Homebrew coreutils), `od -c`, or `xxd`. The `-A` display-tail is GNU-only and deferred (#176).
 - **Paths:** Use absolute paths only. The working directory resets between subagent turns.
 - **Code navigation:** Use AST or treesitter for code structure overviews. Use LSP for cross-file renames and references (`rename`, `references`).
 - **Search:** Prefer `rg` over `grep` or `grep -r`. Ripgrep respects `.gitignore` rules and supports fast scoped queries with `--glob`, `-g`, or `--type`.
