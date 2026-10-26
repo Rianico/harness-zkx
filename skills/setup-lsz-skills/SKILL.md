@@ -37,7 +37,8 @@ uv run skills/setup-lsz-skills/scripts/setup_detect.py detect --write-env
 Detection inspects the CLI toolchain, git provider, and steering file.
 `detect --write-env` writes compact YAML to `docs/agents/env.yaml` recording
 `project`, `provider`, `remote_url`, `steering_file`, `domain_layout` (glossary
-paths and deprecated `stale_files`), `runtime.tmp`, and `toolchain`. Review that
+paths and deprecated `stale_files`), `runtime.tmp`, `toolchain`, and an `rtk`
+section (version, active agent, hook status, exclude patterns). Review that
 file before migrating.
 
 ### 2. Migrate deprecated files
@@ -74,7 +75,45 @@ the provider: GitHub uses `gh`, GitLab uses `glab`, local uses files under
 `ready-for-agent`, `ready-for-human`, `wontfix`. Ask the user before changing
 either choice.
 
-### 4. Render docs and update pointers
+### 4. Evaluate RTK integration
+
+RTK (`rtk`) proxies shell commands and compresses their output. It changes host
+state, so the agent asks the user before applying anything.
+
+```bash
+uv run skills/setup-lsz-skills/scripts/setup_detect.py rtk --check
+uv run skills/setup-lsz-skills/scripts/setup_detect.py rtk --check --agent pi
+```
+
+`--check` is read-only. It probes the `rtk` version, the calling agent's hook
+file, the six canonical exclude patterns in `config.toml`, and the legacy
+`@xynogen/pix-optimizer` package. Exit `0` means clean; exit `1` means apply is
+needed. The script resolves the agent from `PI_SESSION_ID`,
+`ANTIGRAVITY_AGENT`, `CLAUDECODE`, or `CODEX_HOME`. A plain terminal shell
+exports none of those, so it exits `2` and asks for `--agent`.
+
+**Agent duty: confirm before applying.** `setup_detect.py` never prompts and
+never reads stdin. The calling agent must:
+
+1. Show the `--check` output to the user.
+2. Ask whether to install the hook and merge the exclude patterns.
+3. Run `--apply` only after an explicit yes.
+
+```bash
+uv run skills/setup-lsz-skills/scripts/setup_detect.py rtk --apply --agent pi --dry-run
+uv run skills/setup-lsz-skills/scripts/setup_detect.py rtk --apply --agent pi
+```
+
+`--apply` runs `rtk init` for the agent (`pi`, `agy`, `claude`, or `codex`),
+then merges the canonical exclude patterns into `[hooks] exclude_commands`.
+No other config line changes. `--project` installs a project hook instead of a
+global one. `--dry-run` prints the plan and writes nothing.
+
+`@xynogen/pix-optimizer` interferes with native RTK rewriting. Removal is
+opt-in only: pass `--remove-pix-optimizer` and only after the user agrees.
+Without that flag the package stays installed.
+
+### 5. Render docs and update pointers
 
 Render the `.j2` templates into `docs/agents/`.
 
