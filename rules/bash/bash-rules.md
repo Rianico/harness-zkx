@@ -36,7 +36,7 @@ You are operating in a Bash/POSIX shell codebase.
 
 - **Fix over suppress:** narrowest `shellcheck disable=SCxxxx` with `# Reason:` at line scope. Blanket disables are banned.
 - **Fresh diagnostics:** ShellCheck output is file-based. Re-run after edits. Treat stale CI green as unproven.
-- **Platform probe:** use `command -v`, never `which`. Declare the minimum Bash version behind a `BASH_VERSINFO` gate. Detect GNU vs BSD with `case "$(uname -s)"` (`sed -i` vs `sed -i ''`). Run `checkbashisms` for POSIX targets. Fail fast with `install X >=Y`.
+- **Platform probe:** use `command -v`, never `which`. Declare the minimum Bash version behind a `BASH_VERSINFO` gate. Detect GNU vs BSD with `case "$(uname -s)"` (`sed -i` vs `sed -i ''`, `cat -vet` vs `cat -A`). Run `checkbashisms` for POSIX targets. Fail fast with `install X >=Y`.
 
 ## Expertise Routing (Use `Read` tool)
 

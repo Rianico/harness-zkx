@@ -333,6 +333,7 @@ done
 | Bashism check  | `checkbashisms script.sh` + `shellcheck --shell=sh` for POSIX                                             |
 | Echo vs printf | Prefer `printf '%s\n' "$var"` — `echo` is non-portable for flags/escapes                                  |
 | `sed -i`       | GNU `sed -i` vs BSD `sed -i ''` — detect: `case "$(uname -s)" in Darwin*) sed -i '' ;; *) sed -i ;; esac` |
+| `cat -A`       | GNU-only; fails on BSD/macOS (`illegal option -- A`). On macOS use `cat -vet`, `gcat -A`, `od -c`, or `xxd` |
 | Exports        | `VAR=value; export VAR` is portable; `export VAR=value` is Bashism in strict POSIX                        |
 | Test           | `[[ ]]` Bash-only; `[ ]` + `case` for POSIX; `(( ))` arithmetic is Bash/Ksh                               |
 
@@ -347,6 +348,12 @@ case "$(uname -s)" in
   Linux*)  platform=linux ;;
   Darwin*) platform=macos ;;
   *)       platform=unknown ;;
+esac
+
+# Display non-printing characters / line endings portably
+case "$(uname -s)" in
+  Darwin*) cat_show_all="cat -vet" ;; # BSD cat lacks GNU -A; gcat -A, od -c, xxd also work
+  *)       cat_show_all="cat -A" ;;
 esac
 
 # Command existence — never which
