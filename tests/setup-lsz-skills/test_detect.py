@@ -507,3 +507,50 @@ def test_pix_optimizer_opt_in_removal(sd, tmp_path: Path, monkeypatch) -> None:
     assert with_flag == 0
     assert "pi remove npm:@xynogen/pix-optimizer" in [" ".join(call) for call in calls]
     assert sd.detect_pix_optimizer()["detected"] is False
+
+
+def test_rtk_reports_an_unparseable_config_instead_of_success(tmp_path: Path, run_cli) -> None:
+    env, config = _rtk_cli_env(tmp_path)
+    unparseable = "hooks = [\n"  # unterminated array: not valid TOML
+    _ = config.write_text(unparseable, encoding="utf-8")
+
+    checked = run_cli(tmp_path, "rtk", "--check", "--agent", "pi", env=env)
+
+    assert checked.returncode == 1, (checked.stdout, checked.stderr)
+    assert "cannot parse" in checked.stdout
+
+    preview = run_cli(tmp_path, "rtk", "--apply", "--agent", "pi", "--dry-run", env=env)
+
+    assert preview.returncode == 0  # dry-run never writes, so it stays exit 0
+    assert "merge would fail: cannot parse" in preview.stdout
+    assert config.read_text(encoding="utf-8") == unparseable
+
+    applied = run_cli(tmp_path, "rtk", "--apply", "--agent", "pi", env=env)
+
+    assert applied.returncode == 1, (applied.stdout, applied.stderr)
+    assert "cannot parse" in (applied.stdout + applied.stderr)
+    assert config.read_text(encoding="utf-8") == unparseable
+
+
+def test_rtk_apply_reports_a_failed_config_creation(tmp_path: Path, run_cli) -> None:
+    env, config = _rtk_cli_env(tmp_path)
+    config.unlink()  # fresh machine: no config.toml yet
+    inline = "hooks = { exclude_commands = [] }\n"
+    stub = tmp_path / "bin" / "rtk"
+    _ = stub.write_text(
+        "#!/bin/sh\n"
+        'if [ "$1" = "--version" ]; then echo "rtk 0.48.0"; fi\n'
+        'if [ "$1" = "config" ] && [ "$2" = "--create" ]; then\n'
+        "  echo 'hooks = { exclude_commands = [] }' > \"$RTK_CREATE_PATH\"\n"
+        "fi\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+
+    applied = run_cli(
+        tmp_path, "rtk", "--apply", "--agent", "pi", env={**env, "RTK_CREATE_PATH": str(config)}
+    )
+
+    assert applied.returncode == 1, (applied.stdout, applied.stderr)
+    assert "cannot write" in (applied.stdout + applied.stderr)
+    assert config.read_text(encoding="utf-8") == inline

@@ -384,20 +384,28 @@ def inspect_rtk_config(path: Path | None = None) -> dict[str, Any]:
 
 
 def _create_rtk_config(config_path: Path, patterns: list[str]) -> bool:
-    """Create the config, preferring `rtk config --create` over a hand-written minimal TOML."""
+    """Create the config, preferring `rtk config --create` over a hand-written minimal TOML.
+
+    Returns False when the file cannot be seeded with the canonical patterns: a
+    caller must never report a creation that did not happen.
+    """
     try:
         config_path.parent.mkdir(parents=True, exist_ok=True)
         if shutil.which("rtk") is not None:
             _ = _run_capture(["rtk", "config", "--create"])
         if config_path.is_file():
             current = inspect_rtk_config(config_path)
+            if current.get("parse_error"):
+                return False
             missing = list(current["missing"])
-            if missing:
-                merged = list(current["exclude_commands"]) + missing
-                text = config_path.read_text(encoding="utf-8")
-                rewritten = _rewrite_exclude_commands(text, merged)
-                if rewritten is not None:
-                    _ = config_path.write_text(rewritten, encoding="utf-8")
+            if not missing:
+                return True
+            merged = list(current["exclude_commands"]) + missing
+            text = config_path.read_text(encoding="utf-8")
+            rewritten = _rewrite_exclude_commands(text, merged)
+            if rewritten is None:
+                return False
+            _ = config_path.write_text(rewritten, encoding="utf-8")
             return True
         body = f"[hooks]\nexclude_commands = {_toml_string_array(patterns)}\n"
         _ = config_path.write_text(body, encoding="utf-8")
@@ -409,7 +417,8 @@ def _create_rtk_config(config_path: Path, patterns: list[str]) -> bool:
 def merge_rtk_exclude_commands(path: Path | None = None, dry_run: bool = False) -> dict[str, Any]:
     """Add every missing canonical exclude pattern, preserving the rest of the file.
 
-    Idempotent: a second run reports `added == []` and writes nothing.
+    Idempotent: a second run reports `added == []` and writes nothing. A refusal
+    sets `error`; callers must treat that as a failure, never as success.
     """
     config_path = get_rtk_config_path() if path is None else path
     result: dict[str, Any] = {
@@ -423,7 +432,10 @@ def merge_rtk_exclude_commands(path: Path | None = None, dry_run: bool = False) 
         if dry_run:
             result["created"] = True
             return result
-        result["created"] = _create_rtk_config(config_path, list(CANONICAL_EXCLUDE_COMMANDS))
+        if not _create_rtk_config(config_path, list(CANONICAL_EXCLUDE_COMMANDS)):
+            result["error"] = f"cannot write {config_path}"
+            return result
+        result["created"] = True
         return result
 
     current = inspect_rtk_config(config_path)
@@ -562,6 +574,7 @@ def _rtk_check(agent: str, cwd: Path) -> int:
     hooks = {name: _hook_installed(name, cwd) for name in targets}
     hooks_ok = all(hooks.values())
     preview = merge_rtk_exclude_commands(dry_run=True)
+    merge_error = preview.get("error")
     pix = detect_pix_optimizer()
     missing = list(preview["added"])
 
@@ -573,8 +586,11 @@ def _rtk_check(agent: str, cwd: Path) -> int:
     for name, installed in hooks.items():
         status = "installed" if installed else "missing"
         print(f"  {f'hook[{name}]:':<15}{status} {_hook_target(name, cwd)}")
-    excludes = "complete" if not missing else f"missing {missing}"
-    print(f"  {'exclude:':<15}{excludes} ({preview['path']})")
+    if merge_error:
+        print(f"  {'exclude:':<15}{merge_error}")
+    else:
+        excludes = "complete" if not missing else f"missing {missing}"
+        print(f"  {'exclude:':<15}{excludes} ({preview['path']})")
     if pix["detected"]:
         print(
             f"  {'pix-optimizer:':<15}DETECTED ({pix['source']}) — interferes with rtk rewriting; "
@@ -589,6 +605,7 @@ def _rtk_check(agent: str, cwd: Path) -> int:
         and hooks_ok
         and not missing
         and not pix["detected"]
+        and not merge_error
     )
     print(f"status: {'clean' if clean else 'needs-apply'}")
     if not clean:
@@ -604,7 +621,10 @@ def _rtk_apply(agent: str, cwd: Path, dry_run: bool, project: bool, remove_pix: 
         for cmd in commands:
             print(f"{prefix}would run: {' '.join(cmd)}")
         preview = merge_rtk_exclude_commands(dry_run=True)
-        print(f"{prefix}would merge {preview['added']} into {preview['path']}")
+        if preview.get("error"):
+            print(f"{prefix}merge would fail: {preview['error']}")
+        else:
+            print(f"{prefix}would merge {preview['added']} into {preview['path']}")
         if remove_pix:
             print(f"{prefix}would run: {' '.join(PIX_OPTIMIZER_REMOVE_ARGS)} (only if detected)")
         return 0
@@ -619,6 +639,8 @@ def _rtk_apply(agent: str, cwd: Path, dry_run: bool, project: bool, remove_pix: 
 
     merged = merge_rtk_exclude_commands()
     print(f"exclude_commands: {merged['path']} created={merged['created']} added={merged['added']}")
+    if merged.get("error"):
+        failed.append(str(merged["error"]))
     if remove_pix:
         removal = remove_pix_optimizer()
         print(
