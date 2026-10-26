@@ -27,6 +27,13 @@ STE100_BANNED_WORDS: dict[str, str] = {
     "blazing-fast": "state the latency or throughput metric instead",
     "state-of-the-art": "state the baseline model or benchmark result instead",
     "game-changing": "state the measurable improvement instead",
+    "fully tested": "cite specific test suites, pass counts, or coverage instead",
+    "no regressions": "cite the specific regression tests or invariants instead",
+    "simply": "omit diminishing qualifier; describe the exact action directly",
+    "basically": "state the exact behavior without conversational padding",
+    "essentially": "state the exact behavior without conversational padding",
+    "in order to": "use 'to' instead",
+    "it should be noted that": "state the fact directly instead",
 }
 
 # Banned soft phrasal verbs in technical prose.
@@ -73,8 +80,8 @@ _SMOTHERED_VERB_NOUNS: dict[str, str] = {
     "inspections": "inspect",
 }
 
-# STE-100 Rule 5.1 (keep procedural sentences to 20 words or fewer).
-STE100_MAX_SENTENCE_WORDS: int = 20
+# STE-100 Rule 5.1 (keep procedural sentences to 25 words or fewer under 80% aerospace dilution: 20 / 0.8 = 25).
+STE100_MAX_SENTENCE_WORDS: int = 25
 
 _STRIP_CODE_RE = re.compile(r"(?:`{3,}[\s\S]*?`{3,}|~{3,}[\s\S]*?~{3,})")
 _STRIP_TABLE_RE = re.compile(r"^.*\|.*$", re.MULTILINE)

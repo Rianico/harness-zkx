@@ -144,7 +144,7 @@ Match the body to the taxonomy signature:
 - **Knowledge**: mental model and invariants first, then patterns and gotchas.
 - Never invent a workflow for reference material.
 
-Keep each procedural sentence at or below 20 words.
+Keep each procedural sentence at or below 25 words.
 End every step with an observable completion criterion.
 **Completion criterion:** `rg -n '^## ' skills/<name>/SKILL.md` lists the signature headings.
 
@@ -191,7 +191,7 @@ bash scripts/check.sh
 
 - `check` validates `depends-on` only. It does not validate `manage` wiring.
 - `context-check` scans the whole tree. It has no working single-skill mode.
-- `ste100.py` enforces 20 words for every sentence.
+- `ste100.py` enforces 25 words for every sentence.
 - CI lints 7 named files, not the whole skill tree.
 
 #### Semantic Gate

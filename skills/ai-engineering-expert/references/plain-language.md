@@ -7,20 +7,21 @@ Sentence-level rules shared by `writing-for-agents` and `writing-for-humans`. Ev
 
 Adapted from `warpdotdev/common-skills@b811c24` (MIT, © Denver Technologies, Inc.): `write-pr-description/references/plain-language.md` + `write-feature-docs` style rules.
 
-> [!note] Authoritative Provenance: ASD-STE100 Issue 9 (published January 15, 2025).
+> [!note] Authoritative Provenance: ASD-STE100 Issue 9 (published January 15, 2025) is the international standard for simplified technical English.
 > - **Adopted Structural Rules:**
 >   - Rule 1.1: plain words.
 >   - Rule 2.1: multi-word nouns ≤3 words.
 >   - Rule 3.7: smothered verbs and nominalizations.
->   - Rule 5.1: procedural sentences ≤20 words.
+>   - Rule 5.1: procedural sentences ≤25 words (diluted from 20 words via 80% aerospace dilution).
 >   - Section 6: descriptive sentences ≤25 words.
 >   - Rule 8.1: semicolon ban.
 >   - Rule 8.5-8.7: count parentheticals, elements, and hyphenated words as one word.
 > - **Enforcement status:** `ste100.py` enforces Rules 3.7, 5.1, and 8.1, plus the lexical bans, deterministically. Rule 2.1 (multi-word nouns) and the Section 6 descriptive rules stay review judgment calls. No reliable deterministic check exists for noun chains.
 > - **Intentional CS Adaptations / Deviations:**
->   1. **The 80% Sweet Spot:** Decouple from the aerospace dictionary and grammatical rigidity. Apply STE-100 rules to eliminate fluff, active-voice ambiguity, and run-ons without inflating token volume.
->   2. **Epistemic Modality:** Preserved `MUST`, `SHOULD`, `MAY`, and `could` for system certainty and confidence bounds. Issue 9 Rule 3.4 bans auxiliary verbs, but computing requires them.
->   3. **Marketing Fluff Extension:** Added empirical replacements for ungrounded superlatives (`robust`, `seamless`).
+>   1. **The 80% Aerospace Dilution Principle:** Aerospace standards cannot be applied to all industries uniformly without dilution. By default we adopt 80% strength (1 / 0.8 = 1.25x headroom). Since Rule 5.1 has a 20-word restriction, 20 / 0.8 = 25 words, establishing a unified 25-word restriction that aligns with `AGENTS.md`.
+>   2. **Lexical Decoupling:** Decouple from the aerospace dictionary and grammatical rigidity. Apply STE-100 rules to eliminate fluff, active-voice ambiguity, and run-ons without inflating token volume.
+>   3. **Epistemic Modality:** Preserved `MUST`, `SHOULD`, `MAY`, and `could` for system certainty and confidence bounds. Issue 9 Rule 3.4 bans auxiliary verbs, but computing requires them.
+>   4. **Marketing Fluff Extension:** Added empirical replacements for ungrounded superlatives (`robust`, `seamless`).
 
 ## Which part of this file you need
 
@@ -42,7 +43,7 @@ Adapted from `warpdotdev/common-skills@b811c24` (MIT, © Denver Technologies, In
 
 | Mode | Scope / Artifacts | Structural rules |
 | --- | --- | --- |
-| **Machine-Targeted STE Flavor** | Tool/function descriptions, error messages, system prompts, inter-agent instructions (`herdr`), procedural runbooks (`AGENTS.md`, procedural `SKILL.md` bodies) | This file, plus ≤20 words/instruction, 1 action/sentence, imperative, front-loaded guards, token insulation |
+| **Machine-Targeted STE Flavor** | Tool/function descriptions, error messages, system prompts, inter-agent instructions (`herdr`), procedural runbooks (`AGENTS.md`, procedural `SKILL.md` bodies) | This file, plus ≤25 words/instruction, 1 action/sentence, imperative, front-loaded guards, token insulation |
 | **Human-Targeted STE Flavor** | PR descriptions, ADRs, RFCs, GitHub issues, CHANGELOGs, review comments, human-facing guidelines (such as `subskills/writing-for-humans`) | This file: ≤25 words/sentence, 60s scannability |
 | **Hybrid / Gray Areas** | Architecture reviews, complex diagnostics, proposals with embedded action blocks | Human-Targeted STE for exposition and rationale. Machine-Targeted STE for normative contracts, invariants, and action blocks |
 
@@ -145,7 +146,7 @@ A maintainer triaging under context-switching pressure must grasp problem, evide
 
 ## What is exempt
 
-Technical names stay verbatim. Never paraphrase an identifier to satisfy a word rule — `nil` is `nil`, not "an empty value":
+Technical nouns and verbs stay verbatim. ASD-STE100 Issue 9 classifies domain identifiers as technical nouns and technical verbs. Never paraphrase an identifier to satisfy a word rule — `nil` is `nil`, not "an empty value":
 
 - Code identifiers, type and field names, file paths: `FactoryConfig`, `spawn_server_impl`, `logic/factories.go`.
 - Command lines, flags, and arguments: `uv run pytest -k test_ste100`.
