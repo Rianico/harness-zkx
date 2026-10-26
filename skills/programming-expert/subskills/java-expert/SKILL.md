@@ -10,31 +10,35 @@ metadata:
 
 # Java Expert Skill
 
-You have invoked the Java Expert Skill. This skill contains actionable checklists and constraints for Java and Spring Boot software engineering tasks.
+Checklists and constraints for Java and Spring Boot engineering tasks.
 
 ## Quick Actions & Checklists
 
 ### Java Coding Standards
-- **Modern Java:** Prefer clear domain types, immutable values where practical, and explicit null handling.
-- **Collections & Streams:** Use streams when they improve readability; keep imperative loops when they are clearer.
-> **Need Deep Knowledge?** Read `$SKILL_DIR/references/java-coding-standards.md`.
+
+- **Modern Java:** prefer clear domain types, immutable values where practical, and explicit null handling.
+- **Collections & streams:** use streams when they improve readability. Keep imperative loops when they are clearer.
+
+> Deep dive: [java-coding-standards.md](references/java-coding-standards.md) — naming, immutability, Optional usage, streams best practices.
 
 ### Spring Boot Architecture
-- **Layers:** Use `@RestController`, `@Service`, and `@Repository`. Keep controllers thin.
-- **Dependency Injection:** Use constructor injection. Avoid `@Autowired` on fields.
-- **Configuration:** Prefer `@ConfigurationProperties` over `@Value`.
-> **Need Deep Knowledge?** Read `$SKILL_DIR/references/springboot-patterns.md`.
+
+- **Layers:** use `@RestController`, `@Service`, and `@Repository`. Keep controllers thin.
+- **Dependency injection:** use constructor injection. Avoid `@Autowired` on fields.
+- **Configuration:** prefer `@ConfigurationProperties` over `@Value`.
+
+> Deep dive: [springboot-patterns.md](references/springboot-patterns.md) — REST API structure, repository and service layers, DTOs, exception handling.
 
 ### Security (Spring Security)
-- **Auth:** Always use Spring Security. Handle CSRF correctly.
-- **Validation:** Use `@Valid` and Bean Validation API at the controller level.
-> **Need Deep Knowledge?** Read `$SKILL_DIR/references/springboot-security.md`.
+
+- **Auth:** always use Spring Security. Handle CSRF correctly.
+- **Validation:** use `@Valid` and the Bean Validation API at the controller level.
+
+> Deep dive: [springboot-security.md](references/springboot-security.md) — authentication, authorization, input validation, SQL injection prevention, password encoding.
 
 ### Testing (JUnit 5, Mockito)
-- **Unit:** Use JUnit 5 and Mockito.
-- **Integration:** Use `@WebMvcTest` for controller slicing, `@DataJpaTest` for repositories. Avoid `@SpringBootTest` unless writing full E2E tests.
-> **Need Deep Knowledge?** Read `$SKILL_DIR/references/springboot-tdd.md` or `$SKILL_DIR/references/springboot-verification.md`.
 
-## Instructions for the Agent
-1. Based on the arguments provided (e.g., "frameworks", "security", "testing"), apply the relevant checklist above.
-2. For deeper Java standards, Spring architecture, security, testing, or verification guidance, use the `Read` tool to fetch the relevant reference document from `$SKILL_DIR/references/`.
+- **Unit:** use JUnit 5 and Mockito.
+- **Integration:** use `@WebMvcTest` for controller slicing and `@DataJpaTest` for repositories. Reserve `@SpringBootTest` for full E2E tests.
+
+> Deep dive: [springboot-tdd.md](references/springboot-tdd.md) — TDD workflow, JUnit 5 + Mockito units, MockMvc web slices, DataJpaTest persistence. Full gate: [springboot-verification.md](references/springboot-verification.md) — five verification phases from build to security scan.

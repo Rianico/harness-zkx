@@ -48,7 +48,15 @@ shfmt -i 2 -ci -bn -sr -kp -w .     # write
 
 # Standard flags: -i 2 (indent 2), -ci (case indent), -bn (binary ops newline),
 # -sr (space redirect), -kp (keep padding)
-# Config file .editorconfig or .shfmt.toml
+# Config file .editorconfig or .shfmt.toml:
+#
+# .shfmt.toml
+# indent = 2
+# case_indent = true
+# binary_next_line = true
+# switch_case_indent = true
+# space_redirects = true
+# keep_padding = true
 
 # Pre-commit hook: shfmt -d exits non-zero when diff found
 ```

@@ -14,24 +14,19 @@ metadata:
 
 # TypeScript Composed Expert
 
-You are a unified TypeScript expert combining four complementary sources into one workflow: advanced type system (generics, conditional/mapped/template literals, utility types), Jest testing (structure, mocking, async, snapshots, React), LobeHub style conventions (type safety, async-first, imports, naming), and monorepo/tooling performance (strict config, migration, build, diagnostics).
+Four domains in one workflow: advanced type system, Jest testing, style conventions, and monorepo/tooling performance.
 
 > [!tip] Attribution
-> Raw sources stored inside this skill at `sources/`:
->
-> - `sources/github/awesome-copilot/javascript-typescript-jest/ORIGINAL.md` — Jest best practices
-> - `sources/wshobson/agents/typescript-advanced-types/ORIGINAL.md` + `details.md` — advanced types
-> - `sources/lobehub/lobehub/typescript/ORIGINAL.md` — LobeHub style & type-safety
-> - `sources/sickn33/agentic-awesome-skills/typescript-expert/ORIGINAL.md` + `references/`, `scripts/ts_diagnostic.py` — general expert
+> Raw sources live under `sources/` in this skill.
+
+- `sources/github/awesome-copilot/javascript-typescript-jest/ORIGINAL.md` — Jest best practices.
+- `sources/wshobson/agents/typescript-advanced-types/ORIGINAL.md` + `details.md` — advanced types.
+- `sources/lobehub/lobehub/typescript/ORIGINAL.md` — LobeHub style and type safety.
+- `sources/sickn33/agentic-awesome-skills/typescript-expert/ORIGINAL.md` — general expert, plus `references/` and `scripts/ts_diagnostic.py`.
 
 ## When invoked
 
-0. **Route if out-of-scope, then stop:**
-   - Deep bundler internals (webpack/vite/rollup) → `typescript-build-expert`
-   - ESM/CJS circular dependency analysis → `typescript-module-expert`
-   - Compiler type-performance profiling → `typescript-type-expert`
-
-   > Example: "This requires deep bundler expertise. Please invoke: 'Use the typescript-build-expert subagent.' Stopping here."
+0. **Route out-of-scope work:** if the task needs deep bundler internals, ESM/CJS cycle analysis, or compiler trace profiling, stop. Escalate to the orchestrator with your findings so far.
 
 1. **Analyze project setup (adapt tooling):**
 
@@ -42,79 +37,79 @@ You are a unified TypeScript expert combining four complementary sources into on
    uv run $SKILL_DIR/scripts/ts_diagnostic.py 2>&1 | head -n 80
    ```
 
-   Respect existing `baseUrl`/`paths`, import style (absolute vs relative), and project scripts over raw tools. In monorepos, consider [[tooling#monorepo-matrix]] project references before broad `tsconfig` changes.
+   Respect existing `baseUrl`/`paths`, import style (absolute vs relative), and project scripts over raw tools. In monorepos, consider the [tooling — Monorepo Matrix](references/tooling.md) and project references before broad `tsconfig` changes.
 
-2. **Classify the task** — type design, Jest testing, style fix, tooling/migration, or diagnostics — then apply the matching guidance below. Keep SKILL.md ==tight== (20% solves 80%); load deep detail behind pointers only when the branch needs it.
+2. **Classify the task** — type design, Jest testing, style fix, tooling/migration, or diagnostics — then apply the matching guidance below. Keep SKILL.md **tight** (20% solves 80%). Load deep detail behind pointers only when the branch needs it.
 
 ## Type system mastery
 
 Load advanced types only when implementing complex type logic.
 
-- **Generics** with constraints and multiple params — see [[advanced-types#generics]]
-- **Conditional types** (`extends ? :`, `infer`, distributive, nested) — see [[advanced-types#conditional-types]]
-- **Mapped types** (`Readonly`, `Partial`, key remapping, filtering by value) — see [[advanced-types#mapped-types]]
-- **Template literals** (`on${Capitalize<>}`, path building) — see [[advanced-types#template-literals]]
-- **Utility types** (`Pick`, `Omit`, `Record`, `Exclude`/`Extract`, `ReturnType`, `Awaited`) — see [[cheatsheet#utility-types]] and `utility-types.ts`
-- **Branded types** for domain primitives (`Brand<string, 'UserId'>`) — see [[advanced-types#branded-types]]
-- **Patterns** — event emitter, type-safe API client, builder, `DeepReadonly`/`DeepPartial`, discriminated unions — see [[advanced-types#patterns]]
+- **Generics** with constraints and multiple params — see [advanced-types — Generics](references/advanced-types.md)
+- **Conditional types** (`extends ? :`, `infer`, distributive, nested) — see [advanced-types — Conditional Types](references/advanced-types.md)
+- **Mapped types** (`Readonly`, `Partial`, key remapping, filtering by value) — see [advanced-types — Mapped Types](references/advanced-types.md)
+- **Template literals** (`on${Capitalize<>}`, path building) — see [advanced-types — Template Literals](references/advanced-types.md)
+- **Utility types** (`Pick`, `Omit`, `Record`, `Exclude`/`Extract`, `ReturnType`, `Awaited`) — see [cheatsheet — Utility Types](references/cheatsheet.md) and [utility-types.ts](references/utility-types.ts)
+- **Branded types** for domain primitives (`Brand<string, 'UserId'>`) — see [advanced-types — Branded Types](references/advanced-types.md)
+- **Patterns** — event emitter, type-safe API client, builder, `DeepReadonly`/`DeepPartial`, discriminated unions — see [advanced-types — Advanced Patterns](references/advanced-types.md)
 
 ### Critical cruxes
 
-- **`exactOptionalPropertyTypes`**: Optional field `{ prop?: string }` rejects `{ prop: undefined }`. Use conditional spreading to omit keys rather than assigning undefined: `...(val !== undefined && { val })`.
-- **`noUncheckedIndexedAccess`**: Array and record lookups yield `T | undefined`. Safely narrow before use (`const [first] = arr; if (first !== undefined)`) or iterate via `for...of`.
-- **Zod boundary admission**: `JSON.parse`, fetch, or file reads return untyped data. Parse at admission boundaries via Zod schema (`Schema.parse(raw)`) to admit strictly typed models into domain code; serialize only at egress.
-- **Async `forEach` trap**: Never use `items.forEach(async ...)`, which creates unhandled/unawaited floating promises. Use `await Promise.all(items.map(...))` for concurrency or `for (const item of items) await ...` for sequential execution.
+- **`exactOptionalPropertyTypes`:** optional field `{ prop?: string }` rejects `{ prop: undefined }`. Use conditional spreading to omit keys rather than assigning undefined: `...(val !== undefined && { val })`.
+- **`noUncheckedIndexedAccess`:** array and record lookups yield `T | undefined`. Safely narrow before use (`const [first] = arr; if (first !== undefined)`) or iterate via `for...of`.
+- **Zod boundary admission:** `JSON.parse`, fetch, or file reads return untyped data. Parse at admission boundaries via Zod schema (`Schema.parse(raw)`) to admit strictly typed models into domain code. Serialize only at egress.
+- **Async `forEach` trap:** `items.forEach(async ...)` creates unhandled, unawaited floating promises. Use `await Promise.all(items.map(...))` for concurrency or `for (const item of items) await ...` for sequential execution.
 
 > [!note] Writing rule
-> Use `unknown` over `any`, prefer `interface` for object shapes and `type` for unions, leverage inference, create helper types, and document complex types with JSDoc. See [[cheatsheet#best-practices]] and [[style-guide#types-and-type-safety]].
+> Use `unknown` over `any`. Prefer `interface` for object shapes and `type` for unions. Leverage inference, create helper types, and document complex types with JSDoc. See [cheatsheet — Best Practices](references/cheatsheet.md) and [style-guide — Types and Type Safety](references/style-guide.md).
 
 ## Jest testing
 
 Use when writing or fixing JavaScript/TypeScript tests.
 
-- **Structure:** `*.test.ts` next to code or `__tests__/`, `describe('Unit', () => it('should ...'))` nesting — see [[jest-testing#test-structure]]
-- **Mocking:** `jest.mock()` for modules, `jest.spyOn()` for fns, `mockReturnValue()`/`mockImplementation()`, `jest.resetAllMocks()` in `afterEach` — see [[jest-testing#effective-mocking]]
-- **Async:** `async/await` or `resolves`/`rejects`, `jest.setTimeout()` for slow — see [[jest-testing#testing-async-code]]
-- **Snapshots & React:** small focused snapshots; use React Testing Library + `userEvent` over `fireEvent`, query by role/label — see [[jest-testing#snapshot-and-react]]
-- **Matchers:** `toBe`/`toEqual`, `toBeTruthy`, `toMatch`, `toHaveLength`, `toHaveProperty`, `toThrow`, `toHaveBeenCalledWith` — see [[jest-testing#common-jest-matchers]]
+- **Structure:** `*.test.ts` next to code or `__tests__/`, `describe('Unit', () => it('should ...'))` nesting — see [jest-testing — Test Structure](references/jest-testing.md)
+- **Mocking:** `jest.mock()` for modules, `jest.spyOn()` for fns, `mockReturnValue()`/`mockImplementation()`, `jest.resetAllMocks()` in `afterEach` — see [jest-testing — Effective Mocking](references/jest-testing.md)
+- **Async:** `async/await` or `resolves`/`rejects`, `jest.setTimeout()` for slow tests — see [jest-testing — Testing Async Code](references/jest-testing.md)
+- **Snapshots & React:** small focused snapshots. Use React Testing Library + `userEvent` over `fireEvent`. Query by role/label — see [jest-testing — Snapshot Testing and React](references/jest-testing.md)
+- **Matchers:** `toBe`/`toEqual`, `toBeTruthy`, `toMatch`, `toHaveLength`, `toHaveProperty`, `toThrow`, `toHaveBeenCalledWith` — see [jest-testing — Common Jest Matchers](references/jest-testing.md)
 
 ## Style and safety (LobeHub conventions)
 
 Enforce when editing `*.ts`/`*.tsx`/`*.mts`.
 
-- ==Type safety==: avoid explicit annotations when inferred, never implicit `any`, `Record<PropertyKey, unknown>` over `object` — see [[style-guide#types-and-safety]]
-- Async-first: new IO must use `fs/promises`, never `*Sync` except sync-locked contract or `process.on('exit')` — see [[style-guide#async-patterns]]
-- Imports: separate `import type { }` (never `import { type }`), `simple-import-sort/imports`, alphabetical specifiers — see [[style-guide#imports]]
-- Structure: destructuring, named exports over `default` (except framework-required), reuse `packages/utils` helpers (`isRecord`, `isPlainRecord`, etc.) — see [[style-guide#code-structure]]
-- Logging: never log secrets, use `console.error` in catch, never silent `.catch(() => fallback)` — see [[style-guide#logging]]
+- **Type safety:** avoid explicit annotations when inference covers them. Never write implicit `any`. Prefer `Record<PropertyKey, unknown>` over `object` — see [style-guide — Types and Type Safety](references/style-guide.md)
+- **Async-first:** new IO must use `fs/promises`. Use `*Sync` only for a sync-locked contract or `process.on('exit')` — see [style-guide — Async Patterns](references/style-guide.md)
+- **Imports:** separate `import type { }` (never `import { type }`), `simple-import-sort/imports`, alphabetical specifiers — see [style-guide — Imports](references/style-guide.md)
+- **Structure:** destructuring, named exports over `default` (except framework-required), reuse `packages/utils` helpers (`isRecord`, `isPlainRecord`, etc.) — see [style-guide — Code Structure](references/style-guide.md)
+- **Logging:** never log secrets. Use `console.error` in catch. Never silence with `.catch(() => fallback)` — see [style-guide — Logging](references/style-guide.md)
 
 ## Tooling, monorepo, and performance
 
-- **Strict tsconfig** — enable `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `exactOptionalPropertyTypes` — copy `references/tsconfig-strict.json` — see [[tooling#tsconfig-essentials]]
-- **Module** — `ESNext`, `bundler` resolution, `esModuleInterop`, `target ES2022` — see [[tooling#module-configuration]]
-- **Build perf** — `skipLibCheck`, `incremental`, precise `include`/`exclude`, project references `composite:true` — diagnose via `npx tsc --extendedDiagnostics` and `scripts/ts_diagnostic.py` — see [[tooling#performance]]
-- **Linter choice** — Biome for speed (64 rules) vs ESLint for depth/plugins/type-aware — see [[tooling#biome-vs-eslint]]
-- **Monorepo** — Turborepo (<20 pkgs, speed) vs Nx (>50 pkgs, plugins) — see [[tooling#monorepo-matrix]]
-- **Migration** — `allowJs`/`checkJs` incremental, `ts-migrate`/`typesync`, ESM-first `"type":"module"` — see [[tooling#migration]]
+- **Strict tsconfig** — enable `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `exactOptionalPropertyTypes`. Copy [tsconfig-strict.json](references/tsconfig-strict.json). Rationale: [cheatsheet — TSConfig Essentials](references/cheatsheet.md)
+- **Module** — `ESNext`, `bundler` resolution, `esModuleInterop`, `target ES2022` — see [cheatsheet — TSConfig Essentials](references/cheatsheet.md)
+- **Build perf** — `skipLibCheck`, `incremental`, precise `include`/`exclude`, project references `composite:true`. Diagnose via `npx tsc --extendedDiagnostics` and [ts_diagnostic.py](scripts/ts_diagnostic.py) — see [tooling — Debugging Mastery](references/tooling.md)
+- **Linter choice** — Biome for speed (64 rules) vs ESLint for depth/plugins/type-aware — see [tooling — Biome vs ESLint](references/tooling.md)
+- **Monorepo** — Turborepo (<20 pkgs, speed) vs Nx (>50 pkgs, plugins) — see [tooling — Monorepo Matrix](references/tooling.md)
+- **Migration** — `allowJs`/`checkJs` incremental, `ts-migrate`/`typesync`, ESM-first `"type":"module"` — see [tooling — Migration](references/tooling.md)
 
 ## Deep module design & architecture
 
-- **Reject Classitis & Layer Bloat:** In TypeScript/Node, avoid Java-style Enterprise Architecture with 5 shallow layers (`Controller → DTO → Service → Mapper → Repository → Entity`) where each layer merely shuffles fields. Functions, plain objects, and modules are first-class; avoid creating classes purely to wrap a single method.
-- **Narrow Public Surface, Deep Internals:** Public entrypoints (`index.ts`) expose a minimal, cohesive API (e.g. `resolve()`, `mutate()`). Internal modules absorb caching (LRU), CAS addressing, atomic transactions, and boundary normalization without leaking internal helper types.
-- **Design Deepening:** Submodule decomposition curing code smells (God files, Divergent Change, Shotgun Surgery) is permitted design deepening; never widen public barrel exports without mandate.
-- **Counterexample Refutation & Oracles:** Reviewers and implementers must provide concrete minimal failing inputs (`input -> expected vs observed`) to prove defects. Verify non-trivial state machines or combinatorial logic with minimal exhaustive small-input oracle tables or property-based tests.
+- **Reject classitis & layer bloat:** avoid Java-style enterprise stacks of 5 shallow layers (`Controller → DTO → Service → Mapper → Repository → Entity`). Each layer there merely shuffles fields. Functions, plain objects, and modules are first-class. Avoid classes that wrap a single method.
+- **Narrow public surface, deep internals:** public entrypoints (`index.ts`) expose a minimal, cohesive API (e.g. `resolve()`, `mutate()`). Internal modules absorb caching (LRU), CAS addressing, atomic transactions, and boundary normalization without leaking internal helper types.
+- **Design deepening:** submodule decomposition curing code smells (God files, Divergent Change, Shotgun Surgery) is permitted design deepening. Never widen public barrel exports without mandate.
+- **Counterexample refutation & oracles:** reviewers and implementers must provide concrete minimal failing inputs (`input -> expected vs observed`) to prove defects. Verify non-trivial state machines or combinatorial logic with minimal exhaustive small-input oracle tables or property-based tests.
 
 ## Code review checklist
 
-Apply exhaustively; every item is a blocker.
+Apply exhaustively. Every item is a blocker.
 
-- **Architecture:** narrow public API, zero shallow pass-through layers or Classitis; internal modules absorb complexity; multi-step mutations bound in single transactions; counterexamples provided for bug claims
+- **Architecture:** narrow public API, zero shallow pass-through layers or classitis, internal modules absorbing complexity. Multi-step mutations bound in single transactions. Bug claims carry counterexamples.
 - **Type safety:** no implicit `any` (`unknown` instead), strict null checks, minimal `as`, generic constraints, discriminated unions, explicit public return types
 - **Best practices:** `interface` for shapes, const assertions, type guards over `as`, branded types for primitives, template literals where appropriate
 - **Performance:** no deep instantiation (>10 recursion), no hot-path mapped types, `skipLibCheck` set, references configured
 - **Modules:** consistent imports, no circular deps, barrel exports not over-bundled, ESM/CJS handled
 - **Jest:** files named `*.test.ts`, behavior + a11y assertions, `userEvent`, snapshots reviewed
-- **Style:** separate type imports, named exports, `satisfies` over `as`, `==` via `Object.is` pitfalls covered — see [[style-guide]]
+- **Style:** separate type imports, named exports, `satisfies` over `as`, `==` via `Object.is` pitfalls covered — see [style-guide](references/style-guide.md)
 
 ## Validate thoroughly
 
@@ -129,14 +124,14 @@ npx tsc --generateTrace trace --incremental false; npx @typescript/analyze-trace
 ```
 
 > [!warning] Safety
-> Avoid watch/serve (`--watch`, `serve`) in validation — use one-shot diagnostics only. Check `any` and `as` via `grep -rn ': any' --include='*.ts' src/` and `scripts/ts_diagnostic.py`.
+> Avoid watch/serve (`--watch`, `serve`) in validation — use one-shot diagnostics only. Check `any` and `as` via `grep -rn ': any' --include='*.ts' src/` and [ts_diagnostic.py](scripts/ts_diagnostic.py).
 
 ## References
 
 Deep content behind pointers (one level from SKILL.md):
 
 - [Advanced Types & Patterns](references/advanced-types.md) — generics/conditional/mapped/template, builder/event-emitter/API client, type guards
-- [TypeScript Cheatsheet](references/cheatsheet.md) — type basics, aliases, utility types, guards, unions, branded types, module declarations
+- [TypeScript Cheatsheet](references/cheatsheet.md) — type basics, aliases, utility types, guards, unions, branded types, module declarations, TSConfig essentials
 - [Utility Types Library](references/utility-types.ts) — `Brand`, `Result`, `Option`, `DeepReadonly`, `PickByType`, `UnionToTuple`, `assertNever`
 - [TSConfig Strict](references/tsconfig-strict.json) — strict baseline to copy
 - [Jest Testing](references/jest-testing.md) — Jest structure, mocking, async, snapshots, matchers
