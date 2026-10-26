@@ -43,6 +43,8 @@ user-invocable: false
   import { RequestTrigger } from './types';
   ```
 
+- **Re-export scope (`export … from`)**: `export { Foo } from './foo'` forwards `Foo` without binding it in the local module scope. If code in the same file references `Foo`, write separate import and export statements: `import { Foo } from './foo'; export { Foo };`. When converting imports to re-exports, verify with a token-anchored grep (`rg -w Foo` or `\bFoo\b`) and run `tsc`.
+
 - Within each import statement, specifiers are sorted **alphabetically by name**
 
 ## Code Structure
@@ -54,6 +56,12 @@ user-invocable: false
 - Prefer **named exports** over `export default` — keeps refactor renames and IDE auto-import in sync, and avoids the `default` re-naming drift you get with `import Foo from './foo'`. Reserve `export default` for files where the framework requires it (Next.js page/route/layout, React.lazy targets, config files like `vitest.config.ts`). The codebase still has many `export default` occurrences — that's historical debt, not a pattern to copy; do not model new code on existing `export default` usage outside the framework-required cases above
 - Before adding local helpers for common guards/parsing/normalization (record checks, string extraction, empty-string handling, timing helpers, JSON-safe utilities, etc.), search shared utility packages/directories first. If the helper already exists or clearly belongs there, import it from the shared utility module instead of duplicating tiny helpers across feature files.
 - **Deep modules over classitis:** Avoid creating shallow 5-line classes or DTO/mapper hierarchies that do nothing but shuffle properties between layers (e.g. Controller → DTO → Service → Mapper → Repo). Expose simple, narrow module APIs that absorb rich internal complexity (caching, transactions, validation, persistence) behind clean functions or minimal facades.
+
+## Strings and Regex
+
+- **Precedence fallback tiers (`??`)**: Use `??`-chained tier functions (`resolveTier1() ?? resolveTier2() ?? fallback`) to preserve fallback order and lazy evaluation. Avoid `||` when `""`, `0`, or `false` are valid values. Note that `??` preserves `NaN` (`Number(raw) ?? fallback` returns `NaN`). Name tier functions for their precedence.
+- **`String.raw` for backslash literals**: Use `String.raw` for string literals that must carry backslashes (Windows paths, `new RegExp` constructor sources, escape-sequence fixtures). Note that `String.raw` cannot end in a lone unescaped backslash; a trailing backslash escapes the closing delimiter and triggers a syntax error. Trailing backslashes require `"C:\\"`.
+- **Precompiled regexes (non-global)**: Precompile static regexes at module scope with `.exec()`, but only for **non-global** patterns. Global `/g` regexes retain mutable `lastIndex` across calls and tests. For global iteration, use `str.matchAll(/.../g)` (requires `/g` or throws `TypeError`) or `str.replaceAll()`. Guard against catastrophic backtracking (ReDoS) by bounding input length (`^.{0,200}$`) or splitting ambiguous patterns (prefix-exec + linear suffix); verify rewrites via property tests over a generated corpus. `RegExp.exec()` returns `RegExpExecArray | null`, requiring explicit narrowing under `strict`.
 
 ## UI and Theming
 

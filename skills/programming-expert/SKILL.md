@@ -68,7 +68,7 @@ General engineering rules applied by every subskill. Language detail varies. The
 
 - **Resilience — retry only transient faults** — retry `ConnectionError`/`TimeoutError` and `429/502/503/504`. Treat `ValueError`, `TypeError`, and auth 4xx as permanent failures. Use `wait_exponential_jitter` with a cap on attempts *and* wall time. Jitter prevents the thundering herd.
 
-- **Resources — RAII & signal-safe cleanup** — acquire in `enter`/`aenter`. Release unconditionally in `exit`/`aexit` (`with`/`using`/`defer`/`Drop`/`trap ... EXIT`). Stack cleanups with `ExitStack`/`AsyncExitStack`. Finalize streams in `finally`/`exit`. Cleanup runs on every exit — signals, exceptions, interrupts, crashes. The same invariant governs temp files, locks, descriptors, and processes.
+- **Resources — RAII & signal-safe cleanup** — acquire in `enter`/`aenter`. Release unconditionally in `exit`/`aexit` (`with`/`using`/`defer`/`Drop`/`trap ... EXIT`). Stack cleanups with `ExitStack`/`AsyncExitStack`. Finalize streams in `finally`/`exit`. Cleanup runs on every exit — signals, exceptions, interrupts, crashes. The same invariant governs temp files, locks, descriptors, and processes. Test-scoped environment and platform mutations must capture and restore in one construct (fixtures, `afterEach`, RAII, `vi.stubEnv`, `jest.replaceProperty`, `monkeypatch`). Restore original values for pre-existing keys, and use `delete process.env.KEY` on teardown only for keys added during the test — in Node.js, assigning `undefined` sets the string `'undefined'`.
 
 - **Strict by default — permissive hides bugs** — silent empty results, swallowed pipe errors, and implicit `any` hide defects. Separate declaration from assignment when assignment can fail (`local x; x=$(cmd)`, `export x; x=$(cmd)`). Declaration builtins return 0 and mask the exit status under `set -e`. Enable the strictest checks first (`strict`/`--enable=all`/`-Wall -Werror`/type `strict`). Relax only with a narrow, reasoned suppression at the smallest scope.
 
@@ -76,7 +76,9 @@ General engineering rules applied by every subskill. Language detail varies. The
 
 - **Delimiters lie — use structured over ad-hoc split** — ad-hoc splitting (`split(',')`, newline/token) fails when the data contains the delimiter. Choose delimiters that cannot appear in the data, or use structured encodings (arrays, JSON, length-prefix). If you must split, prove the delimiter is safe first.
 
-- **Platform is a dependency — probe, don't assume** — the same API differs across platforms and versions. Declare the minimum version. Probe capabilities and feature-detect. Gate with a fallback. Fail fast with an actionable message (`install X >=Y`). Test on the targets.
+- **Platform is a dependency — probe, don't assume** — the same API differs across platforms and versions. Declare the minimum version. Probe capabilities and feature-detect. Gate with a fallback. Fail fast with an actionable message (`install X >=Y`). Test on the targets. When investigating test flakiness, isolate the case first: passing alone but failing in the file indicates leaked cross-test state (polluted globals or platform stubs), not external environment.
+
+- **Mechanical population verification — derive populations mechanically** — never verify a set you enumerated. Derive the full population via mechanical tools (`tsc`, `basedpyright`, token-anchored `rg '\bIDENT\b'` or `rg -w IDENT`, LSP references, full test suite on dynamic boundaries like string keys, reflection, serialization schemas, config keys, i18n, docs). Hand-enumerating items allows unlisted defects to escape. This single invariant governs module mock surfaces (spread unmocked exports), rename sweeps, and ratchet re-pins.
 
 - **Artifacts: ADR / Blueprint / Technical standards** — three durable artifacts anchor each decision.
   - The ADR is the concise decision log: context → decision → consequences, plus rejected alternatives.
