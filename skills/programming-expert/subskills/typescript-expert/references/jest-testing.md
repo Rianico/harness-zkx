@@ -16,10 +16,27 @@ description: 'Best practices for writing JavaScript/TypeScript tests using Jest,
 
 ### Effective Mocking
 - Mock external dependencies (APIs, databases, etc.) to isolate your tests
-- Use `jest.mock()` for module-level mocks
+- Use `jest.mock()` or `vi.mock()` for module-level mocks
+- Preserve unmocked module surface with `importOriginal` / `requireActual` instead of hand-enumerating exports:
+  ```ts
+  // Vitest:
+  vi.mock('./module', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('./module')>()),
+    targetFn: vi.fn(),
+  }));
+  // Jest:
+  jest.mock('./module', () => ({
+    ...jest.requireActual<typeof import('./module')>('./module'),
+    targetFn: jest.fn(),
+  }));
+  ```
+- Avoid spreading live mutable bindings (exported `let`, counters); inject seams as parameters whenever possible
 - Use `jest.spyOn()` for specific function mocks
 - Use `mockImplementation()` or `mockReturnValue()` to define mock behavior
+
+### Test Setup and Teardown
 - Reset mocks between tests with `jest.resetAllMocks()` in `afterEach`
+- Restore modified environment variables in `afterEach`; prefer `vi.stubEnv` / `jest.replaceProperty`, or restore captured original values and use `delete process.env.KEY` only for keys added during tests
 
 ### Testing Async Code
 - Always return promises or use async/await syntax in tests

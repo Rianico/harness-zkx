@@ -41,6 +41,20 @@ def test_send_notification(fake_transport):
     assert "out of memory" in sent.body
 ```
 
+### Mock Surface Enumeration (Hand-Enumeration vs Seam Override)
+```typescript
+// REJECT: Hand-enumerating module exports; unmocked helpers silently return undefined
+vi.mock('./logger', () => ({
+  log: vi.fn(), // Omitted runtime exports (formatLog, defaultLogger) break downstream callers
+}));
+
+// APPROVE: Factory with importOriginal preserving module surface and types
+vi.mock('./logger', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./logger')>()),
+  log: vi.fn(),
+}));
+```
+
 ---
 
 ## 2. Ontological Truth (EDD / State Safety & Anti-Laziness)
@@ -85,6 +99,39 @@ def load_session(session_id: str):
 
 # APPROVE (Pragmatic Tolerance): Internal helper name differs from draft sketch, but contracts and invariants hold
 def _normalize_token_expiry(token: Token) -> Timestamp: ...
+```
+
+### Ratchet Baseline Widening vs Strict Non-Increasing Count
+```markdown
+# REJECT: Widening baseline or stealth-increasing suppression count
+- baseline_errors: 12
++ baseline_errors: 15  # Added 3 new unaddressed lint/type suppressions!
+
+# APPROVE: Strict non-increasing count with updated identities
+- baseline_errors: 12 (id1, id2, id3, ...)
++ baseline_errors: 10 (id1, id3, ...)  # 2 suppressions cured; dead items dropped
+```
+
+### Concurrency Failure Direction
+```typescript
+// REJECT: Fail-open on security / rate-limit / quota boundary
+async function checkRateLimit(userId: string): Promise<boolean> {
+  try {
+    return await redis.checkLimit(userId);
+  } catch (err) {
+    return true; // Vulnerability: Redis outage permits unlimited traffic/attacks!
+  }
+}
+
+// APPROVE: Fail-closed on security boundary with explicit bounded fallback
+async function checkRateLimit(userId: string): Promise<boolean> {
+  try {
+    return await redisWithTimeout(userId, 200);
+  } catch (err) {
+    logger.error("Rate limit check failed", err);
+    return false; // Domain-safe: fail-closed under security boundary
+  }
+}
 ```
 
 ---
