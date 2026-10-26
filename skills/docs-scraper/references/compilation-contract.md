@@ -104,7 +104,7 @@ Style and structural constraints derive from ASD-STE100 Issue 9 (published Janua
 | Link existence | Warning | Internal links exist |
 | Trigger duplicates | Warning | No duplicates across modules |
 | Trigger format | Error | No regex/special chars |
-| Sentence length (ASD-STE100 Issue 9) | Warning | Max 20 words per sentence (code blocks excluded) |
+| Sentence length (ASD-STE100 Issue 9) | Warning | Max 25 words per sentence (80% ASD-STE100, code blocks excluded) |
 | Banned words (ASD-STE100 Issue 9) | Error | No fluff or marketing terms: comprehensive, robust, properly, various, should work, seamless, cutting-edge, effortless, blazing-fast, state-of-the-art, game-changing |
 | Phrasal verbs (ASD-STE100 Issue 9) | Error | No soft phrasal verbs: spin up, kick off, dive into, reach out, circle back, touch base |
 | Semicolons (ASD-STE100 Issue 9) | Warning | No semicolons in prose (use separate sentences) |

@@ -81,7 +81,7 @@ Group extracted atomic notes into themes first, then write summaries based on th
 
 ### One-Idea-Per-Paragraph
 
-Each paragraph covers exactly one point (STE-100 Rule 6.5). Keep procedural sentences under 20 words (STE-100 Rule 5.1).
+Each paragraph covers exactly one point (STE-100 Rule 6.5). Keep procedural sentences under 25 words (80% ASD-STE100 Rule 5.1 dilution).
 
 **Bad:**
 
@@ -163,7 +163,7 @@ Avoid fluff words that add no technical meaning. Replace with the approved form:
 
 ### Sentence Length (Rule 5.1)
 
-Max 20 words per procedural sentence (Rule 5.1). Code blocks, inline code spans, and frontmatter are excluded before splitting. Long sentences must be split or rewritten.
+Max 25 words per procedural sentence (80% ASD-STE100 Rule 5.1 dilution). Code blocks, inline code spans, and frontmatter are excluded before splitting. Long sentences must be split or rewritten.
 
 ### One Instruction Per Sentence
 

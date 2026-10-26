@@ -84,7 +84,7 @@ class TestSentenceSplitting:
         assert "&amp;" not in _strip_html_entities(text)
 
     def test_max_sentence_words_constant(self):
-        assert STE100_MAX_SENTENCE_WORDS == 20
+        assert STE100_MAX_SENTENCE_WORDS == 25
 
     def test_list_items_split(self):
         text = "- First item\n- Second item\n* Third item\n+ Fourth item"
@@ -97,25 +97,25 @@ class TestSentenceLengths:
 
     def test_short_sentences_pass(self):
         text = "Short sentence one. Short sentence two."
-        assert lint_sentence_lengths(text, max_words=20) == []
+        assert lint_sentence_lengths(text) == []
 
     def test_long_sentence_detected(self):
-        long_sentence = "Word " * 22 + "end."
-        issues = lint_sentence_lengths(long_sentence, max_words=20)
+        long_sentence = "Word " * 26 + "end."
+        issues = lint_sentence_lengths(long_sentence)
         assert len(issues) == 1
-        assert "23 words" in issues[0]
+        assert "27 words" in issues[0]
 
     def test_inline_code_does_not_inflate_word_count(self):
         text = "Run `command with twenty very long parameter options and flags` now."
-        assert lint_sentence_lengths(text, max_words=20) == []
+        assert lint_sentence_lengths(text) == []
 
     def test_code_blocks_do_not_inflate_word_count(self):
         text = "Start.\n```\n" + "long code line\n" * 50 + "```\nEnd."
-        assert lint_sentence_lengths(text, max_words=20) == []
+        assert lint_sentence_lengths(text) == []
 
     def test_tilde_code_blocks_do_not_inflate_word_count(self):
         text = "Start.\n~~~\n" + "long code line\n" * 50 + "~~~\nEnd."
-        assert lint_sentence_lengths(text, max_words=20) == []
+        assert lint_sentence_lengths(text) == []
 
     def test_custom_max_words(self):
         text = "One two three four five."
@@ -125,16 +125,16 @@ class TestSentenceLengths:
 
     def test_parenthetical_text_counts_as_one_word(self):
         """STE-100 Rule 8.5: text in parentheses counts as one word."""
-        base = "Configure the production runtime environment for every connected client device across all regions now"
+        base = "Configure the production runtime environment for every single connected client device across all authorized cloud regions deployed today and verify the output status now"
         text = f"{base} (see the migration appendix notes for details)."
-        assert len(text.split()) > 20
-        assert lint_sentence_lengths(text, max_words=20) == []
+        assert len(text.split()) > 25
+        assert lint_sentence_lengths(text) == []
 
     def test_nested_parenthetical_text_counts_as_one_word(self):
         """STE-100 Rule 8.5: nested parentheses still count as one word."""
-        logis = "Alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau"
+        logis = "Alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi"
         text = f"{logis} (see the note (with an inner aside) here)."
-        assert lint_sentence_lengths(text, max_words=20) == []
+        assert lint_sentence_lengths(text) == []
 
     def test_hyphenated_words_count_as_one_word(self):
         """STE-100 Rule 8.7: a hyphenated word counts as one word."""
@@ -143,10 +143,10 @@ class TestSentenceLengths:
 
     def test_parenthetical_does_not_mask_long_sentence(self):
         """STE-100 Rule 8.5 is a counting rule, not an exemption for long sentences."""
-        text = " ".join(["word"] * 21) + " (short)."
-        issues = lint_sentence_lengths(text, max_words=20)
+        text = " ".join(["word"] * 26) + " (short)."
+        issues = lint_sentence_lengths(text)
         assert len(issues) == 1
-        assert "22 words" in issues[0]
+        assert "27 words" in issues[0]
 
 
 class TestBannedWords:
@@ -173,6 +173,21 @@ class TestBannedWords:
             issues = lint_banned_words(f"Our {term} pipeline delivers results.")
             assert len(issues) >= 1
             assert term in issues[0].lower() or term.replace("-", " ") in issues[0].lower()
+
+    def test_new_banned_fluff_terms(self):
+        new_terms = [
+            ("fully tested", "We deliver a fully tested release candidate."),
+            ("no regressions", "The patch ensures no regressions across all suites."),
+            ("simply", "You simply execute the script to begin."),
+            ("basically", "The coordinator basically acts as a proxy."),
+            ("essentially", "This cache is essentially an in-memory map."),
+            ("in order to", "Deploy workers in order to handle load."),
+            ("it should be noted that", "It should be noted that config is immutable."),
+        ]
+        for term, sentence in new_terms:
+            issues = lint_banned_words(sentence)
+            assert len(issues) >= 1, f"Failed to flag banned term: {term}"
+            assert term in issues[0].lower()
 
     def test_hyphen_and_space_variants(self):
         assert len(lint_banned_words("This is cutting-edge technology.")) >= 1

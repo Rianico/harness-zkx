@@ -16,7 +16,7 @@ These are binary checks in `scripts/compile.py validate-skill` — NOT part of t
 |------|------|-------------|
 | Sanitization | No zero-width/bidi/invisible control codepoints | `sanitize.py` strips before compile. Presence is an Error |
 | Prompt injection | No known injection patterns (4 compiled regexes) | `lint_injections()` on SKILL.md body + reference files |
-| ASD-STE100 Issue 9 sentence length | Max 20 words per sentence (code blocks excluded) | `lint_sentence_lengths()` (Warning) |
+| ASD-STE100 Issue 9 sentence length | Max 25 words per sentence (80% ASD-STE100, code blocks excluded) | `lint_sentence_lengths()` (Warning) |
 | ASD-STE100 Issue 9 banned words | No fluff or marketing terms — authoritative list: `ste100.py` `STE100_BANNED_WORDS`, imported by `compile.py` | `lint_banned_words()` (case-insensitive Error) |
 | ASD-STE100 Issue 9 phrasal verbs | No soft phrasal verbs — authoritative list: `ste100.py` `STE100_BANNED_PHRASAL_VERBS`, imported by `compile.py` | `lint_phrasal_verbs()` (Error) |
 | ASD-STE100 Issue 9 semicolons | No semicolons in prose outside code, URLs, and HTML comments | `lint_semicolons()` (Warning) |
