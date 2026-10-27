@@ -29,6 +29,7 @@ flowchart TD
 
 ### 1. Epistemic Truth (VDD / Refutability)
 - **Refutability Criterion**: Every test must be capable of failing when the behavior is broken. A test that passes regardless of implementation provides 0 bits of information.
+- **Target HEAD Authority**: Audit findings must be verified against the review target's committed HEAD or pinned diff digest, never a stale checkout or truncated diff snippet (see [lane-coordination.md](../herdr/references/lane-coordination.md)). An authoritative green compiler or typecheck (`tsc`, `basedpyright`) refutes broken-reference claims within its program coverage; record the command and verify that modified files were included in the program.
 - **Red Flag (Paper Tigers)**: Reject tests that mock the unit under test (SUT), assert tautologies (`assert True`), or only assert `mock.called` without asserting return state or side-effect outcomes.
 - **Negative Path Invariant**: Critical execution paths must assert refusal and error modes (timeouts, bad payloads, malformed inputs), not only the happy path.
 
@@ -36,6 +37,8 @@ flowchart TD
 - **Anti-Laziness Criterion**: The implementation must solve the generalized problem, not just hardcode outputs to satisfy test fixtures.
 - **Red Flag (Shortcuts & Swallows)**: Reject hardcoded return values tailored to sample inputs, empty `catch`/`except` blocks, stubbed dummy branches, or unhandled `TODO` markers.
 - **State Invariant**: Domain models must make invalid states unrepresentable. Primitive obsession without validation invariants is rejected.
+- **Concurrency Invariant**: Any concurrency change must state empirical measurement (when claiming perf gains or removing bounds), per-task bounds/timeouts, and failure direction. Prove the failure direction points to the domain's safe side (fail-closed with caps for auth, quotas, rate limits; fail-open only when no-op fallback is explicitly safe).
+- **Ratchet & Baseline Invariant**: Edits touching suppression baselines or pinned counts must re-pin in the same change with a non-increasing count and updated identities, never widened. Shrinking counts are encouraged.
 - **Contract & Spec Fidelity**: Diff must satisfy concrete commitments from the product/tech spec (required behaviors, stated constraints, required validation/migration/compatibility steps).
 - **Scope Creep Guard**: Reject significant unrequested architectural scope, speculative scaffolding, or out-of-scope refactorings not mandated by the spec or task.
 - **Material Mismatch Criterion**: Flag spec drift only when material (missing required behavior, contradiction of spec decision, absent required validation/migration, or unplanned scope bloat).

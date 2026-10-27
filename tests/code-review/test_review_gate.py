@@ -49,6 +49,36 @@ def test_compute_route_remediate_on_blocking_issue():
     assert route == "remediate"
 
 
+def test_compute_route_remediate_on_high_issue():
+    """HIGH severity finding routes to remediate even with score >= 8."""
+    findings = [
+        Finding(
+            severity="HIGH",
+            invariant="EDD-Intent",
+            location="pyrightconfig.json:51",
+            defect="Added suppression",
+            remediation="Fix type issue",
+        )
+    ]
+    route = compute_route(score=9, findings=findings, sot_in_sync=True)
+    assert route == "remediate"
+
+
+def test_compute_route_continue_on_info_issue():
+    """INFO severity finding (ratchet shrink) does not block route continue."""
+    findings = [
+        Finding(
+            severity="INFO",
+            invariant="EDD-Intent",
+            location="config/suppressions.pin:1",
+            defect="Suppression baseline or ratchet pin shrunk (5 -> 4)",
+            remediation="Verify shrink",
+        )
+    ]
+    route = compute_route(score=9, findings=findings, sot_in_sync=True)
+    assert route == "continue"
+
+
 def test_compute_route_remediate_on_sot_drift():
     """SOT drift forces remediation regardless of score."""
     route = compute_route(score=10, findings=[], sot_in_sync=False)
@@ -138,6 +168,153 @@ def test_scan_diff_detects_clean_architecture_domain_leak():
     assert findings[0].severity == "BLOCKING"
     assert findings[0].invariant == "Clean-Architecture"
     assert "Domain layer imports" in findings[0].defect
+
+
+def test_scan_diff_detects_ratchet_pin_widening():
+    """Diff scanner detects widening edits to baselines or ratchet pins."""
+    diff = """
+--- a/config/suppressions.pin
++++ b/config/suppressions.pin
+@@ -1,2 +1,2 @@
+-count: 4
++count: 5
+"""
+    findings = scan_diff_for_red_flags(diff)
+    assert len(findings) == 1
+    assert findings[0].severity == "HIGH"
+    assert findings[0].invariant == "EDD-Intent"
+    assert "widened" in findings[0].defect
+
+
+def test_scan_diff_detects_ratchet_pin_shrink_as_info():
+    """Diff scanner detects shrinking baselines and classifies as INFO."""
+    diff = """
+--- a/config/suppressions.pin
++++ b/config/suppressions.pin
+@@ -1,2 +1,2 @@
+-count: 5
++count: 4
+"""
+    findings = scan_diff_for_red_flags(diff)
+    assert len(findings) == 1
+    assert findings[0].severity == "INFO"
+    assert findings[0].invariant == "EDD-Intent"
+    assert "shrunk" in findings[0].defect
+
+
+def test_scan_diff_detects_suppression_widening_in_config():
+    """Diff scanner detects added type-check suppression in pyrightconfig.json."""
+    diff = """
+--- a/pyrightconfig.json
++++ b/pyrightconfig.json
+@@ -50,6 +50,7 @@
+     "reportUnusedParameter": false,
++    "reportUnusedImport": false,
+     "reportPrivateUsage": false
+"""
+    findings = scan_diff_for_red_flags(diff)
+    assert len(findings) == 1
+    assert findings[0].severity == "HIGH"
+    assert findings[0].location == "pyrightconfig.json:51"
+    assert "Added suppression" in findings[0].defect
+
+
+def test_scan_diff_does_not_false_positive_on_source_file_with_suppress():
+    """Diff scanner does not flag normal source files containing 'suppress' in name."""
+    diff = """
+--- a/src/suppress_warnings.py
++++ b/src/suppress_warnings.py
+@@ -1,2 +1,2 @@
+-def suppress_warnings(log): pass
++def suppress_warnings(log, *, strict: bool = False) -> None: return None
+"""
+    findings = scan_diff_for_red_flags(diff)
+    assert len(findings) == 0
+
+
+def test_scan_diff_does_not_skip_blocking_checks_in_baseline_named_source_files():
+    """Source files named *baseline* or *ratchet* must not skip BLOCKING checks."""
+    diff_arch = """
+--- a/core/baseline_policy.py
++++ b/core/baseline_policy.py
+@@ -1,2 +1,3 @@
++from fastapi import APIRouter
+ def resolve_policy(x):
+     return x
+"""
+    findings_arch = scan_diff_for_red_flags(diff_arch)
+    assert len(findings_arch) == 1
+    assert findings_arch[0].severity == "BLOCKING"
+    assert findings_arch[0].invariant == "Clean-Architecture"
+
+    diff_swallow = """
+--- a/src/baseline_utils.py
++++ b/src/baseline_utils.py
+@@ -1,2 +1,3 @@
+ def handle():
++    try: do_something()
++    except Exception: pass
+"""
+    findings_swallow = scan_diff_for_red_flags(diff_swallow)
+    assert any(
+        f.severity == "BLOCKING" and "Silent error swallowing" in f.defect for f in findings_swallow
+    )
+
+
+def test_scan_diff_leak_flip_does_not_occur_on_deleted_file():
+    """A deleted file must not leak its removed lines into the previous file."""
+    diff = """
+--- a/config/known-issues-baseline.txt
++++ b/config/known-issues-baseline.txt
+@@ -1,1 +1,3 @@
+ issue-1
++issue-2
++issue-3
+--- a/config/retired-cache.json
++++ /dev/null
+@@ -1,5 +0,0 @@
+-{"a": 1}
+-{"b": 2}
+-{"c": 3}
+-{"d": 4}
+-{"e": 5}
+"""
+    findings = scan_diff_for_red_flags(diff)
+    # The baseline widened (+2/-0 entries), so it must be HIGH, not INFO
+    baseline_findings = [f for f in findings if "known-issues-baseline.txt" in f.location]
+    assert len(baseline_findings) == 1
+    assert baseline_findings[0].severity == "HIGH"
+    assert "widened" in baseline_findings[0].defect
+
+
+def test_scan_diff_negative_type_test_passes_cleanly():
+    """@ts-expect-error in test file is an assertion, not a suppression."""
+    diff = """
+--- a/tests/types.test.ts
++++ b/tests/types.test.ts
+@@ -1,2 +1,3 @@
++// @ts-expect-error - asserting wrong-arity call is rejected
+ const res = fn(1, 2, 3);
+"""
+    findings = scan_diff_for_red_flags(diff)
+    assert len(findings) == 0
+
+
+def test_scan_diff_first_hunk_line_not_overwritten():
+    """First hunk at line 1 must not be overwritten by later hunks."""
+    diff = """
+--- a/config/suppressions.pin
++++ b/config/suppressions.pin
+@@ -1,2 +1,2 @@
+-count: 9
++count: 8
+@@ -120,2 +120,2 @@
+-id: abc
++id: def
+"""
+    findings = scan_diff_for_red_flags(diff)
+    assert len(findings) == 1
+    assert findings[0].location == "config/suppressions.pin:1"
 
 
 def test_scan_diff_clean_pass():
