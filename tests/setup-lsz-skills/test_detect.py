@@ -297,7 +297,15 @@ def _rtk_cli_env(tmp_path: Path) -> tuple[dict[str, str], Path]:
         encoding="utf-8",
     )
     stub.chmod(0o755)
-    return {"HOME": str(home), "PATH": f"{bin_dir}:/usr/bin:/bin"}, config
+    # Pin XDG_CONFIG_HOME too: on Linux get_rtk_config_path() prefers it over
+    # HOME, and run_cli overlays (not replaces) the parent env, so a CI-set
+    # value would leak the real config path into hermetic runs.
+    env = {
+        "HOME": str(home),
+        "XDG_CONFIG_HOME": str(home / ".config"),
+        "PATH": f"{bin_dir}:/usr/bin:/bin",
+    }
+    return env, config
 
 
 def test_canonical_exclude_commands_are_the_documented_six(sd) -> None:
