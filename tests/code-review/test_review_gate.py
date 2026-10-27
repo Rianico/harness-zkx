@@ -333,6 +333,268 @@ def test_scan_diff_clean_pass():
     assert len(findings) == 0
 
 
+def test_scan_diff_detects_multiline_empty_except_python():
+    """Diff scanner detects multi-line empty except pass in Python."""
+    diff = """
+--- a/src/service.py
++++ b/src/service.py
+@@ -10,3 +10,6 @@
+ def run():
+     try:
+         work()
++    except Exception:
++        # silently ignored
++        pass
+"""
+    findings = scan_diff_for_red_flags(diff)
+    assert len(findings) == 1
+    assert findings[0].severity == "HIGH"
+    assert findings[0].invariant == "EDD-Intent"
+    assert findings[0].location == "src/service.py:13"
+    assert "Silent error swallowing" in findings[0].defect
+
+
+def test_scan_diff_detects_multiline_empty_except_with_ellipsis_python():
+    """Diff scanner detects multi-line empty except with ellipsis in Python."""
+    diff = """
+--- a/src/worker.py
++++ b/src/worker.py
+@@ -5,3 +5,5 @@
+ def poll():
+     try:
+         poll_once()
++    except:
++        ...
+"""
+    findings = scan_diff_for_red_flags(diff)
+    assert len(findings) == 1
+    assert findings[0].severity == "HIGH"
+    assert findings[0].location == "src/worker.py:8"
+
+
+def test_scan_diff_detects_multiline_empty_catch_javascript():
+    """Diff scanner detects multi-line empty catch in TypeScript/JavaScript."""
+    diff = """
+--- a/src/client.ts
++++ b/src/client.ts
+@@ -20,3 +20,6 @@
+ function request() {
+     try {
+         send();
++    } catch (err) {
++        // ignore error
++    }
+"""
+    findings = scan_diff_for_red_flags(diff)
+    assert len(findings) == 1
+    assert findings[0].severity == "HIGH"
+    assert findings[0].location == "src/client.ts:23"
+    assert "Silent error swallowing" in findings[0].defect
+
+
+def test_scan_diff_multiline_empty_except_opener_outside_hunk_emits_no_blocking():
+    """Hunk starting inside docstring emits no BLOCKING findings."""
+    diff = """
+--- a/docs/example.py
++++ b/docs/example.py
+@@ -130,4 +130,7 @@ def documented():
+     Never do this:
++    except Exception:
++        pass
++    # noqa: E501
+     Done.
+     \"\"\"
+"""
+    findings = scan_diff_for_red_flags(diff)
+    assert not any(f.severity == "BLOCKING" for f in findings)
+    assert any(f.severity == "HIGH" for f in findings)
+
+
+def test_scan_diff_context_except_with_added_pass_detected():
+    """Context except line with newly added empty pass is detected as HIGH."""
+    diff = """
+--- a/svc/worker.py
++++ b/svc/worker.py
+@@ -5,4 +5,5 @@ def run():
+     try:
+         work()
+     except Exception:
++        pass
+     return None
+"""
+    findings = scan_diff_for_red_flags(diff)
+    assert len(findings) == 1
+    assert findings[0].severity == "HIGH"
+    assert findings[0].location == "svc/worker.py:7"
+
+
+def test_scan_diff_ignores_single_line_string_fixtures():
+    """Single-line string literals containing suppression syntax produce no findings."""
+    diff = """
+--- a/tests/test_x.py
++++ b/tests/test_x.py
+@@ -1,2 +1,4 @@
+ def test_x():
++    fixture = "except Exception: pass"
++    note = "# noqa: E501 is allowed here"
+     assert fixture
+"""
+    findings = scan_diff_for_red_flags(diff)
+    assert len(findings) == 0
+
+
+def test_scan_diff_ignores_typescript_comments_and_strings():
+    """Commented out catches or string literals in TypeScript produce no findings."""
+    diff = """
+--- a/web/client.ts
++++ b/web/client.ts
+@@ -1,3 +1,5 @@
+ // Never write this:
++// catch (e) {}
++const msg = "catch (e) {}";
+ export const x = 1;
+"""
+    findings = scan_diff_for_red_flags(diff)
+    assert len(findings) == 0
+
+
+def test_scan_diff_detects_vue_eslint_suppression():
+    """HTML comment eslint-disable in Vue templates is detected as INFO."""
+    diff = """
+--- a/web/App.vue
++++ b/web/App.vue
+@@ -1,3 +1,4 @@
+ <template>
++  <!-- eslint-disable-next-line -->
+   <div />
+ </template>
+"""
+    findings = scan_diff_for_red_flags(diff)
+    assert len(findings) == 1
+    assert findings[0].severity == "INFO"
+    assert "eslint-disable" in findings[0].defect
+
+
+def test_scan_diff_ignores_js_doc_and_template_literals():
+    """Diff scanner ignores documented catch in JSDoc block comments and backtick templates."""
+    diff = """
+--- a/web/util.ts
++++ b/web/util.ts
+@@ -1,3 +1,7 @@
+ /**
+  * Never do this:
++ * catch (e) {}
++ * except Exception: pass
+  */
+ export const ok = 1;
+--- a/web/doc.ts
++++ b/web/doc.ts
+@@ -1,3 +1,6 @@
+ const sample = `
++  catch (e) {}
++  except Exception: pass
+ `;
+ export const ok = 1;
+"""
+    findings = scan_diff_for_red_flags(diff)
+    assert len(findings) == 0
+
+
+def test_scan_diff_detects_multiline_block_comment_suppression():
+    """Multi-line /* ... */ block comment with eslint-disable is detected as INFO."""
+    diff = """
+--- a/web/App.vue
++++ b/web/App.vue
+@@ -1,3 +1,6 @@
++/*
++ * eslint-disable-next-line
++ */
+ const a = 1;
+"""
+    findings = scan_diff_for_red_flags(diff)
+    assert len(findings) == 1
+    assert findings[0].severity == "INFO"
+    assert "eslint-disable" in findings[0].defect
+
+
+def test_scan_diff_does_not_flag_handled_exceptions():
+    """Diff scanner allows exceptions with actual handling logic or logging."""
+    diff = """
+--- a/src/service.py
++++ b/src/service.py
+@@ -10,3 +10,7 @@
+ def run():
+     try:
+         work()
++    except Exception as exc:
++        logger.error("work failed: %s", exc)
++        raise
+--- a/src/client.ts
++++ b/src/client.ts
+@@ -20,3 +20,6 @@
+ function request() {
+     try {
+         send();
++    } catch (err) {
++        console.error(err);
++    }
+"""
+    findings = scan_diff_for_red_flags(diff)
+    assert len(findings) == 0
+
+
+def test_scan_diff_ignores_triple_quoted_string_fixtures():
+    """Diff scanner ignores docstrings and triple-quoted string fixtures in Python."""
+    diff = """
+--- a/tests/test_scanner.py
++++ b/tests/test_scanner.py
+@@ -10,3 +10,12 @@
+ def test_fixture():
++    fixture = \"\"\"
++--- a/pyrightconfig.json
+++++ b/pyrightconfig.json
++@@ -1,2 +1,3 @@
+++    "reportUnusedImport": false,
++--- a/src/foo.py
+++++ b/src/foo.py
+++    except Exception: pass
++\"\"\"
++    assert fixture is not None
+"""
+    findings = scan_diff_for_red_flags(diff)
+    assert len(findings) == 0
+
+
+def test_scan_diff_no_duplicate_findings_in_pin_files():
+    """Baseline pin files report holistic widening without duplicate per-line checks."""
+    diff = """
+--- a/config/lint-suppressions.json
++++ b/config/lint-suppressions.json
+@@ -1,2 +1,3 @@
+ {
++  "reportAny": false
+ }
+"""
+    findings = scan_diff_for_red_flags(diff)
+    assert len(findings) == 1
+    assert findings[0].severity == "HIGH"
+    assert "widened" in findings[0].defect
+
+
+def test_scan_diff_does_not_flag_code_suppression_regex_in_source():
+    """Regex definitions containing suppression names without comment prefixes are not flagged."""
+    diff = """
+--- a/src/rules.py
++++ b/src/rules.py
+@@ -1,2 +1,3 @@
++pattern = re.compile(r"eslint-disable|pragma: no cover")
+ def check(text):
+     return pattern.search(text)
+"""
+    findings = scan_diff_for_red_flags(diff)
+    assert len(findings) == 0
+
+
 def test_format_remediation_markdown():
     """Markdown remediation formatter enumerates issues clearly."""
     finding = Finding(
