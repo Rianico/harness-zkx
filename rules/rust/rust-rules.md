@@ -6,19 +6,20 @@ paths:
 
 # Rust Rules
 
-You are operating in a Rust codebase. Before proceeding with your task, review and apply these rules.
+You are operating in a Rust codebase.
 
 ## Core Rust Standards (80% Base)
-- **Formatting:** Enforce `cargo fmt` and `cargo clippy`. 
-- **Safety:** Use `unsafe` ONLY if absolutely necessary and explicitly document why.
-- **Immutability:** Variables are immutable by default. Only use `mut` when state mutation is required.
-- **Result/Option:** Always handle `Result` and `Option` explicitly (via `?`, `match`, `unwrap_or_else`). Do not use `.unwrap()` in production code.
 
-## Expertise Routing (Use `Skill` tool)
-If your task requires resolving build errors or making complex design decisions, you MUST pause and invoke the `Skill` tool for `programming-expert` (`rust-expert`) to retrieve the deep methodology:
+- **Formatting:** enforce `cargo fmt` and `cargo clippy`.
+- **Safety:** use `unsafe` only when strictly necessary, and document why at the site.
+- **Immutability:** variables are immutable by default. Use `mut` only when state mutation is required.
+- **Result/Option:** always handle `Result` and `Option` explicitly (via `?`, `match`, `unwrap_or_else`). `.unwrap()` in production code is banned.
 
-- **Build Resolution:** If fixing compiler/borrow-checker errors, invoke `Skill(skill="programming-expert", args="rust-expert build")`.
-- **Code Review:** If performing a PR or code review, invoke `Skill(skill="programming-expert", args="rust-expert review")`.
-- **Testing:** If writing comprehensive tests, invoke `Skill(skill="programming-expert", args="rust-expert testing")`.
+## Expertise Routing (Use `Read` tool)
 
-**CRITICAL INSTRUCTION:** Do not randomly guess borrow checker fixes by adding `.clone()`. Retrieve the expert skill methodology first.
+`rust-expert` is a managed subskill of the `programming-expert` router. Subskills are hidden from discovery (`managed-by`) — do not invoke them through the `Skill` tool. Read the file directly:
+
+- `skills/programming-expert/subskills/rust-expert/SKILL.md` — borrow checker resolution rules, coding patterns, testing checklists
+- `skills/programming-expert/subskills/rust-expert/references/` — rust patterns (error handling, traits, enums), testing (unit, integration, panic testing)
+
+**CRITICAL:** Do not guess borrow checker fixes by adding `.clone()`. Read the expert methodology first.

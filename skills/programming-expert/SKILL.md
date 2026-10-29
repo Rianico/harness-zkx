@@ -4,7 +4,7 @@ description: >-
   Polyglot programming and coding expert across Python, TS, Rust, Go, C++, etc. Guides implementation, architecture, and testing. Use when coding, programming, implementing features, writing scripts, debugging broken logic, fixing bugs, refactoring messy code, or resolving architecture issues.
 arguments: language
 argument-hint: |-
-  python-expert -- type safety (Pydantic), async, testing, design, observability, resilience, packaging, production — 18 sub-domains
+  python-expert -- type safety (Pydantic), async, testing, design, observability, resilience, packaging, production
   typescript-expert -- advanced types, Jest, style, tooling, monorepo
   rust-expert -- Cargo, borrow checker, lifetimes, testing
   go-expert -- modules, interfaces, concurrency, table-driven tests
@@ -25,77 +25,115 @@ metadata:
 
 # Programming Expert
 
-Polyglot language router — one description, many projections. The 20% that solves 80%: route by language, then delegate to the focused subskill. Subskills are hidden from discovery (`managed-by`) so context cost drops from ~3250 chars (13 descriptions) to ~280 chars (one router).
+Polyglot language router — one description, many projections. The 20% that solves 80%: route by language, then delegate to the focused subskill. Subskills stay hidden from discovery via `managed-by`. The router spends one description instead of 13.
 
 ## Principles
 
-General engineering rules applied by every subskill — language detail varies, principles don't.
+General engineering rules applied by every subskill. Language detail varies. The principles hold.
 
-- **Clean commits, clear boundaries** — one commit = one intent, conventional `feat|fix|doc:` prefix, atomic bisectable; separate `code` vs `docs` vs `chore`; modules own their boundaries, cross-module only via public contract, no hidden coupling.
-- **SOLID** — SRP one reason to change, OCP open for extension closed for modification, LSP substitutability, ISP narrow interfaces, DIP depend on abstractions; apply at module seams, not per-line; SOLID as design pressure, not ceremony.
-- **Clean architecture + Deep design (the division of labor)** — 
-  - *Macro-Topology (Clean Architecture / Uncle Bob):* Where the line is drawn and inward dependency direction. Inner domain knows nothing of outer delivery; ports & adapters at edges, use cases orchestrate, frameworks are plugins; keep I/O at the boundary, typed admission there — Python `BaseModel.model_validate(object→typed)` / TS `zod.parse` / Rust `serde::Deserialize`. Anti-pattern: `model.model_dump().get("x")` loses types that `model.x` preserves. Isolate business rules from frameworks; testability through decoupling.
-  - *Micro-Geometry & Boundary Thickness (Deep Design / John Ousterhout):* How narrow is the interface, and how much complexity does the module absorb? Interface must be simple and narrow, while internal implementation absorbs coordination, caching (LRU), atomic transactions, and invariant enforcement. Explicitly reject **"Classitis"** (the pathology of creating 15 shallow 5-line classes/DTOs/mappers to do one basic task).
+- **Clean commits, clear boundaries** — one commit carries one intent. Use the conventional `feat|fix|doc:` prefix. Keep commits atomic and bisectable. Separate `code` from `docs` from `chore`. Modules own their boundaries. Cross-module calls go through the public contract only.
+
+- **SOLID** — apply at module seams, not per line. Treat SOLID as design pressure, not ceremony.
+  - SRP: one reason to change.
+  - OCP: open for extension, closed for modification.
+  - LSP: substitutability.
+  - ISP: narrow interfaces.
+  - DIP: depend on abstractions.
+
+- **Clean architecture + deep design — the division of labor.**
+  - *Macro-topology (Clean Architecture, Uncle Bob):* draw the line and point dependencies inward. The inner domain knows nothing of outer delivery. Ports and adapters sit at the edges. Use cases orchestrate. Frameworks are plugins. Keep I/O at the boundary with typed admission: Python `BaseModel.model_validate(object→typed)`, TS `zod.parse`, Rust `serde::Deserialize`. Anti-pattern: `model.model_dump().get("x")` loses the types that `model.x` preserves. Isolate business rules from frameworks. Testability comes from decoupling.
+  - *Micro-geometry & boundary thickness (Deep Design, John Ousterhout):* keep the interface simple and narrow. Let the inside absorb coordination, caching (LRU), atomic transactions, and invariant enforcement. Explicitly reject **"Classitis"** — 15 shallow 5-line classes, DTOs, and mappers to do one basic task.
   - *Systems engineering exemplars:*
-    - **Unix:** File Descriptor (`open`, `read`, `write`, `close`) hiding multi-gigabyte filesystems, network sockets, and pipes behind an integer handle.
-    - **SQLite:** 6-function C API (`open`, `prepare_v2`, `step`, `column`, `finalize`, `close`) and single-file amalgamation (`sqlite3.c`) hiding 150k lines of ACID B-trees, WAL, and bytecode VM.
-    - **Linux Kernel (Linus Torvalds):** Rejects breaking cohesive functions into gratuitous micro-helpers when it harms readability; utilizes deep function-pointer tables (`struct file_operations`) over deep OOP inheritance hierarchies.
-- **Design deepening vs. scope creep taxonomy** — distinguish internal structural refactoring from unmandated scope expansion.
-  - *Harmful Scope Creep (`P2`):* Unmandated public APIs, mutating payload schemas, unrequested user-visible parameters, or altering repo tooling/configs (`.config/wt.toml`, CI workflows, linter configs).
-  - *Permitted Design Deepening:* Submodule decomposition curing code smells (Divergent Change, God files, Shotgun Surgery), extracting cohesive internal helpers, and adding architectural regression tests (`test/arch/`). Design deepening cures smells and strengthens invariants without widening public surfaces; reviewers must never flag internal deepening as scope creep.
-- **Domain & boundaries** — what belongs in core domain vs edges; what boundaries must stay stable as system evolves; bounded contexts, ubiquitous language, aggregate invariants; align code structure with domain concepts, don't share tables across contexts; enforce ubiquitous language: canonical domain terms and avoided synonyms (`GLOSSARY.md`) are load-bearing boundaries; banned synonyms in types, parameters, error messages, or comments constitute domain boundary drift.
-- **Transactional & coupling** — what must be transactional together vs asynchronous; what coupling is introduced and is it acceptable; multi-step mutations spanning multiple records or tables must be atomic in a single transaction (`BEGIN IMMEDIATE`), never fragmented; hybrid disk+DB operations must surface desync warnings/errors explicitly, never swallowed with silent console logging; avoid modifying two aggregates in one transaction; prefer events/Saga/Outbox over 2PC; batches return `BatchResult{ok, failed}` never abort on one item; jobs are `pending→running→succeeded|failed` with idempotent, at-least-once handlers.
-- **Operational realism** — what operational burden does the decision create; what becomes easier vs harder afterwards; prefer operable, observable, independently deployable boundaries; avoid premature microservice splits; emit JSON structured logs with `correlation_id` (`ContextVar`/`AsyncLocalStorage`) + `method/path/status`; Prometheus bounded cardinality (never `user_id` label); watch golden signals (latency/traffic/errors/saturation).
-- **Configuration — fail fast** — externalize env-specific values; parse and validate all config at boot into typed `Settings` (Py `BaseSettings`/`Field(alias=)` / TS `zod` env schema / Rust `config` crate); crash with field-level errors before serving. No secrets in code/logs/errors.
-- **Resilience — retry only transient** — retry `ConnectionError/TimeoutError` + `429/502/503/504`, never `ValueError/TypeError`/auth 4xx; `wait_exponential_jitter` with cap on attempts _and_ wall time; jitter to avoid thundering herd.
-- **Resources — RAII & signal-safe cleanup** — acquire in `enter`/`aenter`, release unconditionally in `exit`/`aexit` (`with`/`using`/`defer`/`Drop` / `trap ... EXIT`); stack with `ExitStack`/`AsyncExitStack`; streaming finalizes in `finally`/`exit`. Ensure cleanup runs on all exits (signals/exceptions/interrupts/crashes), not just happy path — same invariant for temp files, locks, descriptors, processes.
-- **Strict by default — permissive hides bugs** — permissive defaults mask failures (silent empty, swallowed pipe errors, implicit `any`). Separate declaration from assignment when assignment can fail (`local x; x=$(cmd)`, `export x; x=$(cmd)`) to prevent declaration builtins returning 0 from masking exit status under `set -e`. Enable strictest checks first (`strict`/`--enable=all`/`-Wall -Werror`/type `strict`); relax only with narrow, reasoned suppression at smallest scope.
-- **Data is not code — keep channels separate** — boundary validation: never interpolate data into code via strings (SQL/XSS/injection); isolate options from untrusted positional args via `--` delimiter (`cmd -- "$arg"`); keep data in typed data channels (parameterized queries, placeholders, typed args, arrays), never build commands or code by string concatenation; avoid `eval`/string-concat execution.
-- **Delimiters lie — use structured over ad-hoc split** — ad-hoc splitting (`split(',')`, newline/token) fails when data contains delimiter; prefer delimiters that cannot appear in data or structured encodings (arrays/JSON/length-prefix); prove delimiter safety if you must split.
-- **Platform is a dependency — probe, don't assume** — same API can differ across platforms/versions; declare minimum version, probe capabilities/feature-detect, gate with fallback, fail fast with actionable `install X >=Y`, test on targets.
-- **Artifacts: ADR / Blueprint / Technical standards** — ADR is the concise decision log (context → decision → consequences, rejected alternatives); Blueprint is the current model (components, boundaries, interfaces, data/control flow, runtime shape, invariants, risks); Technical standards are reusable rules (naming, layering, dependency direction, FK/deletion policy, API contracts). Update blueprint/standards only when establishing reusable paradigm, not one-off details.
-- **Decision framing** — keep reasoning decision-oriented; surface trade-offs explicitly; make rejected alternatives concrete; tie concerns back to boundaries, invariants, and risks.
-- **Refutation by counterexample & oracle tests** — when diagnosing an invariant violation or algorithmic failure, refute with a concrete minimal failing input (`input -> expected vs observed`) rather than speculating or applying cosmetic heuristic tweaks. For non-trivial state machines, combinatorial engines, and pairing algorithms, write minimal exhaustive small-input oracle tests or property-based tests to prove the algorithm's invariants before optimizing.
-- **Self-described code** — names reveal intent, functions do one thing, errors fail loud with context, comments explain why not what; `object` forces validation, `Any` silences the checker; reserve `Any` for truly dynamic data or designated transport/IPC zones (file-level suppression only); validate once at admission, trust inside.
+    - **Unix:** the file descriptor (`open`, `read`, `write`, `close`) hides filesystems, sockets, and pipes behind one integer handle.
+    - **SQLite:** a 6-function C API and one amalgamation file (`sqlite3.c`) hide 150k lines of internals. The hidden machinery: ACID B-trees, WAL, and a bytecode VM. The API surface is `open`, `prepare_v2`, `step`, `column`, `finalize`, `close`.
+    - **Linux kernel (Linus Torvalds):** keeps cohesive functions whole. Uses deep function-pointer tables (`struct file_operations`) over deep OOP inheritance hierarchies.
+
+- **Design deepening vs. scope creep** — distinguish internal structural refactoring from unmandated scope expansion.
+  - *Harmful scope creep (`P2`):* unmandated public APIs, mutating payload schemas, unrequested user-visible parameters, altering repo tooling or configs (`.config/wt.toml`, CI workflows, linter configs).
+  - *Permitted design deepening:* submodule decomposition that cures code smells (Divergent Change, God files, Shotgun Surgery), extracting cohesive internal helpers, adding architectural regression tests (`test/arch/`). Deepening cures smells and strengthens invariants without widening public surfaces. Reviewers treat internal deepening as in-scope work.
+
+- **Domain & boundaries** — decide what belongs in the core domain and what belongs at the edges. Name the boundaries that must stay stable as the system evolves. Use bounded contexts, ubiquitous language, and aggregate invariants. Align code structure with domain concepts. Keep each table inside one context. Enforce the ubiquitous language: canonical domain terms and avoided synonyms (`GLOSSARY.md`) are load-bearing boundaries. A banned synonym in a type, parameter, error message, or comment is domain boundary drift.
+
+- **Transactions & coupling** — decide what must commit together and what runs async. Name each new coupling and judge whether it is acceptable.
+  - Multi-step mutations spanning multiple records or tables run in one atomic transaction (`BEGIN IMMEDIATE`). Fragmenting them is a defect.
+  - Hybrid disk+DB operations surface desync warnings or errors explicitly. A silent console log hides the desync.
+  - Modify one aggregate per transaction.
+  - Prefer events, Saga, or Outbox over 2PC.
+  - Batches return `BatchResult{ok, failed}`. One failed item aborts nothing.
+  - Jobs move `pending→running→succeeded|failed` with idempotent, at-least-once handlers.
+
+- **Operational realism** — ask what operational burden each decision creates. Ask what becomes easier and what becomes harder afterwards. Prefer operable, observable, independently deployable boundaries. Split microservices only after the pain is real. Emit JSON structured logs with `correlation_id` (`ContextVar`/`AsyncLocalStorage`) plus `method/path/status`. Keep Prometheus label cardinality bounded — a `user_id` label explodes it. Watch golden signals: latency, traffic, errors, saturation.
+
+- **Configuration — fail fast** — externalize env-specific values. Parse and validate all config at boot into typed `Settings` (Py `BaseSettings`/`Field(alias=)`, TS `zod` env schema, Rust `config` crate). Crash with field-level errors before serving. Keep secrets out of code, logs, and errors.
+
+- **Resilience — retry only transient faults** — retry `ConnectionError`/`TimeoutError` and `429/502/503/504`. Treat `ValueError`, `TypeError`, and auth 4xx as permanent failures. Use `wait_exponential_jitter` with a cap on attempts *and* wall time. Jitter prevents the thundering herd.
+
+- **Resources — RAII & signal-safe cleanup** — acquire in `enter`/`aenter`. Release unconditionally in `exit`/`aexit` (`with`/`using`/`defer`/`Drop`/`trap ... EXIT`). Stack cleanups with `ExitStack`/`AsyncExitStack`. Finalize streams in `finally`/`exit`. Cleanup runs on every exit — signals, exceptions, interrupts, crashes. The same invariant governs temp files, locks, descriptors, and processes. Test-scoped environment and platform mutations must capture and restore in one construct (fixtures, `afterEach`, RAII, `vi.stubEnv`, `jest.replaceProperty`, `monkeypatch`). Restore original values for pre-existing keys, and use `delete process.env.KEY` on teardown only for keys added during the test — in Node.js, assigning `undefined` sets the string `'undefined'`.
+
+- **Strict by default — permissive hides bugs** — silent empty results, swallowed pipe errors, and implicit `any` hide defects. Separate declaration from assignment when assignment can fail (`local x; x=$(cmd)`, `export x; x=$(cmd)`). Declaration builtins return 0 and mask the exit status under `set -e`. Enable the strictest checks first (`strict`/`--enable=all`/`-Wall -Werror`/type `strict`). Relax only with a narrow, reasoned suppression at the smallest scope.
+
+- **Data is not code — keep channels separate** — put data in typed data channels. Use parameterized queries, placeholders, typed args, and arrays for transport. Interpolating data into code via strings opens SQL injection, XSS, and command injection. Terminate options with `--` before untrusted positional args (`cmd -- "$arg"`). Building commands or code by string concatenation is banned. Avoid `eval` and string-concat execution.
+
+- **Delimiters lie — use structured over ad-hoc split** — ad-hoc splitting (`split(',')`, newline/token) fails when the data contains the delimiter. Choose delimiters that cannot appear in the data, or use structured encodings (arrays, JSON, length-prefix). If you must split, prove the delimiter is safe first.
+
+- **Platform is a dependency — probe, don't assume** — the same API differs across platforms and versions. Declare the minimum version. Probe capabilities and feature-detect. Gate with a fallback. Fail fast with an actionable message (`install X >=Y`). Test on the targets. When investigating test flakiness, isolate the case first: passing alone but failing in the file indicates leaked cross-test state (polluted globals or platform stubs), not external environment.
+
+- **Mechanical population verification — derive populations mechanically** — never verify a set you enumerated. Derive the full population via mechanical tools (`tsc`, `basedpyright`, token-anchored `rg '\bIDENT\b'` or `rg -w IDENT`, LSP references, full test suite on dynamic boundaries like string keys, reflection, serialization schemas, config keys, i18n, docs). Hand-enumerating items allows unlisted defects to escape. This single invariant governs module mock surfaces (spread unmocked exports), rename sweeps, and ratchet re-pins.
+
+- **Artifacts: ADR / Blueprint / Technical standards** — three durable artifacts anchor each decision.
+  - The ADR is the concise decision log: context → decision → consequences, plus rejected alternatives.
+  - The blueprint is the current model: components, boundaries, interfaces, data/control flow, runtime shape, invariants, risks.
+  - Technical standards are the reusable rules: naming, layering, dependency direction, FK/deletion policy, API contracts.
+  - Update the blueprint or standards only for a reusable paradigm. One-off details stay out.
+
+- **Decision framing** — keep reasoning decision-oriented. Surface trade-offs explicitly. Make rejected alternatives concrete. Tie each concern back to boundaries, invariants, and risks.
+
+- **Refutation by counterexample & oracle tests** — refute defects with concrete evidence.
+  - When diagnosing an invariant violation or algorithmic failure, produce a minimal failing input (`input -> expected vs observed`).
+  - Cosmetic heuristic tweaks prove nothing.
+  - For non-trivial state machines, combinatorial engines, and pairing algorithms, write minimal exhaustive small-input oracle tests or property-based tests.
+  - Prove the invariants before optimizing.
+
+- **Self-described code** — names reveal intent. Functions do one thing. Errors fail loud with context. Comments explain why, not what. `object` forces validation. `Any` silences the checker. Reserve `Any` for truly dynamic data or designated transport/IPC zones (file-level suppression only). Validate once at admission. Trust the data inside.
 
 ## Dispatch
 
-Read the subskill that matches the language you need. Use `Read` (not `Skill` tool — subskills hidden from discovery via `managed-by`).
+Read `$SKILL_DIR/subskills/<name>/SKILL.md` for the language you need. Use `Read`, because `managed-by` hides subskills from the `Skill` tool.
 
-| Language              | Subskill                                            | When to load                                                                                                                                                                 |
-| --------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `python-expert`       | `$SKILL_DIR/subskills/python-expert/SKILL.md`       | type safety (Pydantic strict), async, testing, design, observability, resilience, resources, jobs, packaging, production — [python-expert](subskills/python-expert/SKILL.md) |
-| `typescript-expert`   | `$SKILL_DIR/subskills/typescript-expert/SKILL.md`   | advanced types, Jest, style, tooling, monorepo — [typescript-expert](subskills/typescript-expert/SKILL.md)                                                                   |
-| `rust-expert`         | `$SKILL_DIR/subskills/rust-expert/SKILL.md`         | Cargo, borrow checker, lifetimes, Result, async — [rust-expert](subskills/rust-expert/SKILL.md)                                                                              |
-| `go-expert`           | `$SKILL_DIR/subskills/go-expert/SKILL.md`           | modules, interfaces, goroutines, table-driven tests — [go-expert](subskills/go-expert/SKILL.md)                                                                              |
-| `lua-expert`          | `$SKILL_DIR/subskills/lua-expert/SKILL.md`          | tables, metatables, game loops, Love2D — [lua-expert](subskills/lua-expert/SKILL.md)                                                                                         |
-| `cpp-expert`          | `$SKILL_DIR/subskills/cpp-expert/SKILL.md`          | CMake, RAII, templates, GoogleTest — [cpp-expert](subskills/cpp-expert/SKILL.md)                                                                                             |
-| `java-expert`         | `$SKILL_DIR/subskills/java-expert/SKILL.md`         | Spring Boot, JPA, Maven/Gradle, JUnit — [java-expert](subskills/java-expert/SKILL.md)                                                                                        |
-| `kotlin-expert`       | `$SKILL_DIR/subskills/kotlin-expert/SKILL.md`       | Coroutines/Flow, Compose, Ktor, Gradle — [kotlin-expert](subskills/kotlin-expert/SKILL.md)                                                                                   |
-| `swift-expert`        | `$SKILL_DIR/subskills/swift-expert/SKILL.md`        | SwiftUI, actors, Sendable, strict concurrency — [swift-expert](subskills/swift-expert/SKILL.md)                                                                              |
-| `php-expert`          | `$SKILL_DIR/subskills/php-expert/SKILL.md`          | Laravel, Eloquent, Pest, auth/policies — [php-expert](subskills/php-expert/SKILL.md)                                                                                         |
-| `perl-expert`         | `$SKILL_DIR/subskills/perl-expert/SKILL.md`         | modern Perl 5.36+, Moo, taint, Test2 — [perl-expert](subskills/perl-expert/SKILL.md)                                                                                         |
-| `bash-expert`         | `$SKILL_DIR/subskills/bash-expert/SKILL.md`         | defensive Bash, strict mode, quoting, file/temp safety, args, portability, ShellCheck/Bats — [bash-expert](subskills/bash-expert/SKILL.md)                                   |
-| `basedpyright-expert` | `$SKILL_DIR/subskills/basedpyright-expert/SKILL.md` | pyright config, diagnostics, stubs, migration — [basedpyright-expert](subskills/basedpyright-expert/SKILL.md)                                                                |
+| Subskill                                                        | Load when                                                                                                                       |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| [python-expert](subskills/python-expert/SKILL.md)               | type safety (Pydantic strict), async, testing, design, observability, resilience, resources, jobs, packaging, production         |
+| [typescript-expert](subskills/typescript-expert/SKILL.md)       | advanced types, Jest, style, tooling, monorepo                                                                                  |
+| [rust-expert](subskills/rust-expert/SKILL.md)                   | Cargo, borrow checker, lifetimes, Result, async                                                                                 |
+| [go-expert](subskills/go-expert/SKILL.md)                       | modules, interfaces, goroutines, table-driven tests                                                                            |
+| [lua-expert](subskills/lua-expert/SKILL.md)                     | tables, metatables, game loops, Love2D                                                                                          |
+| [cpp-expert](subskills/cpp-expert/SKILL.md)                     | CMake, RAII, templates, GoogleTest                                                                                              |
+| [java-expert](subskills/java-expert/SKILL.md)                   | Spring Boot, JPA, Maven/Gradle, JUnit                                                                                           |
+| [kotlin-expert](subskills/kotlin-expert/SKILL.md)               | Coroutines/Flow, Compose, Ktor, Gradle                                                                                          |
+| [swift-expert](subskills/swift-expert/SKILL.md)                 | SwiftUI, actors, Sendable, strict concurrency                                                                                   |
+| [php-expert](subskills/php-expert/SKILL.md)                     | Laravel, Eloquent, Pest, auth/policies                                                                                          |
+| [perl-expert](subskills/perl-expert/SKILL.md)                   | modern Perl 5.36+, Moo, taint, Test2                                                                                            |
+| [bash-expert](subskills/bash-expert/SKILL.md)                   | defensive Bash, strict mode, quoting, file/temp safety, args, portability, ShellCheck/Bats                                      |
+| [basedpyright-expert](subskills/basedpyright-expert/SKILL.md)   | pyright config, diagnostics, stubs, migration                                                                                   |
 
-Omitted argument loads only the spine above. For an unknown language, use the closest subskill or escalate — do not invent a new projection in place.
+An omitted argument loads only the spine above. For an unknown language, use the closest subskill or escalate. Do not invent a new projection in place.
 
 ## When to Use vs Neighbors
 
-- **This router:** language-idiomatic implementation, debugging, testing, review; applies clean-code principles above within each language.
-- **`adr`:** ADR lifecycle methodology — `adr` owns the full decision log process; this router now owns the architecture foundations (boundaries, trade-offs, DDD) and the lightweight ADR principle.
+- **This router:** language-idiomatic implementation, debugging, testing, review. It applies the principles above within each language.
+- **`adr`:** owns the ADR lifecycle and the full decision log process. This router owns the architecture foundations (boundaries, trade-offs, DDD) and the lightweight ADR principle.
 - **`sysops-expert` / `safety-guard`:** ops, security, privacy — not code style.
-- **`basedpyright` subskill vs `tdd-expert`:** type checker config lives here; test strategy lives in `tdd-expert`.
+- **`basedpyright-expert` vs `tdd-expert`:** type checker config lives here. Test strategy lives in `tdd-expert`.
 
 ## Migration
 
-**Status: Complete.** All 12 language experts consolidated under `programming-expert` router. Legacy top-level `skills/*-expert` directories retired — subskills are now canonical.
+**Status: Complete.** The router manages 13 subskills: 12 language experts plus `basedpyright-expert`. Legacy top-level `skills/*-expert` directories are retired. Subskills are canonical.
 
-Adding a new language: create `$SKILL_DIR/subskills/<new>-expert/SKILL.md` with `name: <new>-expert` and `managed-by: programming-expert`, append to `manage`, run `validate-deps.py check && lint && context-check`.
+Adding a new language: create `$SKILL_DIR/subskills/<new>-expert/SKILL.md` with `name: <new>-expert` and `managed-by: programming-expert`. Append it to `manage`. Run `validate-deps.py check`, `lint`, and `context-check`.
 
 ## Verification
 
-Each subskill declares its deterministic gate. Router passes when dispatched subskill's gate passes:
+Each subskill declares its deterministic gate. The router passes when the dispatched subskill's gate passes:
 
 ```bash
 uv run ruff check . && uv run basedpyright && uv run pytest          # python
@@ -106,9 +144,9 @@ luacheck . && busted                                                   # lua (wh
 shellcheck --enable=all --external-sources **/*.sh && shfmt -i 2 -ci -bn -sr -kp -d . && bats tests/  # bash
 ```
 
-See subskill for exact command.
+See the subskill for the exact command.
 
 ## References
 
-- Sources: `skills/programming-expert/subskills/<language>-expert/` — each subskill is self-contained with its `references/` and `scripts/`
-- Authoring: the `skill-authoring` skill, under `ai-engineering-expert`
+- Sources: `$SKILL_DIR/subskills/<language>-expert/` — each subskill is self-contained with its `references/` and `scripts/`.
+- Authoring: the `skill-authoring` skill under `ai-engineering-expert`.

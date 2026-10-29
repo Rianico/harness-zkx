@@ -24,7 +24,7 @@ Generation is fast. Reading and comprehension is the primary bottleneck. Sprawli
 
 Address this bottleneck with controlled technical English (80% ASD-STE100):
 - **Imperative mood:** Direct the reader with active commands (`Validate inputs at admission`).
-- **Short sentences:** Keep procedural instructions to 20 words or fewer. Keep descriptive sentences to 25 words or fewer.
+- **Short sentences:** Keep procedural and descriptive instructions to 25 words or fewer (80% ASD-STE100 dilution: 20 / 0.8 = 25).
 - **One action per sentence:** Never combine sequential steps with conjunctions.
 - **Front-loaded guards:** Place conditions before actions: `If <condition>, then <action>`. Trailing conditions cause speculative execution before the model checks guards.
 - **Structured lookups:** Use tables or key-value pairs for mappings. Structured formats provide immediate random access without parsing ambiguity.

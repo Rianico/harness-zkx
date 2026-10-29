@@ -10,39 +10,45 @@ metadata:
 
 # Kotlin Expert Skill
 
-You have invoked the Kotlin Expert Skill. This skill contains actionable checklists and constraints for Kotlin software engineering tasks.
+Checklists and constraints for Kotlin engineering tasks.
 
 ## Quick Actions & Checklists
 
 ### Idiomatic Kotlin Design
-- **Null Safety:** Model absence with nullable types or sealed results instead of sentinel values.
-- **Extensions:** Use extension functions for local readability, not to hide large behavior.
-> **Need Deep Knowledge?** Read `$SKILL_DIR/references/kotlin-patterns.md`.
+
+- **Null safety:** model absence with nullable types or sealed results instead of sentinel values.
+- **Extensions:** use extension functions for local readability, not to hide large behavior.
+
+> Deep dive: [kotlin-patterns.md](references/kotlin-patterns.md) — core principles, sealed classes and interfaces, scope functions.
 
 ### Kotlin Coroutines & Flow
-- **Scope:** Never use `GlobalScope`. Use structured concurrency (e.g., `viewModelScope`, `lifecycleScope`, `coroutineScope`).
-- **Dispatchers:** Explicitly inject dispatchers for testability (don't hardcode `Dispatchers.IO`).
-- **Flow:** Use `StateFlow` for state, `SharedFlow` for events.
-> **Need Deep Knowledge?** Read `$SKILL_DIR/references/kotlin-coroutines.md`.
+
+- **Scope:** never use `GlobalScope`. Use structured concurrency (`viewModelScope`, `lifecycleScope`, `coroutineScope`).
+- **Dispatchers:** inject dispatchers explicitly for testability.
+- **Flow:** use `StateFlow` for state, `SharedFlow` for events.
+
+> Deep dive: [kotlin-coroutines.md](references/kotlin-coroutines.md) — structured concurrency, Flow patterns, dispatchers, cancellation, testing.
 
 ### Frameworks (Ktor & Exposed)
-- **Ktor:** Use DSL routing. Extract complex logic into plugins or service classes.
-- **Exposed:** Prefer DSL over DAO for complex queries. Always wrap DB calls in `transaction {}`.
-> **Need Deep Knowledge?** Read `$SKILL_DIR/references/kotlin-ktor.md` or `kotlin-exposed.md`.
+
+- **Ktor:** use DSL routing. Extract complex logic into plugins or service classes.
+- **Exposed:** prefer DSL over DAO for complex queries. Wrap DB calls in `transaction {}`.
+
+> Deep dives: [kotlin-ktor.md](references/kotlin-ktor.md) — application structure, routing DSL, serialization, authentication, status pages. [kotlin-exposed.md](references/kotlin-exposed.md) — table definitions, DSL queries, database setup.
 
 ### Testing (Kotest, MockK)
-- **Mocks:** Use `MockK` instead of Mockito for proper coroutine and extension function mocking.
-- **Async:** Use `runTest` from `kotlinx-coroutines-test` for suspending functions.
-> **Need Deep Knowledge?** Read `$SKILL_DIR/references/kotlin-testing.md`.
+
+- **Mocks:** use `MockK` instead of Mockito for coroutine and extension function mocking.
+- **Async:** use `runTest` from `kotlinx-coroutines-test` for suspending functions.
+
+> Deep dive: [kotlin-testing.md](references/kotlin-testing.md) — MockK and runTest examples.
 
 ### Compose & Compose Multiplatform
-- **State:** ViewModel + `StateFlow` with `collectAsStateWithLifecycle`. Single data class per screen.
-- **Events:** Sealed interface event sink over multiple callback lambdas for complex screens.
-- **Navigation:** Type-safe routes with `@Serializable` objects (Compose Navigation 2.8+). Pass lambdas, not `NavController`.
+
+- **State:** ViewModel + `StateFlow` with `collectAsStateWithLifecycle`. One data class per screen.
+- **Events:** sealed interface event sink over multiple callback lambdas for complex screens.
+- **Navigation:** type-safe routes with `@Serializable` objects (Compose Navigation 2.8+). Pass lambdas, not `NavController`.
 - **Performance:** `@Immutable` data classes, `key()` in lazy lists, `derivedStateOf` for derived reads.
 - **KMP:** `expect`/`actual` for platform-specific composables.
-> **Need Deep Knowledge?** Read `$SKILL_DIR/references/kotlin-compose.md`.
 
-## Instructions for the Agent
-1. Based on the arguments provided (e.g., "frameworks", "coroutines", "testing", "compose"), apply the relevant checklist above.
-2. For deeper Kotlin patterns, coroutine, framework, database, or testing guidance, use the `Read` tool to fetch the relevant reference document from `$SKILL_DIR/references/`.
+> Deep dive: [kotlin-compose.md](references/kotlin-compose.md) — state management, navigation, composable design, KMP platform UI, performance.

@@ -26,22 +26,22 @@ Domain knowledge for production Bash — safe, portable, testable, and observabl
 > **Strict mode + quoting is the spine.** Every other section degrades without it. Fail loud, quote always, trap cleanup.
 
 > [!tip] Attribution
-> Sources: `$SKILL_DIR/references/sources.md` — 9 skills via `docs-scraper` (`skills` scraper), raw in `.lsz/tmp/bash-fetch/`.
+> Sources: [sources.md](references/sources.md) — 9 upstream skills, scrape commands, and the audit trail.
 
 ## When to Use — Trigger Matrix
 
-| Trigger in your task                                           | Load this section               | Source skills                                              |
-| -------------------------------------------------------------- | ------------------------------- | ---------------------------------------------------------- |
-| `set -euo pipefail`, `trap`, `ERR`, `pipefail`, exit codes     | §1 Strict Mode & Error Handling | err-strict-mode, err-trap-cleanup, error-handling-patterns |
-| `"$var"`, `"$@"`, `$( )`, quoting, globbing, word splitting    | §2 Quoting & Expansion          | quote-always-quote-variables, bash-pro quoting             |
-| arrays, `local`, `readonly`, `${var:-}`, parameter expansion   | §3 Variables & Data             | var-use-arrays, var-local-scope, var-default-values        |
-| `mktemp`, `find -print0`, NUL-safe, temp cleanup, injection    | §4 File & Temp Safety           | safety-temp-files, safety-argument-injection               |
-| `getopts`, `--help`, `--dry-run`, input validation             | §5 Argument Parsing             | bash-pro args, bash-scripting Phase 2-4                    |
-| `#!/usr/bin/env bash`, `bashisms`, GNU vs BSD, `checkbashisms` | §6 Portability                  | port-shebang, port-avoid-bashisms, port-printf-over-echo   |
-| `[[ ]]` vs `[ ]`, `(( ))`, `case`, conditionals                | §7 Conditionals & Tests         | test-double-brackets, test-arithmetic                      |
-| performance, builtins vs external, subshells                   | §8 Performance                  | perf-builtins-over-external, perf-avoid-subshells          |
-| `shellcheck`, `shfmt`, `bats`, pre-commit, CI                  | §9 Tooling & Testing            | shellcheck-configuration, bats-testing-patterns            |
-| Production script from scratch                                 | §10 Template + Checklist        | bash-scripting template, bash-pro quality gate             |
+| Trigger in your task                                           | Load this section               |
+| -------------------------------------------------------------- | ------------------------------- |
+| `set -euo pipefail`, `trap`, `ERR`, `pipefail`, exit codes     | §1 Strict Mode & Error Handling |
+| `"$var"`, `"$@"`, `$( )`, quoting, globbing, word splitting    | §2 Quoting & Expansion          |
+| arrays, `local`, `readonly`, `${var:-}`, parameter expansion   | §3 Variables & Data             |
+| `mktemp`, `find -print0`, NUL-safe, temp cleanup, injection    | §4 File & Temp Safety           |
+| `getopts`, `--help`, `--dry-run`, input validation             | §5 Argument Parsing             |
+| `#!/usr/bin/env bash`, `bashisms`, GNU vs BSD, `checkbashisms` | §6 Portability                  |
+| `[[ ]]` vs `[ ]`, `(( ))`, `case`, conditionals                | §7 Conditionals & Tests         |
+| performance, builtins vs external, subshells                   | §8 Performance                  |
+| `shellcheck`, `shfmt`, `bats`, pre-commit, CI                  | §9 Tooling & Testing            |
+| Production script from scratch                                 | §10 Quality Checklist + template |
 
 If task matches two rows, read both sections plus `references/` for overlapping pattern.
 
@@ -270,8 +270,11 @@ done
 # Absolute paths for external commands in cron/systemd
 command -v rsync &>/dev/null || { printf 'rsync not found\n' >&2; exit 1; }
 
-# Secure file creation
-(umask 077; touch "$secure_file")
+# Secure file creation — subshell keeps the umask change local
+(
+  umask 077
+  touch "$secure_file"
+)
 ```
 
 - Prefer process substitution `<(command)` over temp files when possible.
@@ -318,8 +321,8 @@ done
 # Remaining positional args in "$@"
 ```
 
-- Treat input as untrusted; avoid `eval` and unsafe globbing.
-- Support `--dry-run` for destructive operations; log what would happen.
+- Treat input as untrusted. Avoid `eval` and unsafe globbing.
+- Support `--dry-run` for destructive operations. Log what would happen.
 - Validate with `: "${VAR:?message}"` and `[[ $var =~ ^pattern$ ]]`.
 
 ## 6. Portability
@@ -330,6 +333,7 @@ done
 | Bashism check  | `checkbashisms script.sh` + `shellcheck --shell=sh` for POSIX                                             |
 | Echo vs printf | Prefer `printf '%s\n' "$var"` — `echo` is non-portable for flags/escapes                                  |
 | `sed -i`       | GNU `sed -i` vs BSD `sed -i ''` — detect: `case "$(uname -s)" in Darwin*) sed -i '' ;; *) sed -i ;; esac` |
+| `cat -A`       | GNU-only; fails on BSD/macOS (`illegal option -- A`). On macOS use `cat -vet`, `gcat -A`, `od -c`, or `xxd` |
 | Exports        | `VAR=value; export VAR` is portable; `export VAR=value` is Bashism in strict POSIX                        |
 | Test           | `[[ ]]` Bash-only; `[ ]` + `case` for POSIX; `(( ))` arithmetic is Bash/Ksh                               |
 
@@ -346,11 +350,17 @@ case "$(uname -s)" in
   *)       platform=unknown ;;
 esac
 
+# Display non-printing characters / line endings portably
+case "$(uname -s)" in
+  Darwin*) cat_show_all="cat -vet" ;; # BSD cat lacks GNU -A; gcat -A, od -c, xxd also work
+  *)       cat_show_all="cat -A" ;;
+esac
+
 # Command existence — never which
 command -v jq &>/dev/null || { printf 'jq required\n' >&2; exit 1; }
 ```
 
-- Document minimum Bash version in header; test on Linux + macOS + BSD.
+- Document the minimum Bash version in the header. Test on Linux, macOS, and BSD.
 - Use builtins over external commands when possible for portability.
 
 ## 7. Conditionals & Tests
@@ -381,38 +391,28 @@ if [ -f "$file" ] && [ -r "$file" ]; then content=$(cat "$file"); fi
 - Avoid subshells in loops: `while read` not `for i in $(cat file)`.
 - Use builtins: `[[ ]]` over `test`, `${var//pattern/repl}` over `sed`, `$(( ))` over `expr`.
 - Batch operations: one `sed -e 's/a/b/' -e 's/c/d/'` not two `sed` invocations.
-- `mapfile`/`readarray` for efficient array population; `readarray -d ''` for NUL.
+- `mapfile`/`readarray` for efficient array population. Use `readarray -d ''` for NUL.
 - Associative arrays for lookups vs repeated `grep`.
 - `xargs -P "$(nproc)" -n 1` for parallel independent operations.
-- Process line-by-line for large files; avoid loading entire file into memory.
+- Process line-by-line for large files. Avoid loading entire files into memory.
 
 ## 9. Tooling & Testing
 
 ### Static Analysis & Formatting
 
 ```bash
-# ShellCheck — enable all, check external sources
-shellcheck --enable=all --external-sources script.sh
-shellcheck -f gcc script.sh          # gcc format for CI
-# Config file .shellcheckrc:
-# enable=all
-# external-sources=true
-# shell=bash
-# disable=SC2148  # only if justified, with reason comment
-
-# shfmt — formatter, standard: -i 2 -ci -bn -sr -kp
-shfmt -i 2 -ci -bn -sr -kp -d script.sh   # diff
-shfmt -i 2 -ci -bn -sr -kp -w script.sh   # write
-
-# checkbashisms — portability
-checkbashisms script.sh
+shellcheck --enable=all --external-sources script.sh   # gate
+shfmt -i 2 -ci -bn -sr -kp -d script.sh               # format check (-w to write)
+checkbashisms script.sh                               # POSIX portability
 ```
 
-Inline suppression (smallest scope, with reason):
+Suppress at the smallest scope, with a reason:
 
 ```bash
 # shellcheck disable=SC2086  # Reason: word splitting intended for glob expansion
 ```
+
+Install steps, `.shellcheckrc`, Makefile targets, pre-commit hooks, and the GitHub Actions matrix live in [tooling.md](references/tooling.md).
 
 ### Bats Testing (bats-core)
 
@@ -454,125 +454,13 @@ teardown() { rm -rf -- "$TMPDIR"; }
 
 Run: `bats tests/` or `bats --tap tests/ | tee results.tap`
 
-### Pre-commit & CI
-
-```yaml
-# .pre-commit-config.yaml
-repos:
-  - repo: https://github.com/shellcheck-py/shellcheck-py
-    rev: v0.10.0
-    hooks: [{ id: shellcheck }]
-  - repo: https://github.com/shellcheck-py/shfmt-py
-    rev: v3.8.0
-    hooks: [{ id: shfmt, args: [-i, '2', -ci, -bn, -sr, -kp, -d] }]
-  - repo: https://github.com/shellspec/shellspec
-    rev: master
-    hooks: [{ id: shellspec }]
-
-# GitHub Actions snippet
-# - run: shellcheck --enable=all --external-sources **/*.sh
-# - run: shfmt -d .
-# - run: bats tests/ --tap
-# - run: checkbashisms **/*.sh  # if POSIX target
-```
-
 ## 10. Production Script Template
 
-Copy-paste starter — covers 80% of needs:
-
-```bash
-#!/usr/bin/env bash
-set -Eeuo pipefail
-shopt -s inherit_errexit 2>/dev/null || true
-IFS=$'\n\t'
-
-readonly SCRIPT_NAME="$(basename -- "${BASH_SOURCE[0]}")"
-readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-readonly VERSION="0.1.0"
-
-# --- globals ---
-VERBOSE=false
-DRY_RUN=false
-OUTPUT=""
-
-# --- logging ---
-log()  { printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >&2; }
-info() { log "INFO: $*"; }
-warn() { log "WARN: $*" >&2; }
-die()  { log "ERROR: $*"; exit 1; }
-debug() { [[ $VERBOSE == true ]] && log "DEBUG: $*"; }
-
-cleanup() { rm -rf -- "${TMPDIR:-}" 2>/dev/null || true; }
-trap cleanup EXIT
-trap 'die "Error at ${BASH_SOURCE[0]}:${LINENO} (exit $?)"' ERR
-
-# --- usage ---
-usage() {
-  cat <<EOF
-Usage: $SCRIPT_NAME [OPTIONS] <input>
-
-Options:
-  -v, --verbose   Verbose output
-  -d, --dry-run   Preview without changes
-  -o, --output FILE  Output file
-  -h, --help      Show help
-  --version       Show version
-  --trace         Enable bash trace
-
-Examples:
-  $SCRIPT_NAME -v -o out.txt input.txt
-  $SCRIPT_NAME --dry-run input.txt
-EOF
-  exit "${1:-0}"
-}
-
-# --- validation ---
-validate_input() {
-  local -r file="$1"
-  [[ -f "$file" ]] || die "File not found: $file"
-  [[ -r "$file" ]] || die "Not readable: $file"
-}
-
-# --- main ---
-main() {
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      -v|--verbose) VERBOSE=true; shift ;;
-      -d|--dry-run) DRY_RUN=true; shift ;;
-      -o|--output) OUTPUT="$2"; shift 2 ;;
-      -h|--help) usage 0 ;;
-      --version) printf '%s %s\n' "$SCRIPT_NAME" "$VERSION"; exit 0 ;;
-      --trace) set -x; shift ;;
-      --) shift; break ;;
-      -*) die "Unknown option: $1" ;;
-      *) break ;;
-    esac
-  done
-
-  [[ $# -ge 1 ]] || { usage 2; }
-  local -r input="$1"
-  validate_input "$input"
-
-  info "Starting $SCRIPT_NAME"
-  if [[ $DRY_RUN == true ]]; then
-    info "[dry-run] Would process $input -> ${OUTPUT:-stdout}"
-    return 0
-  fi
-
-  # TMPDIR for work
-  TMPDIR="$(mktemp -d)" || die "mktemp failed"
-  # ... core logic ...
-  info "Done"
-}
-
-main "$@"
-```
-
-See `$SKILL_DIR/references/templates.md` for backup, monitoring, log-analysis, and network variants.
+Start from the base template in [templates.md](references/templates.md): strict mode, logging, traps, usage, argument parsing, validation, and `main`. It covers 80% of production needs. Backup, monitoring, log-analysis, and network variants live in the same file.
 
 ## Quality Checklist
 
-Apply exhaustively; every item is a blocker:
+Apply exhaustively. Every item is a blocker:
 
 - [ ] `set -Eeuo pipefail` + `inherit_errexit` + `IFS=$'\n\t'` at top
 - [ ] All variable expansions quoted (`"$var"`, `"${arr[@]}"`, `"$@"`)
@@ -589,12 +477,17 @@ Apply exhaustively; every item is a blocker:
 - [ ] Argument parsing handles `--`, `--help`, `--dry-run`, `--trace`, unknown opts
 - [ ] NUL-safe file handling (`find -print0 | while IFS= read -r -d ''`)
 - [ ] `printf` over `echo` for data; errors to `>&2`
-- [ ] `command -v` not `which`; timeouts for external commands
+- [ ] `command -v` used for command lookup, never `which`
+- [ ] Timeouts wrap external commands
 - [ ] `shellcheck --enable=all` passes with no unreasoned suppressions
-- [ ] `shfmt -i 2 -ci -bn -sr -kp -d` clean; Bats tests cover happy + error + edge + spaces-in-path
-- [ ] Shebang is `#!/usr/bin/env bash`; version/platform docs in header
-- [ ] `--help` and `--version` implemented; exit codes documented
-- [ ] Tested on target platforms (Linux + macOS); POSIX check if `#!/bin/sh`
+- [ ] `shfmt -i 2 -ci -bn -sr -kp -d` reports no diff
+- [ ] Bats tests cover happy + error + edge + spaces-in-path
+- [ ] Shebang is `#!/usr/bin/env bash`
+- [ ] Version and platform docs live in the header
+- [ ] `--help` and `--version` are implemented
+- [ ] Exit codes are documented
+- [ ] Tested on target platforms (Linux + macOS)
+- [ ] POSIX check run when the shebang is `#!/bin/sh`
 
 ## References
 
@@ -603,4 +496,4 @@ Deep content behind pointers (one level from SKILL.md):
 - [Defensive Patterns & Checklists](references/defensive-patterns.md) — trap composition, retry/jitter, idempotency, security, observability
 - [Templates Library](references/templates.md) — backup, monitoring, user-mgmt, log-analysis, network scripts from linux-shell-scripting + os-scripting
 - [Tooling & CI](references/tooling.md) — ShellCheck/shfmt/bats/checkbashisms config, pre-commit, GitHub Actions matrix, semgrep/gitleaks
-- Sources: [Sources & scrape repro](references/sources.md) — 9 skills via `docs-scraper`; raw in `.lsz/tmp/bash-fetch/`
+- Sources: [sources.md](references/sources.md) — 9 upstream skills via `docs-scraper`, scrape commands, audit trail.

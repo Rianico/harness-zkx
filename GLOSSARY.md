@@ -265,7 +265,7 @@ _Avoid_: merge method, integration.
 ## Pull Request Lifecycle
 
 **PR Body Contract**:
-The structured Markdown document defining required review sections: `Summary`, `What Changed`, `Root Cause`, `Blast Radius & Safety`, `Evidence`, `Landing`, `Checklist`. It is the reviewer artifact. It keeps full detail, including Mermaid diagrams, `<details>` blocks, and raw evidence. It stays longer than the **Curated Squash Message** that summarizes it. `Root Cause` is fix-only: required for a `fix` title, deleted whole for every other type — see the [PR body template](skills/gh-router/references/pull_request_template.md).
+The structured Markdown document defining required review sections: `Summary`, `Root Cause`, `Blast Radius & Safety`, `Evidence`, `Checklist`. It is the reviewer artifact. It keeps full detail, including Mermaid diagrams, `<details>` blocks, and raw evidence. It stays longer than the **Curated Squash Message** that summarizes it. `Root Cause` is fix-only: required for a `fix` title, deleted whole for every other type — see the [PR body template](skills/gh-router/references/pull_request_template.md), the section authority. The squash vocabulary adds `What Changed` (a `Summary` alias) and `Links`; the squash sanitizer strips `Landing:` directives and the Checklist.
 _Avoid_: PR form, freeform description, issue body.
 
 **Blast Radius**:
@@ -281,7 +281,7 @@ The anti-pattern of concatenating intermediate scratch commit subjects (`* test(
 _Avoid_: commit history, squash log replay.
 
 **PR Landing State**:
-The predicates `pr-land` derives from git and `gh` before acting: `branch_pushed` (remote ref exists and is not behind), `pr_state` (`none` | `open` | `merged` | `closed`), `pr_draft`, `body_state` (`none` | `scaffold` | `unfilled` | `ready`), `worktree_clean`, `changelog_stamped`, `head_pushed` (remote tip matches after stamping), `checks`, and `mergeable`. Failure states — `diverged`, `head_stale`, `stamp_failed` — are named the same way. Defined once for the router's PR lifecycle (ADR-0021); `pr-refine` and `pr-enhance` reuse the names.
+The predicates `pr-land` derives from git and `gh` before acting: `branch_pushed` (remote ref exists and is not behind), `pr_state` (`none` | `open` | `merged` | `closed`), `pr_draft`, `body_state` (`none` | `scaffold` | `unfilled` | `ready`), `worktree_clean`, `changelog_stamped`, `head_pushed` (remote tip matches after stamping), `checks`, and `mergeable`. Failure states — `diverged`, `head_stale`, `stamp_failed`, `base_unresolvable` — are named the same way. Defined once for the router's PR lifecycle (ADR-0021); `pr-refine` and `pr-enhance` reuse the names.
 _Avoid_: Status flag, phase enum, stored status.
 
 **Derived State**:

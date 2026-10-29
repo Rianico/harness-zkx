@@ -10,29 +10,31 @@ metadata:
 
 # PHP/Laravel Expert Skill
 
-You have invoked the PHP/Laravel Expert Skill. This skill contains actionable checklists and constraints for PHP software engineering tasks.
+Checklists and constraints for PHP and Laravel engineering tasks.
 
 ## Quick Actions & Checklists
 
 ### Laravel Architecture & Eloquent
-- **Controllers:** Keep controllers skinny. Move business logic to Action classes or Services.
-- **Eloquent ORM:** Use Eager Loading (`with()`) proactively to avoid N+1 query problems.
-- **Validation:** Always use Form Requests for complex validation logic instead of validating in the controller.
-> **Need Deep Knowledge?** Read `$SKILL_DIR/references/laravel-patterns.md`.
+
+- **Controllers:** keep controllers skinny. Move business logic to Action classes or Services.
+- **Eloquent ORM:** use eager loading (`with()`) proactively to avoid N+1 query problems.
+- **Validation:** use Form Requests for complex validation logic instead of validating in the controller.
+
+> Deep dive: [laravel-patterns.md](references/laravel-patterns.md) — controllers, actions, services, Eloquent usage.
 
 ### Security
-- **Authentication:** Use built-in Laravel Auth scaffolding (Breeze/Jetstream) or Fortify.
-- **Authorization:** Use Policies for resource-based authorization, not inline checks.
-- **Mass Assignment:** Carefully configure `$fillable` or `$guarded` on models.
-- **Injection:** Always use Eloquent or the query builder, which use parameter binding automatically.
-> **Need Deep Knowledge?** Read `$SKILL_DIR/references/laravel-security.md`.
+
+- **Authentication:** use built-in Laravel Auth scaffolding (Breeze/Jetstream) or Fortify.
+- **Authorization:** use Policies for resource-based authorization, not inline checks.
+- **Mass assignment:** configure `$fillable` or `$guarded` deliberately on every model.
+- **Injection:** use Eloquent or the query builder, which apply parameter binding automatically.
+
+> Deep dive: [laravel-security.md](references/laravel-security.md) — core security settings, session/cookie hardening, auth and tokens, password security.
 
 ### Testing & Verification
-- **Framework:** Prefer Pest over PHPUnit if available in the project, otherwise use PHPUnit.
-- **Database:** Use `RefreshDatabase` trait to reset the DB state between tests.
-- **Factories:** Use Model Factories heavily to generate test data instead of manual inserts.
-> **Need Deep Knowledge?** Read `$SKILL_DIR/references/laravel-tdd.md` or `$SKILL_DIR/references/laravel-verification.md`.
 
-## Instructions for the Agent
-1. Based on the arguments provided (e.g., "patterns", "security", "testing"), apply the relevant checklist above.
-2. For deeper Laravel patterns, security, TDD, or verification guidance, use the `Read` tool to fetch the relevant reference document from `$SKILL_DIR/references/`.
+- **Framework:** prefer Pest over PHPUnit when the project has it. Otherwise use PHPUnit.
+- **Database:** use the `RefreshDatabase` trait to reset DB state between tests.
+- **Factories:** use Model Factories to generate test data instead of manual inserts.
+
+> Deep dives: [laravel-tdd.md](references/laravel-tdd.md) — Pest/PHPUnit TDD workflow. [laravel-verification.md](references/laravel-verification.md) — phased verification from composer and lint to tests and coverage.

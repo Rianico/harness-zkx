@@ -8,6 +8,7 @@ valid importable Python module path, so tests load the script by file location v
 from __future__ import annotations
 
 import importlib.util
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -66,11 +67,16 @@ def git_repo(tmp_path: Path) -> Path:
 def run_cli():
     """Invoke the skill script as a subprocess against a target `--cwd`."""
 
-    def _run(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    def _run(
+        cwd: Path, *args: str, env: dict[str, str] | None = None
+    ) -> subprocess.CompletedProcess[str]:
+        # `env` overlays the parent environment, so a test can pin HOME/PATH or a
+        # runtime agent signal without losing the rest of the process env.
         return subprocess.run(
             [sys.executable, str(SCRIPT), "--cwd", str(cwd), *args],
             capture_output=True,
             text=True,
+            env=None if env is None else {**os.environ, **env},
         )
 
     return _run

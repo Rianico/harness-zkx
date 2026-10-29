@@ -10,28 +10,30 @@ metadata:
 
 # Swift Expert Skill
 
-You have invoked the Swift Expert Skill. This skill contains actionable checklists and constraints for Swift/iOS/macOS software engineering tasks.
+Checklists and constraints for Swift, iOS, and macOS engineering tasks.
 
 ## Quick Actions & Checklists
 
 ### Swift Concurrency (Swift 6 Strict Mode)
-- **Async/Await:** Avoid legacy completion handlers (closures). Use `async`/`await`.
-- **Actors:** Protect mutable state using `actor` or `@MainActor` for UI-bound state. Avoid unchecked `Sendable` warnings.
-- **Tasks:** Avoid unstructured concurrency (`Task { }`) unless bridging synchronous and asynchronous code. Prefer `TaskGroup` or `async let` for parallel operations.
-> **Need Deep Knowledge?** Read `$SKILL_DIR/references/swift-concurrency.md` or `$SKILL_DIR/references/swift-actor-persistence.md`.
+
+- **Async/await:** use `async`/`await`. Migrate away from legacy completion-handler closures.
+- **Actors:** protect mutable state with `actor` or `@MainActor` for UI-bound state. Mark cross-task types `Sendable` and resolve every warning.
+- **Tasks:** avoid unstructured concurrency (`Task { }`) unless bridging synchronous and asynchronous code. Prefer `TaskGroup` or `async let` for parallel operations.
+
+> Deep dives: [swift-concurrency.md](references/swift-concurrency.md) — isolated conformances, global and static variables, `@concurrent` background work. [swift-actor-persistence.md](references/swift-actor-persistence.md) — actor persistence core pattern, design decisions, anti-patterns.
 
 ### SwiftUI Architecture & Patterns
-- **State Management:** Use `@Observable` macro (Swift 5.9+) over legacy `@StateObject`/`@ObservedObject` where possible.
-- **Views:** Keep views small. Extract complex logic into view models or domain objects.
-- **Modifiers:** Order modifiers logically (e.g., layout and framing before styling and background).
-> **Need Deep Knowledge?** Read `$SKILL_DIR/references/swiftui-patterns.md`.
+
+- **State management:** use the `@Observable` macro (Swift 5.9+) over legacy `@StateObject`/`@ObservedObject` where possible.
+- **Views:** keep views small. Extract complex logic into view models or domain objects.
+- **Modifiers:** order modifiers logically — layout and framing before styling and background.
+
+> Deep dive: [swiftui-patterns.md](references/swiftui-patterns.md) — state management, view composition, navigation, performance, previews.
 
 ### Testing & Protocol-Oriented Design
-- **Dependency Injection:** Use Protocols for all dependencies to allow for easy mocking. Avoid singletons (`.shared`).
-- **XCTest:** Group tests logically. Use `setUpWithError` and `tearDownWithError` for test fixtures.
-- **Async Testing:** Use `await` inside tests seamlessly; `XCTest` natively supports async test methods.
-> **Need Deep Knowledge?** Read `$SKILL_DIR/references/swift-protocol-di-testing.md`.
 
-## Instructions for the Agent
-1. Based on the arguments provided (e.g., "concurrency", "swiftui", "testing"), apply the relevant checklist above.
-2. If the task is complex, architectural, or requires resolving strict concurrency warnings, use the `Read` tool to fetch the relevant reference document from `$SKILL_DIR/references/`.
+- **Dependency injection:** use protocols for all dependencies to allow easy mocking. Avoid singletons (`.shared`).
+- **XCTest:** group tests logically. Use `setUpWithError` and `tearDownWithError` for test fixtures.
+- **Async testing:** use `await` directly inside test methods. `XCTest` supports async test methods natively.
+
+> Deep dive: [swift-protocol-di-testing.md](references/swift-protocol-di-testing.md) — protocol-based DI core pattern, best practices, anti-patterns.

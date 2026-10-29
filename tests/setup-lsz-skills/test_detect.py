@@ -3,18 +3,39 @@
 The design contract under test: `CONTEXT.md` is deprecated and migrates to
 `GLOSSARY.md` (never the reverse). Each test is falsifiable against a reverted
 direction or a dropped step.
+
+The RTK tests at the bottom are hermetic on purpose: the engine shells out to
+`rtk` when it exists, so those tests stub `shutil.which`, `_run_capture`,
+and the home directory instead of touching the host.
 """
 
 from __future__ import annotations
 
+import sys
+import tomllib
 from pathlib import Path
 
+import pytest
 import yaml
+
+# A PATH with no `rtk` and no `pi`: CLI runs then probe nothing on the host.
+_NO_PROBE_PATH = {"PATH": "/usr/bin:/bin"}
 
 
 def test_toolchain_covers_all_canonical_tools(sd) -> None:
     tools = sd.detect_toolchain()
-    expected = {"adr", "fd", "rg", "eza", "wt", "uv", "oxlint", "oxfmt", "basedpyright"}
+    expected = {
+        "adr",
+        "fd",
+        "rg",
+        "eza",
+        "wt",
+        "uv",
+        "oxlint",
+        "oxfmt",
+        "basedpyright",
+        "rtk",
+    }
     assert expected == set(tools)
     for tool in tools.values():
         assert set(tool) == {"detected", "path", "purpose", "fallback"}
@@ -115,7 +136,8 @@ def test_workspace_is_idempotent(sd, tmp_repo: Path) -> None:
     assert body.count(".lsz/*") == 1
 
 
-def test_write_env_yaml_is_compact_yaml_not_json(sd, tmp_repo: Path) -> None:
+def test_write_env_yaml_is_compact_yaml_not_json(sd, tmp_repo: Path, monkeypatch) -> None:
+    monkeypatch.setattr(sd.shutil, "which", _no_binary)
     _ = (tmp_repo / "CONTEXT.md").write_text("# Context", encoding="utf-8")
     state = sd.detect_environment(tmp_repo)
     sd.write_env_yaml(tmp_repo, state)
@@ -131,14 +153,16 @@ def test_write_env_yaml_is_compact_yaml_not_json(sd, tmp_repo: Path) -> None:
     assert "adr" in loaded["toolchain"] and "basedpyright" in loaded["toolchain"]
 
 
-def test_write_env_yaml_dry_run_writes_nothing(sd, tmp_repo: Path) -> None:
+def test_write_env_yaml_dry_run_writes_nothing(sd, tmp_repo: Path, monkeypatch) -> None:
+    monkeypatch.setattr(sd.shutil, "which", _no_binary)
     state = sd.detect_environment(tmp_repo)
     result = sd.write_env_yaml(tmp_repo, state, dry_run=True)
     assert result["written"] is False
     assert not (tmp_repo / "docs" / "agents" / "env.yaml").exists()
 
 
-def test_detect_environment_reports_deprecated_direction(sd, tmp_repo: Path) -> None:
+def test_detect_environment_reports_deprecated_direction(sd, tmp_repo: Path, monkeypatch) -> None:
+    monkeypatch.setattr(sd.shutil, "which", _no_binary)
     _ = (tmp_repo / "AGENTS.md").write_text("# Agents", encoding="utf-8")
     _ = (tmp_repo / "CONTEXT.md").write_text("# Context", encoding="utf-8")
     (tmp_repo / "docs" / "adr").mkdir(parents=True)
@@ -151,7 +175,7 @@ def test_detect_environment_reports_deprecated_direction(sd, tmp_repo: Path) -> 
 
 
 def test_cli_detect_write_env(tmp_repo: Path, run_cli) -> None:
-    result = run_cli(tmp_repo, "detect", "--write-env")
+    result = run_cli(tmp_repo, "detect", "--write-env", env=_NO_PROBE_PATH)
     assert result.returncode == 0, result.stderr
     loaded = yaml.safe_load((tmp_repo / "docs" / "agents" / "env.yaml").read_text())
     assert loaded["runtime"]["tmp"] == ".lsz/tmp"
@@ -160,19 +184,19 @@ def test_cli_detect_write_env(tmp_repo: Path, run_cli) -> None:
 
 def test_cli_workspace_then_migrate_end_to_end(tmp_repo: Path, run_cli) -> None:
     _ = (tmp_repo / "CONTEXT.md").write_text("# Context", encoding="utf-8")
-    assert run_cli(tmp_repo, "workspace").returncode == 0
+    assert run_cli(tmp_repo, "workspace", env=_NO_PROBE_PATH).returncode == 0
     assert (tmp_repo / ".lsz" / "tmp").is_dir()
-    dry = run_cli(tmp_repo, "migrate", "--dry-run")
+    dry = run_cli(tmp_repo, "migrate", "--dry-run", env=_NO_PROBE_PATH)
     assert dry.returncode == 0, dry.stderr
     assert (tmp_repo / "CONTEXT.md").exists()  # dry-run touches nothing
-    real = run_cli(tmp_repo, "migrate")
+    real = run_cli(tmp_repo, "migrate", env=_NO_PROBE_PATH)
     assert real.returncode == 0, real.stderr
     assert not (tmp_repo / "CONTEXT.md").exists()
     assert (tmp_repo / "GLOSSARY.md").is_file()
 
 
 def test_cli_render_writes_all_docs(tmp_repo: Path, run_cli) -> None:
-    result = run_cli(tmp_repo, "render")
+    result = run_cli(tmp_repo, "render", env=_NO_PROBE_PATH)
     assert result.returncode == 0, result.stderr
     docs = tmp_repo / "docs" / "agents"
     for name in ("domain.md", "toolchain.md", "issue-tracker.md", "triage-labels.md"):
@@ -216,3 +240,256 @@ def test_toolchain_ignores_non_executable_local_bin(sd, tmp_repo: Path, monkeypa
 def test_toolchain_without_cwd_does_not_probe_node_modules(sd, monkeypatch) -> None:
     monkeypatch.setattr(sd.shutil, "which", _no_binary)
     assert all(tool["detected"] is False for tool in sd.detect_toolchain().values())
+
+
+# --- RTK integration -------------------------------------------------------
+
+ALL_CANONICAL_EXCLUDES = [
+    r"^cat\b",
+    r"^head\b",
+    r"^tail\b",
+    r"^grep\b",
+    r"^rg\b",
+    r"^wc\b",
+]
+
+RTK_AGENT_ENV_VARS = (
+    "PI_SESSION_ID",
+    "PI_CODING_AGENT_DIR",
+    "ANTIGRAVITY_AGENT",
+    "ANTIGRAVITY_CONVERSATION_ID",
+    "CLAUDECODE",
+    "CLAUDE_CODE_CHILD_SESSION",
+    "CODEX_SESSION_ID",
+    "CODEX_HOME",
+)
+
+
+def _rtk_config_text(patterns: list[str]) -> str:
+    """A `config.toml` body in rtk's own style: literal strings, one per line."""
+    items = "".join(f"\n    '{pattern}'," for pattern in patterns)
+    return f"[hooks]\nexclude_commands = [{items}\n]\n"
+
+
+def _rtk_config_path(home: Path) -> Path:
+    """Mirror `get_rtk_config_path()` against a fake HOME, per platform."""
+    if sys.platform == "darwin":
+        return home / "Library" / "Application Support" / "rtk" / "config.toml"
+    return home / ".config" / "rtk" / "config.toml"
+
+
+def _rtk_cli_env(tmp_path: Path) -> tuple[dict[str, str], Path]:
+    """Fake HOME/PATH for hermetic `rtk` CLI runs: stub binary, no real rtk or pi."""
+    home = tmp_path / "home"
+    config = _rtk_config_path(home)
+    config.parent.mkdir(parents=True)
+    _ = config.write_text(_rtk_config_text(ALL_CANONICAL_EXCLUDES), encoding="utf-8")
+    hook = home / ".pi" / "agent" / "extensions" / "rtk.ts"
+    hook.parent.mkdir(parents=True)
+    _ = hook.write_text("// stub rtk hook\n", encoding="utf-8")
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    stub = bin_dir / "rtk"
+    _ = stub.write_text(
+        '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "rtk 0.48.0"; fi\nexit 0\n',
+        encoding="utf-8",
+    )
+    stub.chmod(0o755)
+    # Pin XDG_CONFIG_HOME too: on Linux get_rtk_config_path() prefers it over
+    # HOME, and run_cli overlays (not replaces) the parent env, so a CI-set
+    # value would leak the real config path into hermetic runs.
+    env = {
+        "HOME": str(home),
+        "XDG_CONFIG_HOME": str(home / ".config"),
+        "PATH": f"{bin_dir}:/usr/bin:/bin",
+    }
+    return env, config
+
+
+def test_canonical_exclude_commands_are_the_documented_six(sd) -> None:
+    assert sd.CANONICAL_EXCLUDE_COMMANDS == ALL_CANONICAL_EXCLUDES
+
+
+@pytest.mark.parametrize(
+    ("env", "expected"),
+    [
+        ({}, None),
+        ({"PI_SESSION_ID": "s"}, "pi"),
+        ({"PI_CODING_AGENT_DIR": "/d"}, "pi"),
+        ({"ANTIGRAVITY_AGENT": "a"}, "agy"),
+        ({"ANTIGRAVITY_CONVERSATION_ID": "c"}, "agy"),
+        ({"CLAUDECODE": "1"}, "claude"),
+        ({"CLAUDE_CODE_CHILD_SESSION": "c"}, "claude"),
+        ({"CODEX_SESSION_ID": "s"}, "codex"),
+        ({"CODEX_HOME": "/c"}, "codex"),
+        # An exported-but-empty variable is a signal the shell cleared: treat it as absent.
+        ({"PI_SESSION_ID": ""}, None),
+        ({"PI_SESSION_ID": "", "CODEX_HOME": "/c"}, "codex"),
+        # Precedence: pi > agy > claude > codex.
+        ({"CODEX_HOME": "/c", "CLAUDECODE": "1"}, "claude"),
+        ({"CODEX_HOME": "/c", "CLAUDECODE": "1", "ANTIGRAVITY_AGENT": "a"}, "agy"),
+        (
+            {
+                "CODEX_HOME": "/c",
+                "CLAUDECODE": "1",
+                "ANTIGRAVITY_AGENT": "a",
+                "PI_SESSION_ID": "p",
+            },
+            "pi",
+        ),
+    ],
+)
+def test_detect_active_agent(sd, env: dict[str, str], expected: str | None) -> None:
+    assert sd.detect_active_agent(env) == expected
+
+
+def test_detect_active_agent_reads_the_process_env(sd, monkeypatch) -> None:
+    for name in RTK_AGENT_ENV_VARS:
+        monkeypatch.delenv(name, raising=False)
+    assert sd.detect_active_agent() is None
+
+    monkeypatch.setenv("PI_SESSION_ID", "session-1")
+    assert sd.detect_active_agent() == "pi"
+
+
+def test_merge_rtk_exclude_commands_creates_missing_config(sd, tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(sd.shutil, "which", _no_binary)  # no real `rtk config --create`
+    config = tmp_path / "rtk" / "config.toml"
+    assert not config.exists()
+
+    result = sd.merge_rtk_exclude_commands(config)
+
+    assert result["path"] == str(config)
+    assert result["created"] is True
+    assert result["added"] == ALL_CANONICAL_EXCLUDES
+    parsed = tomllib.loads(config.read_text(encoding="utf-8"))
+    assert parsed["hooks"]["exclude_commands"] == ALL_CANONICAL_EXCLUDES
+
+    again = sd.merge_rtk_exclude_commands(config)
+
+    assert again["created"] is False
+    assert again["added"] == []
+    assert (
+        tomllib.loads(config.read_text(encoding="utf-8"))["hooks"]["exclude_commands"]
+        == ALL_CANONICAL_EXCLUDES
+    )
+
+
+def test_merge_rtk_exclude_commands_preserves_custom_patterns(
+    sd, tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(sd.shutil, "which", _no_binary)
+    config = tmp_path / "config.toml"
+    original = (
+        "[tracking]\nenabled = true\n\n"
+        "# operator note: keep the custom filter\n"
+        "[hooks]\nwarn = false\nexclude_commands = [\n    '^cat\\b',\n    '^my-tool',\n]\n\n"
+        "[limits]\ngrep_max_results = 200\npassthrough_max_chars = 2000\n"
+    )
+    _ = config.write_text(original, encoding="utf-8")
+
+    preview = sd.merge_rtk_exclude_commands(config, dry_run=True)
+
+    assert preview["added"] == ALL_CANONICAL_EXCLUDES[1:]
+    assert config.read_text(encoding="utf-8") == original  # dry-run writes nothing
+
+    result = sd.merge_rtk_exclude_commands(config)
+
+    assert result["created"] is False
+    assert result["added"] == ALL_CANONICAL_EXCLUDES[1:]
+    text = config.read_text(encoding="utf-8")
+    parsed = tomllib.loads(text)
+    assert parsed["hooks"]["exclude_commands"] == [
+        "^cat\\b",
+        "^my-tool",
+        *ALL_CANONICAL_EXCLUDES[1:],
+    ]
+    assert parsed["hooks"]["warn"] is False
+    assert parsed["tracking"] == {"enabled": True}
+    assert parsed["limits"] == {"grep_max_results": 200, "passthrough_max_chars": 2000}
+    for kept in (
+        "# operator note: keep the custom filter",
+        "[tracking]",
+        "passthrough_max_chars = 2000",
+    ):
+        assert kept in text
+
+    assert sd.merge_rtk_exclude_commands(config)["added"] == []
+
+
+def test_rtk_check_clean_and_needs_apply_exit_codes(sd, tmp_path: Path, run_cli) -> None:
+    env, config = _rtk_cli_env(tmp_path)
+
+    clean = run_cli(tmp_path, "rtk", "--check", "--agent", "pi", env=env)
+
+    assert clean.returncode == 0, (clean.stdout, clean.stderr)
+    assert "status: clean" in clean.stdout
+
+    _ = config.write_text(_rtk_config_text([r"^cat\b"]), encoding="utf-8")
+
+    needs_apply = run_cli(tmp_path, "rtk", "--check", "--agent", "pi", env=env)
+
+    assert needs_apply.returncode == 1, (needs_apply.stdout, needs_apply.stderr)
+    assert "needs-apply" in needs_apply.stdout
+
+    no_agent = run_cli(
+        tmp_path, "rtk", "--check", env={**env, **dict.fromkeys(RTK_AGENT_ENV_VARS, "")}
+    )
+
+    assert no_agent.returncode == 2
+    assert "--agent" in no_agent.stderr
+
+    _ = config.write_text(_rtk_config_text(ALL_CANONICAL_EXCLUDES), encoding="utf-8")
+
+    signalled = run_cli(tmp_path, "rtk", "--check", env={**env, "PI_SESSION_ID": "1"})
+
+    assert signalled.returncode == 0, (signalled.stdout, signalled.stderr)
+    assert "agent=pi" in signalled.stdout
+
+
+def test_rtk_reports_an_unparseable_config_instead_of_success(tmp_path: Path, run_cli) -> None:
+    env, config = _rtk_cli_env(tmp_path)
+    unparseable = "hooks = [\n"  # unterminated array: not valid TOML
+    _ = config.write_text(unparseable, encoding="utf-8")
+
+    checked = run_cli(tmp_path, "rtk", "--check", "--agent", "pi", env=env)
+
+    assert checked.returncode == 1, (checked.stdout, checked.stderr)
+    assert "cannot parse" in checked.stdout
+
+    preview = run_cli(tmp_path, "rtk", "--apply", "--agent", "pi", "--dry-run", env=env)
+
+    assert preview.returncode == 0  # dry-run never writes, so it stays exit 0
+    assert "merge would fail: cannot parse" in preview.stdout
+    assert config.read_text(encoding="utf-8") == unparseable
+
+    applied = run_cli(tmp_path, "rtk", "--apply", "--agent", "pi", env=env)
+
+    assert applied.returncode == 1, (applied.stdout, applied.stderr)
+    assert "cannot parse" in (applied.stdout + applied.stderr)
+    assert config.read_text(encoding="utf-8") == unparseable
+
+
+def test_rtk_apply_reports_a_failed_config_creation(tmp_path: Path, run_cli) -> None:
+    env, config = _rtk_cli_env(tmp_path)
+    config.unlink()  # fresh machine: no config.toml yet
+    inline = "hooks = { exclude_commands = [] }\n"
+    stub = tmp_path / "bin" / "rtk"
+    _ = stub.write_text(
+        "#!/bin/sh\n"
+        'if [ "$1" = "--version" ]; then echo "rtk 0.48.0"; fi\n'
+        'if [ "$1" = "config" ] && [ "$2" = "--create" ]; then\n'
+        "  echo 'hooks = { exclude_commands = [] }' > \"$RTK_CREATE_PATH\"\n"
+        "fi\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+
+    applied = run_cli(
+        tmp_path, "rtk", "--apply", "--agent", "pi", env={**env, "RTK_CREATE_PATH": str(config)}
+    )
+
+    assert applied.returncode == 1, (applied.stdout, applied.stderr)
+    assert "cannot write" in (applied.stdout + applied.stderr)
+    assert config.read_text(encoding="utf-8") == inline

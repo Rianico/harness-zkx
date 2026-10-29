@@ -53,4 +53,4 @@ This project implements the methodology in `skills/ai-engineering-expert/SKILL.m
   - Conventional commits (`CONTRIBUTING.md`). Ledger gated in CI (`changelog-check.yml`).
   - `.githooks/pre-commit` runs `scripts/check.sh` on every commit, pytest included. Prefix `HARNESS_CHECK_SKIP_TESTS=1` once the suite has passed for the change; keep `--no-verify` for emergencies.
 - **Runtime**:
-  - Python 3.14 via `uv run` (`pyproject.toml`). Quality: `oxlint`, `ruff`, `validate-deps.py`, `basedpyright --warnings`. `scripts/check.sh` is the single local gate mirroring CI.
+  - Python 3.14 via `uv run` (`pyproject.toml`). Quality: `oxlint`, `ruff`, `validate-deps.py`, `basedpyright --warnings`. `scripts/check.sh` is the single local gate mirroring CI. Toolchain: `docs/agents/toolchain.md`.

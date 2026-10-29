@@ -17,12 +17,12 @@ Goal: turn someone else's PR into a landable one without rewriting their history
 
 ## Script
 
-`$SKILL_DIR/scripts/refine.sh` (`set -euo pipefail`, `GH_TOKEN` via `gh auth`). Attribution gates are reused from `$SKILL_DIR/../pr-land/scripts/pr.py` (via the `_github` gate helpers), never re-derived.
+`$SKILL_DIR/scripts/refine.sh` (`set -euo pipefail`, `GH_TOKEN` via `gh auth`). `lint-body` enforces the same raw-`CODE_AUTHORS` gate as `pr-land`, re-implemented in awk — keep it in sync with `_squash.check_raw_token`.
 
 ```bash
-uv run $SKILL_DIR/scripts/refine.sh observe 157   # which flow?
-uv run $SKILL_DIR/scripts/refine.sh checkout 157  # head intact, locally
-uv run $SKILL_DIR/scripts/refine.sh lint-body --body-file .lsz/gh-router/<slug>.md
+$SKILL_DIR/scripts/refine.sh observe 157   # which flow?
+$SKILL_DIR/scripts/refine.sh checkout 157  # head intact, locally
+$SKILL_DIR/scripts/refine.sh lint-body --body-file .lsz/gh-router/<slug>.md
 ```
 
 ## Flow
@@ -36,7 +36,7 @@ uv run $SKILL_DIR/scripts/refine.sh lint-body --body-file .lsz/gh-router/<slug>.
 
 1. **Refine** — Flow A: `gh pr checkout <N>`, push refinements onto their branch, replace or delete the `CODE_AUTHORS` token, and keep their trailers. Flow B: `checkout <N>` and merge their head intact (never rebase or amend their commits). Open a superseding PR whose body holds `Supersedes #N`, a hand-written `Co-authored-by` trailer, and `Closes #A` for the original issue. Leave a courtesy comment on the original PR. *Done when* the branch is pushed and the body is staged.
 2. **Lint** — `lint-body` enforces what the merge step enforces: no raw `CODE_AUTHORS` token. Run it before the handoff so `pr-land` never refuses. *Done when* it prints `body ok: no raw token` and exits `0`.
-3. **Hand off** — Read `pr-land` and follow its flow. Flow A lands their PR under your account, and their commits keep attribution. Flow B lands yours. *Done when* the PR reads merged on GitHub.
+3. **Hand off** — Read `pr-land` and follow its flow. Flow A lands their PR; their commits keep attribution. Flow B lands yours. *Done when* the PR reads merged on GitHub.
 
 ## Rules
 

@@ -53,58 +53,498 @@ def compute_route(
 ) -> str:
     """Compute the workflow routing decision based on score, findings, and SOT sync."""
     blocking_count = sum(1 for f in findings if f.severity.upper() == "BLOCKING")
+    high_count = sum(1 for f in findings if f.severity.upper() == "HIGH")
 
     # Critical failure: low score + multiple blocking violations
     if score <= 4 and blocking_count >= 2:
         return "blocked"
 
-    # Clean pass: score meets threshold, zero blocking issues, SOT in sync
-    if score >= threshold and blocking_count == 0 and sot_in_sync:
+    # Clean pass: score meets threshold, zero blocking/high issues, SOT in sync
+    if score >= threshold and blocking_count == 0 and high_count == 0 and sot_in_sync:
         return "continue"
 
     # Needs remediation
     return "remediate"
 
 
+def is_pin_or_baseline_file(file_path: str) -> bool:
+    """Check if a file represents a suppression baseline or ratchet pin.
+
+    Requires a pin keyword (baseline, ratchet, suppress, allowlist) and valid extension.
+    Files like known-issues.txt fall back to content rules because they lack keywords.
+    Toolchain configs like pyrightconfig.json are guarded by content suppression rules.
+    """
+    p = Path(file_path)
+    # Source code files are NEVER ratchet pin or baseline files
+    if p.suffix.lower() in {
+        ".py",
+        ".ts",
+        ".tsx",
+        ".js",
+        ".jsx",
+        ".go",
+        ".rs",
+        ".java",
+        ".c",
+        ".cpp",
+        ".h",
+        ".sh",
+    }:
+        return False
+
+    if p.suffix.lower() == ".pin":
+        return True
+
+    valid_exts = {".json", ".yaml", ".yml", ".toml", ".txt", ".cfg"}
+    if p.suffix.lower() not in valid_exts:
+        return False
+
+    name = p.name.lower()
+    pin_keywords = ["baseline", "ratchet", "suppress", "allowlist"]
+    return any(kw in name for kw in pin_keywords)
+
+
+def _evaluate_pin_file(
+    file_path: str,
+    first_hunk_line: int,
+    removed_lines: list[str],
+    added_lines: list[str],
+) -> list[Finding]:
+    """Evaluate diff changes to a suppression baseline or ratchet pin."""
+    findings: list[Finding] = []
+    location = f"{file_path}:{first_hunk_line}"
+
+    count_regex = re.compile(
+        r'(?:["\']?(count|total|suppressions)["\']?\s*[:=]\s*)(\d+)',
+        re.I,
+    )
+    old_counts: dict[str, int] = {}
+    for l in removed_lines:
+        for m in count_regex.finditer(l):
+            old_counts[m.group(1).lower()] = int(m.group(2))
+
+    new_counts: dict[str, int] = {}
+    for l in added_lines:
+        for m in count_regex.finditer(l):
+            new_counts[m.group(1).lower()] = int(m.group(2))
+
+    common_keys = set(old_counts.keys()) & set(new_counts.keys())
+    if common_keys:
+        for key in sorted(common_keys):
+            old_c = old_counts[key]
+            new_c = new_counts[key]
+            if new_c > old_c:
+                findings.append(
+                    Finding(
+                        severity="HIGH",
+                        invariant="EDD-Intent",
+                        location=location,
+                        defect=f"Suppression baseline or ratchet pin {key} widened ({old_c} -> {new_c})",
+                        remediation="Verify count is non-increasing and updated identities are explained",
+                    )
+                )
+            elif new_c < old_c:
+                findings.append(
+                    Finding(
+                        severity="INFO",
+                        invariant="EDD-Intent",
+                        location=location,
+                        defect=f"Suppression baseline or ratchet pin {key} shrunk ({old_c} -> {new_c})",
+                        remediation="Verify shrink is intentional and reflects eliminated suppressions",
+                    )
+                )
+            else:
+                findings.append(
+                    Finding(
+                        severity="HIGH",
+                        invariant="EDD-Intent",
+                        location=location,
+                        defect=f"Edit touches suppression baseline or ratchet pin with unchanged {key} ({new_c})",
+                        remediation="Explain updated identities or suppression migrations",
+                    )
+                )
+        return findings
+
+    # Fallback for line-entry baselines (e.g. .txt or list entries)
+    clean_added = [l for l in added_lines if l.strip()]
+    clean_removed = [l for l in removed_lines if l.strip()]
+    n_add, n_rem = len(clean_added), len(clean_removed)
+
+    if n_add > n_rem:
+        findings.append(
+            Finding(
+                severity="HIGH",
+                invariant="EDD-Intent",
+                location=location,
+                defect=f"Suppression baseline or ratchet pin widened (+{n_add}/-{n_rem} entries)",
+                remediation="Verify count is non-increasing and updated identities are explained",
+            )
+        )
+    elif n_add < n_rem:
+        findings.append(
+            Finding(
+                severity="INFO",
+                invariant="EDD-Intent",
+                location=location,
+                defect=f"Suppression baseline or ratchet pin shrunk (+{n_add}/-{n_rem} entries)",
+                remediation="Verify shrink is intentional and reflects eliminated suppressions",
+            )
+        )
+    elif n_add > 0:
+        findings.append(
+            Finding(
+                severity="HIGH",
+                invariant="EDD-Intent",
+                location=location,
+                defect=f"Edit touches suppression baseline or ratchet pin identities (+{n_add}/-{n_rem} entries)",
+                remediation="Explain updated identities or suppression migrations",
+            )
+        )
+
+    return findings
+
+
+def _is_escaped(s: str, pos: int) -> bool:
+    """Check if character at pos in s is preceded by an odd number of backslashes."""
+    backslashes = 0
+    p = pos - 1
+    while p >= 0 and s[p] == "\\":
+        backslashes += 1
+        p -= 1
+    return backslashes % 2 == 1
+
+
+def _parse_line_segments(
+    line: str,
+    state: str | None,
+    is_py: bool,
+) -> tuple[str | None, str, list[str], bool]:
+    """Parse a line into (updated_state, code_text, comments, is_in_string).
+
+    Strips string literals and comments so syntactic checks only inspect code.
+    """
+    was_in_string = state in ('"""', "'''", "`")
+    i = 0
+    n = len(line)
+    code_chars: list[str] = []
+    comments: list[str] = []
+
+    if state == "/*":
+        end_idx = line.find("*/")
+        if end_idx != -1:
+            comments.append(line[: end_idx + 2])
+            state = None
+            i = end_idx + 2
+        else:
+            comments.append(line)
+            return state, "", comments, False
+    elif state == "`":
+        while i < n:
+            if line[i] == "`" and not _is_escaped(line, i):
+                state = None
+                i += 1
+                break
+            i += 1
+        else:
+            return state, "", [], True
+    elif state is not None:
+        delim_len = len(state)
+        while i <= n - delim_len:
+            if line[i : i + delim_len] == state and not _is_escaped(line, i):
+                state = None
+                i += delim_len
+                break
+            i += 1
+        else:
+            return state, "", [], True
+
+    while i < n:
+        if is_py and line[i] == "#":
+            comments.append(line[i:])
+            break
+        elif not is_py and line[i : i + 2] == "//":
+            comments.append(line[i:])
+            break
+        elif not is_py and line[i : i + 4] == "<!--":
+            comments.append(line[i:])
+            break
+        elif not is_py and line[i : i + 2] == "/*":
+            end_idx = line.find("*/", i + 2)
+            if end_idx != -1:
+                comments.append(line[i : end_idx + 2])
+                i = end_idx + 2
+                continue
+            else:
+                comments.append(line[i:])
+                state = "/*"
+                break
+        elif is_py and i <= n - 3 and line[i : i + 3] in ('"""', "'''"):
+            delim = line[i : i + 3]
+            state = delim
+            i += 3
+            while i <= n - 3:
+                if line[i : i + 3] == delim and not _is_escaped(line, i):
+                    state = None
+                    i += 3
+                    break
+                i += 1
+            else:
+                break
+        elif line[i] in ('"', "'", "`"):
+            q = line[i]
+            if q == "`" and is_py:
+                code_chars.append(q)
+                i += 1
+                continue
+            i += 1
+            while i < n:
+                if line[i] == q and not _is_escaped(line, i):
+                    i += 1
+                    break
+                i += 1
+            else:
+                if q == "`" and not is_py:
+                    state = "`"
+                break
+        else:
+            code_chars.append(line[i])
+            i += 1
+
+    code_text = "".join(code_chars).strip()
+    is_in_string = was_in_string or (state in ('"""', "'''", "`"))
+    return state, code_text, comments, is_in_string
+
+
 def scan_diff_for_red_flags(diff_text: str) -> list[Finding]:
     """Deterministically scan a unified diff for common anti-patterns."""
     findings: list[Finding] = []
     current_file = ""
+    old_file = ""
     current_line = 0
+    first_hunk_line: int | None = None
+    current_removed: list[str] = []
+    current_added: list[str] = []
+    string_state: str | None = None
+    pending_except_loc: tuple[str, int] | None = None
+    pending_catch_loc: tuple[str, int] | None = None
+    is_pin_file = False
+
+    config_suppression_pattern = re.compile(
+        r'("report[A-Za-z]+":\s*(false|"none"))',
+        re.I,
+    )
+    code_suppression_pattern = re.compile(
+        r"(#\s*type:\s*ignore)|((?:\*+|<!--|//|/\*)\s*eslint-disable)|(#\s*pragma:\s*no\s*cover)|(#\s*noqa\b)|((?:\*+|//|/\*)\s*@ts-ignore)",
+        re.I,
+    )
+    single_py_except = re.compile(r"except(\s+[^:]+)?:\s*(pass\b|\.\.\.)")
+    start_py_except = re.compile(r"^\s*except(\s+[^:]+)?:$")
+    body_empty_py = re.compile(r"^(pass\b|\.\.\.)$")
+
+    single_js_catch = re.compile(r"catch\s*(\([^)]*\))?\s*\{\s*\}")
+    start_js_catch = re.compile(r"catch\s*(\([^)]*\))?\s*\{$")
+    close_js_catch = re.compile(r"^\}$")
+
+    def flush_current_file() -> None:
+        nonlocal current_file, first_hunk_line, current_removed, current_added
+        nonlocal string_state, pending_except_loc, pending_catch_loc, is_pin_file
+        if current_file and is_pin_file:
+            findings.extend(
+                _evaluate_pin_file(
+                    current_file,
+                    first_hunk_line if first_hunk_line is not None else 1,
+                    current_removed,
+                    current_added,
+                )
+            )
+        current_file = ""
+        first_hunk_line = None
+        current_removed = []
+        current_added = []
+        string_state = None
+        pending_except_loc = None
+        pending_catch_loc = None
+        is_pin_file = False
 
     lines = diff_text.splitlines()
     for line in lines:
-        if line.startswith("+++ b/"):
-            current_file = line[6:].strip()
+        if line.startswith("diff --git "):
+            flush_current_file()
+            old_file = ""
             continue
+
+        if line.startswith("--- a/"):
+            old_file = line[6:].strip()
+            continue
+
+        if line.startswith("+++ /dev/null"):
+            # A file was deleted!
+            flush_current_file()
+            if old_file and is_pin_or_baseline_file(old_file):
+                findings.append(
+                    Finding(
+                        severity="INFO",
+                        invariant="EDD-Intent",
+                        location=f"{old_file}:1",
+                        defect="Suppression baseline or ratchet pin deleted",
+                        remediation="Acknowledge deleted suppression baseline",
+                    )
+                )
+            old_file = ""
+            current_file = ""
+            continue
+
+        if line.startswith("+++ b/"):
+            flush_current_file()
+            current_file = line[6:].strip()
+            is_pin_file = is_pin_or_baseline_file(current_file)
+            current_line = 0
+            first_hunk_line = None
+            current_removed = []
+            current_added = []
+            continue
+
         if line.startswith("@@ "):
             # Extract line number from hunk header @@ -a,b +c,d @@
             match = re.search(r"\+(\d+)", line)
             if match:
                 current_line = int(match.group(1))
+                if first_hunk_line is None:
+                    first_hunk_line = current_line
+            string_state = None
+            pending_except_loc = None
+            pending_catch_loc = None
             continue
+
+        if line.startswith("-") and not line.startswith("---"):
+            current_removed.append(line[1:])
+            continue
+
+        is_py = current_file.endswith(".py")
+        is_js = current_file.endswith(
+            (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".vue", ".html")
+        )
 
         if line.startswith("+") and not line.startswith("+++"):
             added = line[1:].strip()
+            current_added.append(line[1:])
 
-            # Check: Empty exception swallow
-            if re.search(r"except\s+(\w+)?:\s*pass\b", added) or re.search(
-                r"catch\s*\([^)]*\)\s*\{\s*\}", added
-            ):
-                findings.append(
-                    Finding(
-                        severity="BLOCKING",
-                        invariant="EDD-Intent",
-                        location=f"{current_file}:{current_line}",
-                        defect="Silent error swallowing (empty catch/except pass)",
-                        remediation="Handle exception explicitly, log failure, or bubble domain error",
+            string_state, code_text, comments, is_in_string = _parse_line_segments(
+                line[1:], string_state, is_py
+            )
+
+            if is_in_string and not code_text:
+                current_line += 1
+                continue
+
+            # Check 1: Compiler / toolchain configuration suppression (HIGH)
+            if not is_pin_file and not is_py and not is_js:
+                m_cfg = config_suppression_pattern.search(added)
+                if m_cfg:
+                    findings.append(
+                        Finding(
+                            severity="HIGH",
+                            invariant="EDD-Intent",
+                            location=f"{current_file}:{current_line}",
+                            defect=f"Added suppression ({m_cfg.group(0).strip()})",
+                            remediation="Resolve underlying issue instead of suppressing diagnostics, or provide evidence justifying suppression",
+                        )
                     )
-                )
 
-            # Check: Skipped tests in test files
+            # Check 2: Per-line code suppression (INFO - attention, not blocking)
+            if not is_pin_file:
+                supp_target = " ".join(comments) if (is_py or is_js) else added
+                m_code = code_suppression_pattern.search(supp_target)
+                if m_code:
+                    findings.append(
+                        Finding(
+                            severity="INFO",
+                            invariant="EDD-Intent",
+                            location=f"{current_file}:{current_line}",
+                            defect=f"Added code suppression ({m_code.group(0).strip()})",
+                            remediation="Ensure suppression is narrow, reasoned at smallest scope, and documented",
+                        )
+                    )
+
+            # Check 3: Empty exception swallow
+            # Resolve pending multi-line catches (HIGH)
+            if pending_except_loc is not None:
+                if not code_text:
+                    pass
+                elif body_empty_py.match(code_text):
+                    findings.append(
+                        Finding(
+                            severity="HIGH",
+                            invariant="EDD-Intent",
+                            location=f"{pending_except_loc[0]}:{pending_except_loc[1]}",
+                            defect="Silent error swallowing (multi-line empty except pass)",
+                            remediation="Handle exception explicitly, log failure, or bubble domain error",
+                        )
+                    )
+                    pending_except_loc = None
+                else:
+                    pending_except_loc = None
+
+            if pending_catch_loc is not None:
+                if not code_text:
+                    pass
+                elif close_js_catch.match(code_text):
+                    findings.append(
+                        Finding(
+                            severity="HIGH",
+                            invariant="EDD-Intent",
+                            location=f"{pending_catch_loc[0]}:{pending_catch_loc[1]}",
+                            defect="Silent error swallowing (multi-line empty catch)",
+                            remediation="Handle exception explicitly, log failure, or bubble domain error",
+                        )
+                    )
+                    pending_catch_loc = None
+                else:
+                    pending_catch_loc = None
+
+            # Single-line checks (BLOCKING)
+            if is_py:
+                if single_py_except.search(code_text):
+                    findings.append(
+                        Finding(
+                            severity="BLOCKING",
+                            invariant="EDD-Intent",
+                            location=f"{current_file}:{current_line}",
+                            defect="Silent error swallowing (empty catch/except pass)",
+                            remediation="Handle exception explicitly, log failure, or bubble domain error",
+                        )
+                    )
+                elif start_py_except.search(code_text):
+                    pending_except_loc = (current_file, current_line)
+            elif is_js:
+                if single_js_catch.search(code_text):
+                    findings.append(
+                        Finding(
+                            severity="BLOCKING",
+                            invariant="EDD-Intent",
+                            location=f"{current_file}:{current_line}",
+                            defect="Silent error swallowing (empty catch/except pass)",
+                            remediation="Handle exception explicitly, log failure, or bubble domain error",
+                        )
+                    )
+                elif start_js_catch.search(code_text):
+                    pending_catch_loc = (current_file, current_line)
+            else:
+                if single_py_except.search(code_text) or single_js_catch.search(code_text):
+                    findings.append(
+                        Finding(
+                            severity="BLOCKING",
+                            invariant="EDD-Intent",
+                            location=f"{current_file}:{current_line}",
+                            defect="Silent error swallowing (empty catch/except pass)",
+                            remediation="Handle exception explicitly, log failure, or bubble domain error",
+                        )
+                    )
+
+            # Check 4: Skipped tests in test files (BLOCKING)
             if "test" in current_file.lower():
-                if re.search(r"@(pytest\.mark\.)?skip\b", added) or re.search(
-                    r"\b(xit|test\.skip|it\.skip)\b", added
+                if re.search(r"@(pytest\.mark\.)?skip\b", code_text) or re.search(
+                    r"\b(xit|test\.skip|it\.skip)\b", code_text
                 ):
                     findings.append(
                         Finding(
@@ -116,7 +556,7 @@ def scan_diff_for_red_flags(diff_text: str) -> list[Finding]:
                         )
                     )
 
-            # Check: Hardcoded temporary returns
+            # Check 5: Hardcoded temporary returns (BLOCKING)
             if re.search(r"return\s+(True|False|None|\"mock\"|\"test\").*#\s*(TODO|FIXME)", added):
                 findings.append(
                     Finding(
@@ -128,24 +568,37 @@ def scan_diff_for_red_flags(diff_text: str) -> list[Finding]:
                     )
                 )
 
-            # Check: Clean Architecture violation (Domain importing delivery/infra)
+            # Check 6: Clean Architecture violation (Domain importing delivery/infra) (BLOCKING)
             if any(part in current_file.lower() for part in ["domain/", "core/", "entities/"]):
                 framework_pattern = r"^\s*(from|import)\s+(fastapi|flask|django|sqlalchemy|requests|httpx|express|axios)\b"
-                if re.search(framework_pattern, added):
+                if re.search(framework_pattern, code_text):
                     findings.append(
                         Finding(
                             severity="BLOCKING",
                             invariant="Clean-Architecture",
                             location=f"{current_file}:{current_line}",
-                            defect=f"Domain layer imports delivery/infrastructure module ({added})",
+                            defect=f"Domain layer imports delivery/infrastructure module ({code_text})",
                             remediation="Invert dependency: domain defines port interface, infra implements adapter",
                         )
                     )
 
             current_line += 1
         elif not line.startswith("-"):
+            string_state, code_text, _, _ = _parse_line_segments(line[1:], string_state, is_py)
+            if is_py and start_py_except.search(code_text):
+                pending_except_loc = (current_file, current_line)
+            else:
+                if pending_except_loc and code_text:
+                    pending_except_loc = None
+
+            if is_js and start_js_catch.search(code_text):
+                pending_catch_loc = (current_file, current_line)
+            else:
+                if pending_catch_loc and code_text:
+                    pending_catch_loc = None
             current_line += 1
 
+    flush_current_file()
     return findings
 
 
@@ -156,6 +609,7 @@ class GoalGateResult:
     floor_status: str  # pass | fail
     ceiling_score: int  # 1-10
     blocking_count: int
+    high_count: int
     sot_in_sync: bool
     remediation_issues: list[str]
 
@@ -178,6 +632,7 @@ def evaluate_goal_gate(
         floor_issues = eval_report.get("issues", [])
 
     blocking_count = sum(1 for f in semantic_findings if f.severity.upper() == "BLOCKING")
+    high_count = sum(1 for f in semantic_findings if f.severity.upper() == "HIGH")
 
     all_remediation: list[str] = [f"[FLOOR] {iss}" for iss in floor_issues]
     for f in semantic_findings:
@@ -189,11 +644,12 @@ def evaluate_goal_gate(
         all_remediation.append("[CEILING:HIGH] SOT Drift: implementation diverged from design.md")
 
     # Convergence Predicate:
-    # Goal Attained iff Floor == pass AND Semantic Score >= threshold AND Blocking == 0 AND SOT in sync
+    # Goal Attained iff Floor == pass AND Semantic Score >= threshold AND Blocking == 0 AND High == 0 AND SOT in sync
     goal_attained = (
         floor_status == "pass"
         and semantic_score >= score_threshold
         and blocking_count == 0
+        and high_count == 0
         and sot_in_sync
     )
 
@@ -210,6 +666,7 @@ def evaluate_goal_gate(
         floor_status=floor_status,
         ceiling_score=semantic_score,
         blocking_count=blocking_count,
+        high_count=high_count,
         sot_in_sync=sot_in_sync,
         remediation_issues=all_remediation,
     )

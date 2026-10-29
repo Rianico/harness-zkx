@@ -21,6 +21,16 @@ TEMPLATE_NAMES = [
     "triage-labels.md.j2",
 ]
 
+# Fixture data only: the canonical exclude list is asserted in test_detect.py.
+EXCLUDE_PATTERNS = [
+    r"^cat\b",
+    r"^head\b",
+    r"^tail\b",
+    r"^grep\b",
+    r"^rg\b",
+    r"^wc\b",
+]
+
 
 def _state(provider: str = "github", has_context_map: bool = False) -> dict[str, Any]:
     tool = {
@@ -28,6 +38,16 @@ def _state(provider: str = "github", has_context_map: bool = False) -> dict[str,
         "path": "/usr/bin/tool",
         "purpose": "does work",
         "fallback": "plain tool",
+    }
+    toolchain: dict[str, dict[str, Any]] = {
+        name: dict(tool)
+        for name in ("adr", "fd", "rg", "eza", "wt", "uv", "oxlint", "oxfmt", "basedpyright")
+    }
+    toolchain["rtk"] = {
+        "detected": True,
+        "path": "/opt/homebrew/bin/rtk",
+        "purpose": "Token-optimized CLI proxy for shell commands",
+        "fallback": "direct command execution",
     }
     return {
         "cwd": "/repo",
@@ -43,9 +63,15 @@ def _state(provider: str = "github", has_context_map: bool = False) -> dict[str,
         "has_adr_dir": True,
         "existing_docs_agents": [],
         "stale_files": {},
-        "toolchain": {
-            name: dict(tool)
-            for name in ("adr", "fd", "rg", "eza", "wt", "uv", "oxlint", "oxfmt", "basedpyright")
+        "toolchain": toolchain,
+        "rtk": {
+            "installed": True,
+            "path": "/opt/homebrew/bin/rtk",
+            "version": "0.48.0",
+            "version_ok": True,
+            "active_agent": "pi",
+            "hook_installed": True,
+            "exclude_commands": {"present": list(EXCLUDE_PATTERNS), "missing": []},
         },
     }
 
@@ -130,6 +156,7 @@ def test_toolchain_doc_lists_every_tool_with_status_and_fallback(
         assert f"| `{name}` |" in text
     assert "| `oxlint` | missing | ruff / eslint |" in text
     assert "| `uv` | found |" in text
+    assert "| `rtk` | found | direct command execution |" in text
 
 
 def test_triage_doc_has_the_canonical_five_labels(sd, tmp_repo: Path, templates_dir: Path) -> None:
@@ -157,4 +184,38 @@ def test_templates_honor_the_canonical_jinja_settings(
     # trim_blocks/lstrip_blocks: the toolchain table has no blank lines between rows.
     table = (tmp_repo / "docs" / "agents" / "toolchain.md").read_text()
     rows = [line for line in table.splitlines() if line.startswith("| `")]
-    assert len(rows) == 9
+    assert len(rows) == 10
+
+
+def test_toolchain_doc_renders_the_rtk_section(sd, tmp_repo: Path, templates_dir: Path) -> None:
+    sd.render_docs(tmp_repo, _state(), templates_dir)
+    text = (tmp_repo / "docs" / "agents" / "toolchain.md").read_text()
+    assert "## RTK (Token Killer)" in text
+    assert "rtk rewrite" in text
+    assert "| Version | 0.48.0 |" in text
+    assert "| Active agent | pi |" in text
+    assert "| Hook | installed |" in text
+    for token in ("exclude_commands", "2,000 lines", "50 KB", "cat -vet", "cat -A"):
+        assert token in text
+
+
+def test_toolchain_doc_renders_without_rtk_state(sd, tmp_repo: Path, templates_dir: Path) -> None:
+    state = _state()
+    del state["rtk"]
+    sd.render_docs(tmp_repo, state, templates_dir)  # StrictUndefined: must not raise
+    text = (tmp_repo / "docs" / "agents" / "toolchain.md").read_text()
+    assert "## RTK" not in text
+    assert text.endswith("\n")
+    assert not text.endswith("\n\n")
+
+
+def test_env_yaml_rtk_section_is_agent_agnostic(sd) -> None:
+    document = sd.build_env_document(_state())
+    rtk = document["rtk"]
+    assert set(rtk) == {"installed", "version"}
+    assert rtk["installed"] is True
+    assert rtk["version"] == "0.48.0"
+    assert document["toolchain"]["rtk"] == {
+        "detected": True,
+        "fallback": "direct command execution",
+    }

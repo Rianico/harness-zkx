@@ -10,27 +10,28 @@ metadata:
 
 # C++ Expert Skill
 
-You have invoked the C++ Expert Skill. This skill contains actionable checklists and constraints for C++ software engineering tasks.
+Checklists and constraints for C++ engineering tasks.
 
 ## Quick Actions & Checklists
 
 ### Build & Linker Resolution (CMake)
-- **Undefined References:** Often caused by missing `target_link_libraries` or failing to compile a `.cpp` file. Check `CMakeLists.txt`.
-- **Header Guards:** Ensure `#pragma once` or standard `#ifndef` guards are present.
-- **Includes:** Prefer forward declarations in headers to reduce compilation time. Include what you use.
+
+- **Undefined references:** trace to a missing `target_link_libraries` or an uncompiled `.cpp` file. Check `CMakeLists.txt`.
+- **Header guards:** ensure `#pragma once` or standard `#ifndef` guards are present.
+- **Includes:** prefer forward declarations in headers to cut compilation time. Include what you use.
 
 ### Coding Standards (Modern C++)
-- **Memory Management:** Use `std::unique_ptr` and `std::shared_ptr`. Avoid raw `new` and `delete`.
-- **Initialization:** Use uniform initialization (brace initialization `{}`).
-- **Const Correctness:** Apply `const` liberally to methods, parameters, and variables.
-- **Auto:** Use `auto` when the type is obvious or overly complex, but prefer explicit types for readability if it's ambiguous.
-> **Need Deep Knowledge?** Read `$SKILL_DIR/references/cpp-coding-standards.md`.
+
+- **Memory management:** use `std::unique_ptr` and `std::shared_ptr`. Avoid raw `new` and `delete`.
+- **Initialization:** use uniform brace initialization `{}`.
+- **Const correctness:** apply `const` liberally to methods, parameters, and variables.
+- **Auto:** use `auto` when the type is obvious or overly complex. Prefer explicit types when the type is ambiguous.
+
+> Deep dive: [cpp-coding-standards.md](references/cpp-coding-standards.md) — cross-cutting principles, function and class rules (`F.*`, `C.*`), resource management.
 
 ### Testing & Verification (GoogleTest/Catch2)
-- **Test Structure:** Use `TEST_F` for fixtures. Keep setup logic in the fixture constructor or `SetUp()` method.
-- **Mocks:** Use GoogleMock (`MOCK_METHOD`) for dependency injection.
-> **Need Deep Knowledge?** Read `$SKILL_DIR/references/cpp-testing.md`.
 
-## Instructions for the Agent
-1. Based on the arguments provided (e.g., "build", "review", "testing"), apply the relevant checklist above.
-2. For deeper coding standards or testing guidance, use the `Read` tool to fetch the relevant reference document from `$SKILL_DIR/references/`.
+- **Test structure:** use `TEST_F` for fixtures. Keep setup logic in the fixture constructor or `SetUp()`.
+- **Mocks:** use GoogleMock (`MOCK_METHOD`) for dependency injection.
+
+> Deep dive: [cpp-testing.md](references/cpp-testing.md) — TDD workflow, GoogleTest/Catch2 examples, running tests, debugging failures.
