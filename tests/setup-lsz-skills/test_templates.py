@@ -72,7 +72,6 @@ def _state(provider: str = "github", has_context_map: bool = False) -> dict[str,
             "active_agent": "pi",
             "hook_installed": True,
             "exclude_commands": {"present": list(EXCLUDE_PATTERNS), "missing": []},
-            "pix_optimizer_detected": False,
         },
     }
 
@@ -210,35 +209,13 @@ def test_toolchain_doc_renders_without_rtk_state(sd, tmp_repo: Path, templates_d
     assert not text.endswith("\n\n")
 
 
-def test_env_yaml_rtk_section_structure(sd) -> None:
+def test_env_yaml_rtk_section_is_agent_agnostic(sd) -> None:
     document = sd.build_env_document(_state())
     rtk = document["rtk"]
-    assert set(rtk) == {
-        "installed",
-        "version",
-        "active_agent",
-        "hook_installed",
-        "hook_status",
-        "pix_optimizer_detected",
-        "exclude_commands",
-    }
+    assert set(rtk) == {"installed", "version"}
     assert rtk["installed"] is True
     assert rtk["version"] == "0.48.0"
-    assert rtk["active_agent"] == "pi"
-    assert rtk["hook_installed"] is True
-    assert rtk["hook_status"] == "installed"
-    assert rtk["pix_optimizer_detected"] is False
-    assert rtk["exclude_commands"] == EXCLUDE_PATTERNS
     assert document["toolchain"]["rtk"] == {
         "detected": True,
         "fallback": "direct command execution",
     }
-
-
-def test_env_yaml_rtk_hook_status_names_the_gap(sd) -> None:
-    state = _state()
-    state["rtk"] = {**state["rtk"], "active_agent": None, "hook_installed": False}
-    assert sd.build_env_document(state)["rtk"]["hook_status"] == "unknown-agent"
-
-    state["rtk"] = {**state["rtk"], "active_agent": "pi"}
-    assert sd.build_env_document(state)["rtk"]["hook_status"] == "missing"

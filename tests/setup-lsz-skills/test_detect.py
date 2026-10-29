@@ -5,13 +5,12 @@ The design contract under test: `CONTEXT.md` is deprecated and migrates to
 direction or a dropped step.
 
 The RTK tests at the bottom are hermetic on purpose: the engine shells out to
-`rtk` and `pi` when they exist, so those tests stub `shutil.which`,
-`_run_capture`, and the home directory instead of touching the host.
+`rtk` when it exists, so those tests stub `shutil.which`, `_run_capture`,
+and the home directory instead of touching the host.
 """
 
 from __future__ import annotations
 
-import subprocess
 import sys
 import tomllib
 from pathlib import Path
@@ -447,74 +446,6 @@ def test_rtk_check_clean_and_needs_apply_exit_codes(sd, tmp_path: Path, run_cli)
 
     assert signalled.returncode == 0, (signalled.stdout, signalled.stderr)
     assert "agent=pi" in signalled.stdout
-
-
-def _fake_completed(returncode: int = 0, stdout: str = "") -> subprocess.CompletedProcess[str]:
-    return subprocess.CompletedProcess(args=[], returncode=returncode, stdout=stdout, stderr="")
-
-
-def _apply_namespace(sd, *, dry_run: bool, remove_pix: bool):
-    return sd.argparse.Namespace(
-        check=False,
-        apply=True,
-        agent="pi",
-        project=False,
-        dry_run=dry_run,
-        remove_pix_optimizer=remove_pix,
-    )
-
-
-def test_pix_optimizer_opt_in_removal(sd, tmp_path: Path, monkeypatch) -> None:
-    home = tmp_path / "home"
-    settings = home / ".pi" / "agent" / "settings.json"
-    settings.parent.mkdir(parents=True)
-    installed = '{"packages": ["npm:@xynogen/pix-optimizer"]}\n'
-    _ = settings.write_text(installed, encoding="utf-8")
-    config = tmp_path / "config.toml"
-    _ = config.write_text(_rtk_config_text(ALL_CANONICAL_EXCLUDES), encoding="utf-8")
-
-    calls: list[list[str]] = []
-
-    def fake_run(
-        cmd: list[str], timeout: float | None = None, cwd: Path | None = None
-    ) -> subprocess.CompletedProcess[str]:
-        calls.append(list(cmd))
-        if cmd[:2] == ["pi", "remove"]:
-            _ = settings.write_text('{"packages": []}\n', encoding="utf-8")
-        return _fake_completed()
-
-    def fake_which(name: str) -> str:
-        return f"/usr/bin/{name}"
-
-    monkeypatch.setattr(sd, "_pi_settings_path", lambda: settings)
-    monkeypatch.setattr(sd, "get_rtk_config_path", lambda: config)
-    monkeypatch.setattr(sd.shutil, "which", fake_which)
-    monkeypatch.setattr(sd, "_run_capture", fake_run)
-
-    assert sd.detect_pix_optimizer() == {"detected": True, "source": "settings.json"}
-
-    dry = sd._run_rtk_command(_apply_namespace(sd, dry_run=True, remove_pix=True), tmp_path)
-
-    assert dry == 0
-    assert calls == []
-    assert sd.detect_pix_optimizer()["detected"] is True
-
-    without_flag = sd._run_rtk_command(
-        _apply_namespace(sd, dry_run=False, remove_pix=False), tmp_path
-    )
-
-    assert without_flag == 0
-    assert any("init" in " ".join(call) for call in calls)
-    assert not any("remove" in " ".join(call) for call in calls)
-    assert settings.read_text(encoding="utf-8") == installed
-    assert sd.detect_pix_optimizer()["detected"] is True
-
-    calls.clear()
-    with_flag = sd._run_rtk_command(_apply_namespace(sd, dry_run=False, remove_pix=True), tmp_path)
-
-    assert with_flag == 0
-    assert "pi remove npm:@xynogen/pix-optimizer" in [" ".join(call) for call in calls]
-    assert sd.detect_pix_optimizer()["detected"] is False
 
 
 def test_rtk_reports_an_unparseable_config_instead_of_success(tmp_path: Path, run_cli) -> None:
