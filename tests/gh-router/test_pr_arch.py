@@ -41,6 +41,7 @@ SIBLING_MODULES = [
     "_draft.py",
     "_status.py",
     "_changelog.py",
+    "_sync.py",
 ]
 
 

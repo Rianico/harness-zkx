@@ -1390,7 +1390,11 @@ def merge_pr(
                 make_refusal(
                     code,
                     f"refusing to merge: mergeable_state={obs.state} (not clean)",
-                    "reconcile the branch (or wait for GitHub to compute mergeability), then re-run",
+                    (
+                        f"run 'pr.py --sync' to merge {base} into the head, then re-run"
+                        if code == "head_stale"
+                        else "reconcile the branch (or wait for GitHub to compute mergeability), then re-run"
+                    ),
                     f"PR #{num}",
                 )
             ],

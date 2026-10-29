@@ -23,6 +23,7 @@ class PrOptions:
     merge: bool = False
     check: bool = False
     status: bool = False
+    sync: bool = False
     json_output: bool = False
     draft: bool = False
     no_stamp: bool = False
