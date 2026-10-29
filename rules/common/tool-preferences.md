@@ -1,5 +1,10 @@
 # Tool Preferences
 
+- **Shell execution:**
+  - **Atomic commands:** Run one command per tool call. Avoid compound chaining (`&&`, `;`). Use `&&` only when a subsequent command strictly depends on the previous exit status.
+  - **No redundant navigation:** Never prefix commands with `cd <cwd>` or `cd .`. The tool runs in the current workspace directory.
+  - **No decorative banners:** Omit divider echoes (e.g. `echo "---"`) between chained commands.
+  - **No interactive TTY commands:** Never invoke interactive editors or monitors (`vim`, `nano`, `top`, `watch`, `tail -f`, unflagged `git commit`). Pass explicit non-interactive flags (`-m`, `-F`, `--no-edit`) or query flags.
 - **Reading:** Use `read` for files you intend to edit instead of `cat` or `bat`.
 - **Line endings & non-printing characters:** Never assume GNU `cat -A` on macOS. BSD `cat` rejects `-A`. Use `cat -vet`, `gcat -A` (Homebrew coreutils), `od -c`, or `xxd`. The `-A` display-tail is GNU-only and deferred (#176).
 - **Paths:** Use absolute paths only. The working directory resets between subagent turns.
