@@ -30,9 +30,9 @@ This project implements the methodology in `skills/ai-engineering-expert/SKILL.m
 
 - **Skills**: Authored in `skills/<name>/SKILL.md`. Exposed via symlinks under `~/.agents/skills/<name>`.
   - Authoring & Verification: `skills/ai-engineering-expert/SKILL.md`.
-  - Session Retros & Audit: `skills/harness-audit/SKILL.md`.
+  - Session Retros, Patterns & Audit: `skills/harness-audit/SKILL.md`.
 - **Rules**: Authored under `rules/`:
-  - `rules/common/*` inject directly into the system prompt.
+  - `rules/common/*` inject into the system prompt on pi (pi-better-rules reads `~/.pi/rules`) and Claude Code (`~/.claude/rules`); both resolve through the `distributions/` assembly.
   - Other `rules/*` load conditionally via `paths` frontmatter pattern matching.
 - **Domain & Architecture**:
   - Domain context & ubiquitous language: `GLOSSARY.md` (see `docs/agents/domain.md`). Env snapshot: `docs/agents/env.yaml`.

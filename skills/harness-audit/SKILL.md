@@ -1,13 +1,14 @@
 ---
 name: harness-audit
 description: >-
-  Audits pi session JSONL for oversized bash outputs, edit failures, and dead skills; captures trigger evals and triages fixes. Use when trimming verbose results, hardening context bloat, diagnosing edit rejections, or evaluating skill discovery.
+  Audits pi sessions for oversized outputs, edit failures, and dead skills; extracts cross-cutting skill-farm patterns into rules or refactors. Use when trimming verbose results, hardening context bloat, diagnosing edit rejections, evaluating skill discovery, or distilling common patterns.
 arguments: target
 argument-hint: |-
   <session-id-or-path> -- session id (uuid) or absolute/relative path to a pi session jsonl file
   audit.py: [--threshold N] [--json] [--emit-filtered] [--keep-head-tail N] [--census]
   audit_edits.py: [--json] [--with-context N] [--dump-context <dir>]
   audit_skills.py: [--days N] [--json] | capture <session-id> --skill <name> --expect [trigger|no-trigger]
+  audit_skill_patterns.py: [--paths DIR ...] [--json] [--batch-size N]
 disable-model-invocation: true
 ---
 
@@ -15,7 +16,7 @@ disable-model-invocation: true
 
 Deterministic scan for oversized `bash` tool results **plus** constructive triage, **and** a second workload for `edit` tool failures (hash-anchor rejections). Scan identifies candidates; the model analyses, triages, and discusses fixes with you — including whether to refine scripts or add a `rules/` guard. Read-only by default; filtered output is opt-in.
 
-Three workloads: `audit.py` (bash oversized output), `audit_edits.py` (edit failures), and `audit_skills.py` (skill discovery & trigger capture). All resolve targets via §1 and support `--json`.
+Four workloads: `audit.py` (bash oversized output), `audit_edits.py` (edit failures), `audit_skills.py` (skill discovery & trigger capture), and `audit_skill_patterns.py` (cross-skill pattern extraction). The first three resolve session targets via §1; `audit_skill_patterns` resolves a skill corpus. All support `--json`.
 ## Workflow
 
 ### 1. Resolve target
@@ -145,6 +146,32 @@ uv run $SKILL_DIR/scripts/audit_skills.py capture <session-id-or-path> --skill <
 | **Zero-Skill Friction** | High bash retries / edit loops with 0 skills loaded | Model inspects User Prompt + Error Turn to triage whether an installed skill should have triggered |
 | **Eval Harvest** | Daily session encountered target task or near-miss | Capture `agent_run` observation (`user_prompt` or `tool_result`) into `~/.pi/agent/evals/<skill_name>.yaml` |
 
+## Skill patterns workload
+
+`audit_skill_patterns.py` inventories a skill corpus and renders the extraction criteria; the model cross-reads, you resolve in-session. Absorbed from the retired rules-distill skill.
+
+```bash
+# Default corpus: the installed skill farm
+uv run $SKILL_DIR/scripts/audit_skill_patterns.py [--batch-size 12]
+
+# Explicit corpus directories, machine-readable
+uv run $SKILL_DIR/scripts/audit_skill_patterns.py --paths ~/.agents/skills ~/other/farm --json
+```
+
+Deterministic half: resolves the corpus (symlinks followed), parses frontmatter, reports staleness (>90d) and the first/third-party split, and renders the promotion bar, verdict vocabulary, and subagent prompt template from `data/criteria.yaml`. Exit `0` ok / `1` bad args / `2` corpus or criteria missing.
+
+Model half — see [pattern-extraction](references/pattern-extraction.md): regroup the starting batches thematically, dispatch one fresh subagent per batch with the rendered prompt (full `SKILL.md` bodies plus `rules/common` text), merge candidates across batches, re-check the promotion bar against combined evidence, then present verdicts.
+
+| Verdict | Signal | Default action |
+| ------- | ------ | -------------- |
+| **promote_to_rule** | Cross-cutting principle, 2+ skills, absent from rules | Append to or revise one `rules/common` file |
+| **refactor_skill** | One skill restates what another owns | Edit the owning skill; point by name |
+| **merge_skills** | Two skills teach one workflow | Propose a merge; name survivor and retired |
+| **already_covered** | A rule or skill states the behavior | Cite the artifact; change nothing |
+| **too_specific** | Principle serves one skill's domain | Keep inside the skill |
+
+Resolve approved items in-session through repo gates (`scripts/check.sh`, changelog, conventional commit). Nothing is persisted; git history is the record. Evolve criteria in `data/criteria.yaml`, never here.
+
 ## Examples
 
 ```bash
@@ -176,4 +203,4 @@ uv run $SKILL_DIR/scripts/audit_skills.py capture 01a07730-d9be-73cc-b7b1-a8caa2
 
 ## Completion
 
-Done when every `bash` result classified, every oversized entry has `why/manageable/replaceable + bucket`, savings estimate printed (the `keep_head_tail`-window model — the stricter `Σ(n − threshold)` headline differs by one line per entry by definition, not a bug), truncation totals reviewed, **and** user has chosen `A/B/C/D/E` per entry. With `--emit-filtered`, also when sibling file round-trips with same record count. For edit audit: done when every edit failure has deterministic `category` N/H/F/B/T/M/P/R/G/U (or `?` for `E_UNKNOWN` / unrecognized codes with a stated reason), `W_*` rows are reported separately as applied-tier (never as failures), and the model proposes a corrected retry (read before edit, separate spans, re-read after mutation) or an explicit keep.
+Done when every `bash` result classified, every oversized entry has `why/manageable/replaceable + bucket`, savings estimate printed (the `keep_head_tail`-window model — the stricter `Σ(n − threshold)` headline differs by one line per entry by definition, not a bug), truncation totals reviewed, **and** user has chosen `A/B/C/D/E` per entry. With `--emit-filtered`, also when sibling file round-trips with same record count. For edit audit: done when every edit failure has deterministic `category` N/H/F/B/T/M/P/R/G/U (or `?` for `E_UNKNOWN` / unrecognized codes with a stated reason), `W_*` rows are reported separately as applied-tier (never as failures), and the model proposes a corrected retry (read before edit, separate spans, re-read after mutation) or an explicit keep. For pattern extraction: done when every candidate carries a verdict with evidence and target, the user chose approve or skip for each, approved items landed through the gates, and the cross-batch merge re-checked the promotion bar.
