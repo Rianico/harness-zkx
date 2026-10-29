@@ -476,6 +476,7 @@ def build_transitions(
     branch_pushed: bool,
     failure_states: list[str],
     worktree_clean: bool,
+    merge_verdict: str = "unknown",
 ) -> list[Transition]:
     """Legal transitions for the current derived state, each with its mutation."""
     transitions: list[Transition] = []
@@ -517,6 +518,14 @@ def build_transitions(
                 f"gh pr ready {pr_number} --repo {repo}",
                 ["changelog_stamped"],
                 "remote",
+            )
+        )
+    if pr_state == "open" and merge_verdict == "behind":
+        transitions.append(
+            Transition(
+                "pr.py --sync",
+                ["worktree_clean"] if worktree_clean else ["stash or commit local work first"],
+                "local",
             )
         )
     if pr_state == "open":
@@ -825,6 +834,7 @@ def collect_status(
         branch_pushed=branch_pushed,
         failure_states=failure_states,
         worktree_clean=clean,
+        merge_verdict=merge_verdict,
     )
 
     report = StatusReport(

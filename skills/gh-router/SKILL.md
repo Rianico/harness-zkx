@@ -25,11 +25,13 @@ Boundary: `scripts/state.sh` is human-facing orientation (its `gh pr view` query
 | **0: Orientation** | | |
 | See where I stand | `$SKILL_DIR/scripts/state.sh` | 4 lines · `branch  <head> → <base> (ahead N, behind M)` · `pr  #N <mergeable>/<state> checks ok/total` (`-` when no PR) · `guard  ledger ok`, `ledger has findings`, or `no changelog script` · `main  <sha> <subject> (<tag>)` |
 | Brief a commit range | `uv run $SKILL_DIR/subskills/git-diff-digest/scripts/brief.py <spec>` | text brief: commits, files, areas, signals |
+| Sync the head with its base | `uv run $SKILL_DIR/subskills/pr-land/scripts/pr.py --sync` | `synced <head> with <remote>/<base> (N commit(s))` or `already current with <remote>/<base>` · a stopped merge prints the pr-conflict report, then `sync_conflict` + the resume path (exit 1) |
 | **1: Prep & Authoring** | | |
 | Install the canonical PR template | `$SKILL_DIR/scripts/install-template.sh [--target DIR] [--check] [--force] [--dry-run]` | `installed:` / `already installed:` / `clean:` / `dry-run:` exit 0 · `drift:` / `missing:` / `refused:` exit 1 · usage exit 2 · missing or unusable source exit 3 |
 | Draft a PR body from the digest | `uv run $SKILL_DIR/subskills/git-diff-digest/scripts/brief.py '<base>...HEAD' --pr --yaml` | the brief payload plus its `landing` block — the change-fact source for the body |
 | Refresh an open PR description | `uv run $SKILL_DIR/subskills/pr-land/scripts/pr.py --title … --body-file …` | reuses the open PR for the head branch, PATCHes title/body, leaves its draft state alone. Prints `PR <url>` on stdout |
 | **2: Conflict Reconcile** | | |
+| Reach for the extractor | `pr.py --sync`, or the two rows below by hand | the sync prints the report at the moment the merge stops; never edit a conflicted file before it |
 | Triage unmerged conflicts | `uv run $SKILL_DIR/subskills/pr-conflict/scripts/extract_conflict_context.py` | `repo: <root>` · `conflicted files: N` · one row per path: path, conflict type, stages, hunk count |
 | Inspect one conflict | `uv run $SKILL_DIR/subskills/pr-conflict/scripts/extract_conflict_context.py --file <path>` | `operation:`, `author intent:` (ours/theirs sha, author, subject), compact hunks |
 | **3: Landing & CI** | | |

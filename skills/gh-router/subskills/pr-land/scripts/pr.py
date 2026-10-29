@@ -4,11 +4,12 @@
 # ///
 """pr.py — create pull request, watch every check, squash-merge (deterministic bytes)
 
-Usage: pr.py [--title "…"] [--body "…" | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--verbose] [--merge|--no-merge] [--draft] [--check] [--status] [--json] [--out LEAF] [--no-stamp] [--force-scaffold] [--squash-message MSG | --squash-message-file FILE]
+Usage: pr.py [--title "…"] [--body "…" | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--verbose] [--merge|--no-merge] [--draft] [--check] [--status] [--sync] [--json] [--out LEAF] [--no-stamp] [--force-scaffold] [--squash-message MSG | --squash-message-file FILE]
   --watch : poll EVERY check on the PR until all pass; one stderr line per poll (mergeable_state + verdict); a conflicting or unresolved PR fails fast, exit 1
   --merge : after a green watch, squash-merge (waits for mergeable_state clean; a conflicting or unresolved PR fails fast, refuses otherwise)
   --check : preflight + draft phase — run the merge gates and print counts, title facts, the squash preview, and one curation hint (no PR created; refusals carry reason/remedy/site on stderr)
   --status : read-only landing state — predicates, failure states, artifact, title facts, squash preview, refusals[] and transitions[] (never refuses, always exit 0; --json for the pinned schema)
+  --sync : merge <remote>/<base> into the head and push a clean result; when the merge stops, print the pr-conflict dual-intent report and exit 1 before any file is edited
   --out LEAF : scaffold leaf under <repo-root>/.lsz/gh-router/ (default <head-slug>.md); a body-less --check writes it only when absent
   --force-scaffold : with a body-less --check, regenerate the scaffold leaf over an existing file (default: write nothing, report path + stale)
   --draft : leave the PR a draft after stamping (no gh pr ready); default / --no-draft ends a NEWLY CREATED PR ready; an existing open PR is never readied or re-drafted (a reused draft without --draft exits 1 with the manual fix)
@@ -71,15 +72,16 @@ from _squash import (
     refuse_unfilled_sentinels,
 )
 from _status import make_refusal, make_transition, preflight_title, run_status
+from _sync import run_sync
 
 
 def print_usage() -> None:
     usage = """pr.py — create pull request, watch every check, squash-merge (deterministic bytes)
-Usage: pr.py [--title "…"] [--body "…" | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--verbose] [--merge|--no-merge] [--draft] [--check] [--status] [--json] [--out LEAF] [--no-stamp] [--force-scaffold] [--squash-message MSG | --squash-message-file FILE]
+Usage: pr.py [--title "…"] [--body "…" | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--verbose] [--merge|--no-merge] [--draft] [--check] [--status] [--sync] [--json] [--out LEAF] [--no-stamp] [--force-scaffold] [--squash-message MSG | --squash-message-file FILE]
   --watch : poll EVERY check on the PR until all pass; one stderr line per poll (mergeable_state + verdict); a conflicting or unresolved PR fails fast, exit 1
   --merge : after a green watch, squash-merge (waits for mergeable_state clean; a conflicting or unresolved PR fails fast, refuses otherwise)
   --check : preflight + draft phase — run the merge gates, print counts, title facts, the squash preview, one curation hint (no PR created; body-less runs write the scaffold leaf only when absent, --force-scaffold regenerates)
-  --status : read-only landing state, always exit 0 (--json for the pinned schema)
+  --status : read-only landing state, always exit 0 (--json for the pinned schema); --sync : merge <remote>/<base>, push a clean result, and a stopped merge prints the pr-conflict report then exits 1
   --out LEAF : scaffold leaf under <repo-root>/.lsz/gh-router/ (default <head-slug>.md)
   --draft : leave the PR a draft (no gh pr ready); default / --no-draft ends a NEWLY CREATED PR ready; an existing open PR is never readied or re-drafted (a reused draft without --draft exits 1 with the manual fix)
   --no-stamp : skip auto-stamp (#<PR_NUMBER>) in CHANGELOG.md unreleased ledger; the flip to ready still happens (caller owns the changelog) — head unstamped, expect a red changelog gate
@@ -108,6 +110,7 @@ def parse_args(args: list[str]) -> PrOptions:
     watch = False
     merge = False
     status = False
+    sync = False
     json_output = False
     check = False
     draft = False
@@ -181,6 +184,12 @@ def parse_args(args: list[str]) -> PrOptions:
         elif arg == "--no-status":
             status = False
             i += 1
+        elif arg == "--sync":
+            sync = True
+            i += 1
+        elif arg == "--no-sync":
+            sync = False
+            i += 1
         elif arg == "--json":
             json_output = True
             i += 1
@@ -231,6 +240,7 @@ def parse_args(args: list[str]) -> PrOptions:
         merge=merge,
         check=check,
         status=status,
+        sync=sync,
         json_output=json_output,
         draft=draft,
         no_stamp=no_stamp,
@@ -397,6 +407,15 @@ def main(argv: list[str] | None = None) -> int:
         argv = sys.argv[1:]
     try:
         options = parse_args(argv)
+        if options.sync:
+            if options.status or options.check or options.watch or options.merge:
+                raise UsageError("--sync is its own phase: drop --status/--check/--watch/--merge")
+            # Route friction was the defect: one command replaces a hand `git merge`
+            # plus a hand resolution, and hands a stopped merge to pr-conflict.
+            sync_head = resolve_head(options.head)
+            return run_sync(
+                head_ref=sync_head, base=resolve_base(options.base, resolve_repo(sync_head))
+            )
         if options.status:
             if options.merge or options.watch:
                 raise UsageError(

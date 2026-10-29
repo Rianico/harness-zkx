@@ -3,7 +3,7 @@ name: pr-land
 description: >-
   Create PR, watch verification checks, and squash-merge via gh api. Use when opening pull requests, monitoring CI check-runs, or merging approved PRs.
 argument-hint: |-
-  "[--title '…'] [--body '…' | --body-file FILE] [--base main] [--head BRANCH] [--check] [--status] [--json] [--out LEAF] [--force-scaffold] [--watch] [--verbose] [--merge] [--draft] [--no-stamp] [--squash-message '…' | --squash-message-file FILE]"
+  "[--title '…'] [--body '…' | --body-file FILE] [--base main] [--head BRANCH] [--check] [--status] [--sync] [--json] [--out LEAF] [--force-scaffold] [--watch] [--verbose] [--merge] [--draft] [--no-stamp] [--squash-message '…' | --squash-message-file FILE]"
 metadata:
   managed-by: gh-router
 ---
@@ -17,9 +17,9 @@ Deterministic GitHub PR lifecycle via `gh api` (avoids `gh pr create` GQL `Head 
 ## Script
 
 Run `$SKILL_DIR/scripts/pr.py` with `uv run` (Python >=3.14, `GH_TOKEN` via `gh auth`). The `$SKILL_DIR/scripts/pr.sh` shim execs it. Shared Python modules resolve repository identity (`_github.repo_slug_from_url`, push remote first) and check verdicts (`_github.checks_verdict`).
-
 ```bash
 uv run $SKILL_DIR/scripts/pr.py --status --json
+uv run $SKILL_DIR/scripts/pr.py --sync
 uv run $SKILL_DIR/scripts/pr.py --check --body-file .lsz/gh-router/feat-x.md
 uv run $SKILL_DIR/scripts/pr.py --title '…' --body-file .lsz/gh-router/feat-x.md
 uv run $SKILL_DIR/scripts/pr.py --title '…' --watch --merge --body-file .lsz/gh-router/feat-x.md --squash-message-file .lsz/gh-router/squash_message.md
@@ -39,6 +39,7 @@ uv run $SKILL_DIR/scripts/pr.py --title '…' --watch --merge --body-file .lsz/g
 | `--no-stamp` | Skip auto-stamping `(#NUM)` into `CHANGELOG.md`. The ready flip still runs. |
 | `--check` | Run drafting preflight: gates plus facts on stdout. See [Draft Phase](#draft-phase). |
 | `--status` / `--json` | Read-only landing state: predicates, failure states, artifact, title facts, squash preview, `refusals[]`, `transitions[]`. `--status` never refuses (exit 0); `--json` prints the pinned schema. |
+| `--sync` | Merge `<remote>/<base>` into the head and push a clean result; a stopped merge prints the pr-conflict dual-intent report and refuses (exit 1) before any file is edited. See [Sync](#sync). |
 | `--out LEAF` | Scaffold leaf under `.lsz/gh-router/` (default `<head-slug>.md`; see [Draft Phase](#draft-phase)). |
 | `--force-scaffold` | With a body-less `--check`, regenerate the leaf over an existing file. Otherwise the tool writes nothing and reports path + `stale`. |
 
@@ -63,6 +64,12 @@ Curate the scaffold leaf before passing it to the create phase as `--body-file`,
 Author prose from the git-diff-digest brief with `pr-enhance`. The PR body is the reviewer's artifact, not the commit message. Author the squash overview as a separate file (at most 5 bullets and 15 lines). Pass that file to `--merge` with `--squash-message-file`. The merge operation never falls back to the PR body. A message that reproduces the scaffold leaf (`.lsz/gh-router/<slug>.md`) is refused.
 
 Exit: `0` gates passed · `1` a gate refused (see below) · `2` usage error, or a body-less `--check` with no open PR (scaffold path).
+
+## Sync
+
+`--sync` is the governed base sync. It fetches `<remote>/<base>`, merges it into the head, and pushes a clean result in one command. A stopped merge runs the pr-conflict dual-intent report (`extract_conflict_context.py --all`) and prints it on stdout, then refuses on stderr, so no file is edited before both sides' intent is read. An already-current head is a no-op that still pushes local commits. History is never rewritten and no push is forced.
+
+Resume after a stop: reconcile each path from the report, `git add` it, `git commit`, then re-run `--sync` to push. A merge, rebase, cherry-pick, or revert already in progress refuses first (`sync_in_progress`); finish it, then re-run.
 
 ## Invariants & Gates
 
@@ -102,6 +109,6 @@ The Title Shape gate matches the type case-insensitively (`FEAT:` passes) and ke
 2. **Draft** — run `--check`. Curate the scaffold leaf it writes (`.lsz/gh-router/<head-slug>.md`) and pass it back as `--body-file`. *Done when* `--check` exits `0`.
 3. **Create or reuse** — `GET pulls?head=owner:HEAD` reuses `number` and calls `PATCH title/body`. Otherwise, call `POST pulls` (always with `draft=true`). Stamp `(#NUM)` into unattributed unreleased entries, push, and flip a new PR ready via `gh pr ready`. This fires the `ready_for_review` event. Existing open PRs remain untouched. *Done when* stdout prints `PR <url>` and the ready flip exits `0`.
 4. **Watch** (`--watch`) — poll all check-runs and commit statuses: `gh pr checks --json name,bucket` → `checks_verdict`. Each poll prints one stderr line: `checks <verdict> (mergeable_state=<state>, <i>/<tries>)`. A `behind` head appends `, head behind <base>`. Resolve mergeability first. An `unknown` state retries 5×2s (~8s) and refuses through the shared report with verdict `unknown`. A `dirty` reading requires confirmation twice 3s apart before counting as conflicting. Non-dirty readings reset strikes. A `behind` head is accepted with a folded warning. Default output is slim. A `failure` verdict prints failing run IDs plus a `gh run view --run-id <id> --log-failed` pointer (or `ci.sh why`). A timeout prints only its line. Pass `--verbose` to view full tails. *Done when* stderr prints `checks success`. A `failure` verdict exits `1`. Only a `pending` verdict continues polling up to 60×10s.
-5. **Merge** (`--merge`) — require an explicit `--squash-message` (or `--squash-message-file`) and a green watch. The title gate runs before any `gh` mutation. Resolve `mergeable_state` using the same retry budgets (unknown 5×2s, dirty debounced 2×3s). A conflicting or unresolved state fails fast through the shared refusal report (`PR <url>`, verdict, touched files, pr-conflict pointer). A `behind` head and any other non-`clean` state refuse. A missing explicit message refuses before any `PUT`. There is no PR-body fallback. Finally, run `PUT pulls/$NUM/merge merge_method=squash` with `commit_title=<title> (#N)` and `commit_message` set to the cleaned explicit message with rebuilt trailers. *Done when* stderr prints `merged #N (squash) to <base>`.
+5. **Merge** (`--merge`) — require an explicit `--squash-message` (or `--squash-message-file`) and a green watch. The title gate runs before any `gh` mutation. Resolve `mergeable_state` using the same retry budgets (unknown 5×2s, dirty debounced 2×3s). A conflicting or unresolved state fails fast through the shared refusal report (`PR <url>`, verdict, touched files, pr-conflict pointer). A `behind` head refuses with `pr.py --sync` as the remedy; run it, then re-run the watch and merge. A missing explicit message refuses before any `PUT`. There is no PR-body fallback. Finally, run `PUT pulls/$NUM/merge merge_method=squash` with `commit_title=<title> (#N)` and `commit_message` set to the cleaned explicit message with rebuilt trailers. *Done when* stderr prints `merged #N (squash) to <base>`.
 
 Fail-loud, no secrets in logs: PR URL on stdout, progress on stderr. Re-trigger is model-driven — the script returns failure info, the model edits, pushes, and re-runs `--watch --merge`.
