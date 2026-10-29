@@ -91,10 +91,6 @@ RTK_INIT_COMMANDS: dict[str, list[str]] = {
     "codex": ["rtk", "init", "-g", "--codex"],
 }
 
-PIX_OPTIMIZER_SPECS: tuple[str, ...] = ("@xynogen/pix-optimizer", "npm:@xynogen/pix-optimizer")
-PIX_OPTIMIZER_REMOVE_ARGS: list[str] = ["pi", "remove", "npm:@xynogen/pix-optimizer"]
-PI_SETTINGS_REL = Path(".pi") / "agent" / "settings.json"
-
 
 def detect_toolchain(cwd: Path | None = None) -> dict[str, dict[str, Any]]:
     """Check availability of the canonical CLI tools.
@@ -458,48 +454,6 @@ def merge_rtk_exclude_commands(path: Path | None = None, dry_run: bool = False) 
     return result
 
 
-def _pi_settings_path() -> Path:
-    return Path.home() / PI_SETTINGS_REL
-
-
-def _mentions_pix_optimizer(text: str) -> bool:
-    return any(spec in text for spec in PIX_OPTIMIZER_SPECS)
-
-
-def detect_pix_optimizer() -> dict[str, Any]:
-    """Detect the legacy `@xynogen/pix-optimizer` package. Never raises."""
-    source: str | None = None
-    try:
-        settings = _pi_settings_path()
-        if settings.is_file() and _mentions_pix_optimizer(settings.read_text(encoding="utf-8")):
-            source = "settings.json"
-    except Exception:
-        source = None
-    if source is None and shutil.which("pi") is not None:
-        proc = _run_capture(["pi", "list"])
-        if proc is not None and proc.returncode == 0 and _mentions_pix_optimizer(proc.stdout):
-            source = "pi list"
-    return {"detected": source is not None, "source": source}
-
-
-def remove_pix_optimizer(dry_run: bool = False) -> dict[str, Any]:
-    """Remove the legacy package, only when the caller asks for it explicitly."""
-    detected = detect_pix_optimizer()
-    result: dict[str, Any] = {
-        "detected": detected["detected"],
-        "source": detected["source"],
-        "removed": False,
-        "command": list(PIX_OPTIMIZER_REMOVE_ARGS),
-        "dry_run": dry_run,
-    }
-    if not detected["detected"] or dry_run:
-        return result
-    proc = _run_capture(list(PIX_OPTIMIZER_REMOVE_ARGS), timeout=RTK_APPLY_TIMEOUT)
-    result["removed"] = proc is not None and proc.returncode == 0
-    result["returncode"] = None if proc is None else proc.returncode
-    return result
-
-
 def _hook_target(agent: str, cwd: Path | None = None) -> Path | None:
     """Where `rtk init` records the hook for a given agent."""
     home = Path.home()
@@ -520,7 +474,7 @@ def _hook_installed(agent: str, cwd: Path | None = None) -> bool:
 
 
 def detect_rtk(cwd: Path | None = None, env: Mapping[str, str] | None = None) -> dict[str, Any]:
-    """Read-only RTK state: binary, version gate, active agent, hook, config, pix conflict."""
+    """Read-only RTK state: binary, version gate, active agent, hook, and config."""
     binary = shutil.which("rtk")
     if binary is None and cwd is not None:
         candidate = cwd / "node_modules" / ".bin" / "rtk"
@@ -553,7 +507,6 @@ def detect_rtk(cwd: Path | None = None, env: Mapping[str, str] | None = None) ->
             "present": list(config["exclude_commands"]),
             "missing": list(config["missing"]),
         },
-        "pix_optimizer_detected": detect_pix_optimizer()["detected"],
     }
 
 
@@ -575,7 +528,6 @@ def _rtk_check(agent: str, cwd: Path) -> int:
     hooks_ok = all(hooks.values())
     preview = merge_rtk_exclude_commands(dry_run=True)
     merge_error = preview.get("error")
-    pix = detect_pix_optimizer()
     missing = list(preview["added"])
 
     print(f"rtk check (agent={agent})")
@@ -591,21 +543,8 @@ def _rtk_check(agent: str, cwd: Path) -> int:
     else:
         excludes = "complete" if not missing else f"missing {missing}"
         print(f"  {'exclude:':<15}{excludes} ({preview['path']})")
-    if pix["detected"]:
-        print(
-            f"  {'pix-optimizer:':<15}DETECTED ({pix['source']}) — interferes with rtk rewriting; "
-            "pass --remove-pix-optimizer on apply"
-        )
-    else:
-        print(f"  {'pix-optimizer:':<15}not detected")
-
     clean = bool(
-        state["installed"]
-        and state["version_ok"]
-        and hooks_ok
-        and not missing
-        and not pix["detected"]
-        and not merge_error
+        state["installed"] and state["version_ok"] and hooks_ok and not missing and not merge_error
     )
     print(f"status: {'clean' if clean else 'needs-apply'}")
     if not clean:
@@ -613,8 +552,8 @@ def _rtk_check(agent: str, cwd: Path) -> int:
     return 0 if clean else 1
 
 
-def _rtk_apply(agent: str, cwd: Path, dry_run: bool, project: bool, remove_pix: bool) -> int:
-    """Install the agent hook, merge the exclude list, and opt-in remove pix-optimizer."""
+def _rtk_apply(agent: str, cwd: Path, dry_run: bool, project: bool) -> int:
+    """Install the agent hook and merge the exclude list."""
     commands = _init_commands(agent, project)
     prefix = "[DRY-RUN] " if dry_run else ""
     if dry_run:
@@ -625,8 +564,6 @@ def _rtk_apply(agent: str, cwd: Path, dry_run: bool, project: bool, remove_pix: 
             print(f"{prefix}merge would fail: {preview['error']}")
         else:
             print(f"{prefix}would merge {preview['added']} into {preview['path']}")
-        if remove_pix:
-            print(f"{prefix}would run: {' '.join(PIX_OPTIMIZER_REMOVE_ARGS)} (only if detected)")
         return 0
 
     failed: list[str] = []
@@ -641,14 +578,6 @@ def _rtk_apply(agent: str, cwd: Path, dry_run: bool, project: bool, remove_pix: 
     print(f"exclude_commands: {merged['path']} created={merged['created']} added={merged['added']}")
     if merged.get("error"):
         failed.append(str(merged["error"]))
-    if remove_pix:
-        removal = remove_pix_optimizer()
-        print(
-            f"pix-optimizer: detected={removal['detected']} removed={removal['removed']} "
-            f"source={removal['source']}"
-        )
-        if removal["detected"] and not removal["removed"]:
-            failed.append(" ".join(PIX_OPTIMIZER_REMOVE_ARGS))
     if failed:
         print(f"failed: {failed}", file=sys.stderr)
         return 1
@@ -680,7 +609,6 @@ def _run_rtk_command(args: argparse.Namespace, cwd: Path) -> int:
         cwd,
         dry_run=args.dry_run,
         project=args.project,
-        remove_pix=args.remove_pix_optimizer,
     )
 
 
@@ -771,21 +699,9 @@ def build_env_document(state: dict[str, Any]) -> dict[str, Any]:
         for name, tool in state["toolchain"].items()
     }
     rtk_state = state.get("rtk") or {}
-    rtk_excludes = rtk_state.get("exclude_commands") or {}
-    if rtk_state.get("hook_installed"):
-        hook_status = "installed"
-    elif rtk_state.get("active_agent"):
-        hook_status = "missing"
-    else:
-        hook_status = "unknown-agent"
     rtk_document = {
         "installed": bool(rtk_state.get("installed", False)),
         "version": rtk_state.get("version"),
-        "active_agent": rtk_state.get("active_agent"),
-        "hook_installed": bool(rtk_state.get("hook_installed", False)),
-        "hook_status": hook_status,
-        "pix_optimizer_detected": bool(rtk_state.get("pix_optimizer_detected", False)),
-        "exclude_commands": list(rtk_excludes.get("present", [])),
     }
     return {
         "project": state["project_name"],
@@ -989,11 +905,6 @@ def main() -> int:
     )
     _ = rtk_p.add_argument(
         "--dry-run", action="store_true", help="Print the intent without writing anything"
-    )
-    _ = rtk_p.add_argument(
-        "--remove-pix-optimizer",
-        action="store_true",
-        help="Remove the legacy @xynogen/pix-optimizer package (opt-in)",
     )
 
     args = parser.parse_args()

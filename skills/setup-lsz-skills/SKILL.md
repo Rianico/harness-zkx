@@ -38,7 +38,7 @@ Detection inspects the CLI toolchain, git provider, and steering file.
 `detect --write-env` writes compact YAML to `docs/agents/env.yaml` recording
 `project`, `provider`, `remote_url`, `steering_file`, `domain_layout` (glossary
 paths and deprecated `stale_files`), `runtime.tmp`, `toolchain`, and an `rtk`
-section (version, active agent, hook status, exclude patterns). Review that
+section (installed, version). Review that
 file before migrating.
 
 ### 2. Migrate deprecated files
@@ -86,8 +86,7 @@ uv run skills/setup-lsz-skills/scripts/setup_detect.py rtk --check --agent pi
 ```
 
 `--check` is read-only. It probes the `rtk` version, the calling agent's hook
-file, the six canonical exclude patterns in `config.toml`, and the legacy
-`@xynogen/pix-optimizer` package. Exit `0` means clean; exit `1` means apply is
+file, and the six canonical exclude patterns in `config.toml`. Exit `0` means clean; exit `1` means apply is
 needed. The script resolves the agent from `PI_SESSION_ID`,
 `ANTIGRAVITY_AGENT`, `CLAUDECODE`, or `CODEX_HOME`. A plain terminal shell
 exports none of those, so it exits `2` and asks for `--agent`.
@@ -109,10 +108,6 @@ then merges the canonical exclude patterns into `[hooks] exclude_commands`.
 No other config line changes. `--project` installs a project hook instead of a
 global one. `--dry-run` prints the plan and writes nothing.
 
-`@xynogen/pix-optimizer` interferes with native RTK rewriting. Removal is
-opt-in only: pass `--remove-pix-optimizer` and only after the user agrees.
-Without that flag the package stays installed.
-
 ### 5. Render docs and update pointers
 
 Render the `.j2` templates into `docs/agents/`.
@@ -123,8 +118,7 @@ uv run skills/setup-lsz-skills/scripts/setup_detect.py render
 
 Rendering writes `domain.md`, `toolchain.md`, `issue-tracker.md`, and
 `triage-labels.md` from `templates/`. Then add minimal navigation pointers to
-`AGENTS.md` and mirror them into `CLAUDE.md`. Point at `GLOSSARY.md`,
-`docs/agents/env.yaml`, and the rendered docs. Keep pointers only; no inline specs.
+`AGENTS.md`. Keep `CLAUDE.md` as a symlink to `AGENTS.md`; if it is a regular file, mirror the pointers there. Point at `GLOSSARY.md`, `docs/agents/env.yaml`, and the rendered docs. Keep pointers only; no inline specs.
 
 ## Templates
 
