@@ -450,6 +450,78 @@ def test_read_lines_cap_footer_without_kb_suffix_is_counted() -> None:
     assert audit.truncation_of(text) == (100, 90)
 
 
+# --- footer must be the harness tail (ha-fix-A2 / P1-2) ---
+def test_truncation_of_ignores_footer_shaped_prose_mid_body() -> None:
+    """P1-2: a quoted footer followed by real content is prose, not a delivery cap."""
+    body = "\n".join(f"line {i}" for i in range(30))
+    quoted = "[Showing lines 1-30 of 500 (50.0KB limit). Full output: /tmp/quoted.log]"
+    assert audit.truncation_of(body + "\n\n" + quoted + "\n\n" + body) is None
+    assert audit.truncation_of(body + "\n" + quoted + "\ntrailing") is None
+    partial = "[Showing last 50.0KB of line 42 (line is 120.0KB). Full output: /tmp/p.log]"
+    assert audit.truncation_of(body + "\n\n" + partial + "\n\n" + body) is None
+
+
+def test_truncation_of_parses_tail_footer_and_status_tail() -> None:
+    """P1-2: a genuine tail footer still parses, with or without a status line."""
+    body = "\n".join(f"line {i}" for i in range(30))
+    footer = "[Showing lines 1-30 of 500 (50.0KB limit). Full output: /tmp/real.log]"
+    assert audit.truncation_of(body + "\n\n" + footer) == (500, 470)
+    assert audit.truncation_of(body + "\n\n" + footer + "\n") == (500, 470)
+    # An aborted / timed-out bash command appends one status line after the footer.
+    assert audit.truncation_of(body + "\n\n" + footer + "\n\nCommand aborted") == (500, 470)
+    assert audit.truncation_of(body + "\n\n" + footer + "\n\nCommand timed out after 5s") == (
+        500,
+        470,
+    )
+
+
+# --- scan / emit_filtered threshold agreement (ha-fix-A2 / P1-1) ---
+def test_emit_filtered_agrees_with_scan_on_capped_threshold(tmp_path: Path) -> None:
+    """P1-1: the filter must use the same footer-derived delivered count as scan."""
+    p = tmp_path / "capped.jsonl"
+    body = "\n".join(f"line {i}" for i in range(30))
+    footer = "[Showing lines 1-30 of 500 (50.0KB limit). Use offset=31 to continue]"
+    text = body + "\n\n" + footer
+    write_jsonl(
+        p,
+        [
+            session_header(),
+            toolcall_msg("a1", None, "c1", "seq 1 500"),
+            toolresult_msg("r1", "a1", "c1", text),
+        ],
+    )
+    assert audit.count_lines(text) == 32  # 30 delivered + blank separator + footer
+    res = audit.scan(p, threshold=30)
+    assert res["oversized_count"] == 0  # delivered == 30, so not oversized
+    out = audit.emit_filtered(p, threshold=30, keep=5)
+    for line in out.read_text().splitlines():
+        d = json.loads(line)
+        if d.get("message", {}).get("toolCallId") == "c1":
+            assert d["message"]["content"][0]["text"] == text  # left intact
+
+
+def test_emit_filtered_still_truncates_capped_entry_over_threshold(tmp_path: Path) -> None:
+    """P1-1: a capped entry whose delivered count exceeds the threshold is truncated."""
+    p = tmp_path / "capped-over.jsonl"
+    body = "\n".join(f"line {i}" for i in range(30))
+    footer = "[Showing lines 1-30 of 500 (50.0KB limit). Use offset=31 to continue]"
+    text = body + "\n\n" + footer
+    write_jsonl(
+        p,
+        [
+            session_header(),
+            toolcall_msg("a1", None, "c1", "seq 1 500"),
+            toolresult_msg("r1", "a1", "c1", text),
+        ],
+    )
+    assert audit.scan(p, threshold=20)["oversized_count"] == 1
+    out = audit.emit_filtered(p, threshold=20, keep=5)
+    for line in out.read_text().splitlines():
+        d = json.loads(line)
+        if d.get("message", {}).get("toolCallId") == "c1":
+            assert "omitted" in d["message"]["content"][0]["text"]
+
+
 # --- tool census ---
 def test_tool_census_counts_all_tools(tmp_path: Path) -> None:
     p = tmp_path / "census.jsonl"

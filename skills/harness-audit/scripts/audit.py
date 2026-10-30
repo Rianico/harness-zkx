@@ -47,14 +47,19 @@ MESSAGE_RECORD_TYPES = frozenset({"message", "message_end"})
 #   2. lines cap:  "[Showing lines A-B of Z. Full output: <path>]"
 #      (reachable when total lines exceed 2000 while bytes stay <= 51200)
 #   3. partial:    "[Showing last <size> of line N (line is <size>). Full output: <path>]"
+# The footer is the harness-appended *tail*: it must sit at the end of the text,
+# followed by nothing but whitespace or the one status line an aborted or
+# timed-out bash command appends after it. A footer-shaped string quoted
+# mid-body is prose, not a delivery cap, and must not parse.
+_FOOTER_TAIL = r"(?:\s*\Z|\n\nCommand (?:aborted|timed out)[^\n]*\s*\Z)"
 TRUNCATION_FOOTER_RE = re.compile(
     r"\[Showing lines (\d+)-(\d+) of (\d+)"
     r"(?: \([\d.]+KB limit\))?"
-    r"(?:\. Full output: [^\]\n]+|\. Use offset=\d+ to continue)\]"
+    r"(?:\. Full output: [^\]\n]+|\. Use offset=\d+ to continue)\]" + _FOOTER_TAIL
 )
 PARTIAL_LINE_FOOTER_RE = re.compile(
     r"\[Showing last [\d.]+(?:B|KB|MB) of line (\d+) "
-    r"\(line is [\d.]+(?:B|KB|MB)\)\. Full output: [^\]\n]+\]"
+    r"\(line is [\d.]+(?:B|KB|MB)\)\. Full output: [^\]\n]+\]" + _FOOTER_TAIL
 )
 # Census rows are always emitted for these five, zero-filled when unused, so "all five tools"
 # is a stable shape rather than a set that silently drops tools with no calls.
@@ -245,6 +250,9 @@ def truncation_of(text: str) -> tuple[int, int] | None:
     it. Shape 3 (``[Showing last <size> of line N ...]``) delivers every line but
     cuts the last one mid-line; line accounting counts that incomplete line as
     omitted: ``produced = N``, ``delivered = N - 1``, ``omitted = 1``.
+
+    The footer must be the tail of ``text`` (see ``_FOOTER_TAIL``): a
+    footer-shaped string quoted in the body is prose, not a delivery cap.
     """
     m = TRUNCATION_FOOTER_RE.search(text)
     if m is not None:
@@ -602,7 +610,11 @@ def emit_filtered(path: Path, threshold: int, keep: int) -> Path:
                         ):
                             text_parts.append(c["text"])
                     combined = "".join(text_parts)
-                    if count_lines(combined) > threshold:
+                    # Same delivered-line rule as scan(): a capped result's footer
+                    # chrome must not push it over the threshold here alone.
+                    trunc = truncation_of(combined)
+                    delivered = count_lines(combined) if trunc is None else trunc[0] - trunc[1]
+                    if delivered > threshold:
                         truncated, _ = truncate_body(combined, keep)
                         new_content = [{"type": "text", "text": truncated}]
                         msg["content"] = new_content
