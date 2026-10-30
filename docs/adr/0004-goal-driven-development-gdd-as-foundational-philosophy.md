@@ -6,11 +6,13 @@ Date: 2026-05-25
 
 Accepted
 
-implements [3. Respect authoritative tool signals](0003-respect-authoritative-tool-signals.md)
+Relates to [3. Respect authoritative tool signals](0003-respect-authoritative-tool-signals.md)
 
-supports [5. Manifest-Driven Orchestration and Provenance Trace](0005-manifest-driven-orchestration-and-provenance-trace.md)
+Relates to [5. Manifest-Driven Orchestration and Provenance Trace](0005-manifest-driven-orchestration-and-provenance-trace.md)
 
-refined by [9. Behavioral Evals and Manifest-Indexed Handoffs](0009-behavioral-evals-and-manifest-indexed-handoffs.md)
+Amended by [9. Behavioral Evals and Manifest-Indexed Handoffs](0009-behavioral-evals-and-manifest-indexed-handoffs.md)
+
+Amended by [15. Goal Gate and Convergence Loop Architecture for Autonomous Agent Sessions](0015-goal-gate-and-convergence-loop-architecture.md)
 
 ## Context
 

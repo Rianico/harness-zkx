@@ -2,52 +2,64 @@
 
 The default template for this skill is a hybrid that keeps Nygard scannability while promoting `Considered Options` to a first-class subsection of `Decision`. It exists so correctness-critical decisions can preserve the rejection proof without paying the `Alternatives Considered` top-level tax that Nygard warns against.
 
+Installed copies (e.g. `docs/adr/templates/template.md`) are generated from the marked region of this file via `bin/sync-template`. Never hand-edit the installed copy; edit this file and re-sync.
+
 > Load once via `read_skill` when creating or reviewing ADRs: `$SKILL_DIR/references/adr-template.md`
 
 ## Canonical shape
 
-```markdown
+<!-- TEMPLATE-START -->
 # NUMBER. TITLE
 
 Date: DATE
 
 ## Status
 
-STATUS — plus adr-tools relationship lines (Supercedes / Superceded by / Amends / Clarifies) when present
+STATUS
 
+<!-- Lifecycle: Proposed | Accepted | Rejected | Deprecated | Superseded. Keep this section to the status word plus relationship lines (Supercedes, Superceded by, Amends, Amended by, Clarifies, Clarified by, Relates to) inserted by `adr new -s` / `adr link`. Rationale belongs in Context/Decision, never here. -->
 ## Context
 
-The issue motivating this decision, and any context that influences or constrains the decision.
-Constraints, forces, measurements, and why this decision is being made now.
+The issue motivating this decision, and any context that influences or constrains the decision. Constraints, forces, measurements, and why this decision is being made now. Value-neutral facts; 1-2 paragraphs.
 
 ## Decision
 
-State the chosen decision clearly in 1-3 sentences.
+State the chosen decision clearly in 1-3 sentences, active voice ("We will …").
 
 ### Considered Options
 
-When trade-offs matter, document rejected alternatives here. Use the depth the decision warrants:
+When trade-offs matter, document rejected alternatives here. Depth scales with the decision:
 
-- **Simple / transport decisions** (1–3 alternatives, e.g. payload shape, tooling): compact bullets under `## Decision` are enough:
+- **Simple / transport decisions** (1–3 alternatives, e.g. payload shape, tooling): compact bullets:
 
   - Rejected: Option A — Pros / Cons / Why not
-  - Rejected: Option B — Pros / Cons / Why not
 
-- **Correctness-critical / invariant decisions** (e.g. verification model, session keying, anchor canon): expand each option with structured rationale so a future reader will not re-propose it:
+- **Correctness-critical / invariant decisions** (e.g. verification model, session keying): expand each option with structured rationale so a future reader will not re-propose it:
 
-  - **expected_hashes (model submits hash of every removed line)** — rejected on the model–tool boundary: makes the model supply verification data and multiplies the hash-copy error surface.
-  - **Position-indexed served state** — rejected: false-rejects when an out-of-range edit shifts positions.
-  - **Hash-set served state** — rejected: false-accepts when externally-changed content duplicates another served line.
+  - **Option name** — rejected: <boundary-based reason with measurement or invariant>
+
+Rules: options sit on the same abstraction level (never technology vs product). List the chosen option first when it clarifies comparison. If no genuine alternative existed, omit this subsection — do not invent pseudo-alternatives.
+
+## Consequences
+
+What becomes easier or more difficult to do and any risks introduced by the change that will need to be mitigated. Include negative and neutral consequences, not just positive ones. Record load-bearing assumptions and confidence level — anything that would require revisiting this decision if it changed. Link out to deep analysis (`docs/articles/`, `docs/spec/`, issues) instead of pasting it here.
+<!-- TEMPLATE-END -->
+
+The marked region above is the installable template — byte-identical to what `bin/sync-template` writes. Everything below is guidance, never installed.
+
+### Depth examples
+
+Compact (transport): `- Rejected: Option A — Pros / Cons / Why not` per alternative.
+
+Expanded (invariant proof, e.g. served-state verification rejecting 6 mechanisms):
+
+- **expected_hashes (model submits hash of every removed line)** — rejected on the model–tool boundary: makes the model supply verification data and multiplies the hash-copy error surface.
+- **Position-indexed served state** — rejected: false-rejects when an out-of-range edit shifts positions.
+- **Hash-set served state** — rejected: false-accepts when externally-changed content duplicates another served line.
 
 ### Why this nesting
 
 `Considered Options` is `###` under `## Decision`, not a top-level `## Alternatives Considered`. This preserves `adr-tools` compatibility (the four Nygard headings remain top-level) while keeping the proof attached to the choice it justifies. Treat `Consequences` as the place for load-bearing assumptions (`linter-only workflow is load-bearing`, `best-effort TOCTOU`, etc.).
-
-## Consequences
-
-What becomes easier or more difficult to do and any risks introduced by the change that will need to be mitigated.
-Record trade-offs, operational impact, and assumptions that would require revisiting the decision if they change.
-```
 
 ## Nygard vs hybrid — when each fits
 
@@ -64,7 +76,7 @@ Record trade-offs, operational impact, and assumptions that would require revisi
 
 - After `adr new` generates the file, preserve `Date:` and any `Supercedes`/`Amends` lines under `## Status`. Rewrite only bodies.
 - Do not add top-level `## Alternatives Considered`, `## Positive`, `## Negative`, or `## Risks` — use `### Considered Options` inside `## Decision` and `## Consequences` for trade-offs/risks.
-- If the repo already has `templates/template.md`, respect it. This file documents the default for repos without a custom template.
+- The installed `templates/template.md` is generated from the marked region above via `bin/sync-template`. Never hand-edit it; edit this file and re-sync.
 - Keep ADRs short: one page is the target for simple decisions; correctness proofs may spill to ~2 pages rather than losing the rejection chain. Move deep analysis to `docs/articles/` or `docs/spec/` and link it.
 
 ## Examples

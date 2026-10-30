@@ -6,7 +6,7 @@ Date: 2026-05-24
 
 Accepted
 
-implemented by [4. Goal-Driven Development (GDD) as Foundational Philosophy](0004-goal-driven-development-gdd-as-foundational-philosophy.md)
+Relates to [4. Goal-Driven Development (GDD) as Foundational Philosophy](0004-goal-driven-development-gdd-as-foundational-philosophy.md)
 
 ## Context
 

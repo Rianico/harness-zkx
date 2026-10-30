@@ -4,7 +4,7 @@ Date: 2026-09-02
 
 ## Status
 
-Accepted — grilling Q1–Q7 reached shared understanding 2026-09-02. Implements LSZ `Respect Tool Feedback` + `Artifact Hygiene` + `Provenance`.
+Accepted
 
 ## Context
 
@@ -14,6 +14,7 @@ Research (3 subagents, `.lsz/tmp/research-comments-*.md`) found no high-trust so
 
 Harness `everything-claude-code` scaffolds this rule into every repo via `skills/scaffold` and enforces it via `wt.toml [pre-merge].gate` → `eslint`. `CONTEXT.md` is `LSZ` (Skill/Agent/Orchestration/Manifest/Provenance) — no comment policy ADR exists (0001–0013 silent), so the scaffold ships an undocumented `forbid all`. `pi-better-edit` is the first consumer where the ban was falsified at a load-bearing seam. The choice is patch `pi-better-edit` alone (grow globs to 17) vs decide harness-wide (ADR 0014, template+gate, shrink globs).
 
+Note: grilling Q1–Q7 reached shared understanding 2026-09-02. Implements LSZ `Respect Tool Feedback` + `Artifact Hygiene` + `Provenance`.
 ## Decision
 
 We will replace `forbid all` with a **curated, closed allowlist** — deterministic CI gate + semantic guideline split — harness-owned, shrink-only.

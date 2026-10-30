@@ -6,10 +6,7 @@ Date: 2026-05-25
 
 Accepted
 Amends [ADR-0004](0004-goal-driven-development-gdd-as-foundational-philosophy.md), [ADR-0008](0008-goal-locking-and-aggregated-manifest-hierarchy.md)
-
-refines [4. Goal-Driven Development (GDD) as Foundational Philosophy](0004-goal-driven-development-gdd-as-foundational-philosophy.md)
-
-enforces [8. Goal Locking and Aggregated Manifest Hierarchy](0008-goal-locking-and-aggregated-manifest-hierarchy.md)
+Amended by [15. Goal Gate and Convergence Loop Architecture for Autonomous Agent Sessions](0015-goal-gate-and-convergence-loop-architecture.md)
 
 ## Context
 
