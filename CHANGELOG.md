@@ -324,6 +324,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Code Refactoring
 
+* **scaffold:** retire the `adr-scaffolding` subskill — ADR path lifecycle (`adr init`, template sync, fail-loudly guard) belongs to the `adr` skill, so the Dispatch table loses the `adr` flavor row and the subskill directory is deleted; no code or template changes
+
 * **protocol:** extract subagent response format to common rule and ai-engineering spine (#153)
 * **ci:** type the changelog gate's two dynamic seams (#100)
 * **worktrunk:** adopt ASD-STE100 style and add cheatsheet (#181)
