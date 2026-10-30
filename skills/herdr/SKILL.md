@@ -1,10 +1,7 @@
 ---
 name: herdr
 description: >-
-  Herdr terminal-multiplexer reference for coding agents. Drive panes, tabs, workspaces,
-  and sibling agents. Wait on test or server output. Use when the user mentions Herdr
-  or asks to inspect pane layout or drive agents. Requires HERDR_ENV=1.
-  Do not use for background terminals or delegation.
+  Herdr terminal-multiplexer driver for panes, tabs, workspaces, and sibling agents. Waits on test or server output. Use when driving Herdr panes; needs HERDR_ENV=1. Not for background terminals or delegation.
 metadata:
   author: herdrdev
   version: '0.9.0'

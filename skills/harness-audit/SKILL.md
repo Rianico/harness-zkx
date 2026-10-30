@@ -1,7 +1,7 @@
 ---
 name: harness-audit
 description: >-
-  Audits pi sessions for oversized outputs, edit failures, and dead skills; extracts cross-cutting skill-farm patterns into rules or refactors. Use when trimming verbose results, hardening context bloat, diagnosing edit rejections, evaluating skill discovery, or distilling common patterns.
+  Session auditor for oversized outputs, edit failures, and dead skills; distills cross-cutting patterns into rules. Use when trimming verbose results or diagnosing edit rejections.
 arguments: target
 argument-hint: |-
   <session-id-or-path> -- session id (uuid) or absolute/relative path to a pi session jsonl file

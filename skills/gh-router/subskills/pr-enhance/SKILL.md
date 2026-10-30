@@ -1,7 +1,7 @@
 ---
 name: pr-enhance
 description: >-
-  PR description authoring from the git-diff-digest brief: template sections, diagrams, and checklists. Use when submitting a PR, a body is still the unfilled template, or own-PR prose has gone stale.
+  PR description generator from git diff digests: drafts template sections, diagrams, and checklists. Use when drafting PR descriptions, filling empty templates, or updating stale PR bodies.
 arguments: base_or_pr
 argument-hint: |-
   "[base|pr_url] -- base branch, PR URL (https://github.com/.../pull/123) or number (123); default: inferred from context — PR base or cwd's base, fallback main)"

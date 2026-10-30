@@ -1,7 +1,7 @@
 ---
 name: programming-expert
 description: >-
-  Polyglot programming and coding expert across Python, TS, Rust, Go, C++, etc. Guides implementation, architecture, and testing. Use when coding, programming, implementing features, writing scripts, debugging broken logic, fixing bugs, refactoring messy code, or resolving architecture issues.
+  Polyglot coding router for Python, TypeScript, Rust, Go, C++, and Bash. Guides implementation, testing, debugging, and refactoring. Use when writing code or scripts, fixing bugs, or resolving compiler and type errors.
 arguments: language
 argument-hint: |-
   python-expert -- type safety (Pydantic), async, testing, design, observability, resilience, packaging, production

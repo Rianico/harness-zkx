@@ -1,7 +1,7 @@
 ---
 name: cpp-expert
 description: >-
-  Modern C++ domain expertise for C++11/14/17/20/23, CMake/linker errors, memory safety, RAII, smart pointers, templates, const correctness, GoogleTest, Catch2, GoogleMock, performance review, and idiomatic refactoring. For C++ implementation, debugging, testing, build resolution, and code review.
+  Modern C++ guide across C++11-23: RAII, smart pointers, templates, CMake, and GoogleTest/Catch2. Use when implementing C++, debugging memory/linker errors, resolving build failures, or refactoring code.
 argument-hint: |-
   [build|review|testing]
 metadata:

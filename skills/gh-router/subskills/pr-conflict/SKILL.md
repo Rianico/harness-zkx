@@ -1,7 +1,7 @@
 ---
 name: pr-conflict
 description: >-
-  Git conflict reconciliation engine for PR landing and rebase. Extracts compact conflict hunks via Git plumbing and reconciles dual author intent. Use when a merge, rebase, cherry-pick, or stash pop stops on conflicts, or files contain conflict markers; not for clean branch merges.
+  Conflict reconciliation engine for PR landing and rebasing. Extracts conflict hunks and reconciles author intent. Use when a merge, rebase, or cherry-pick halts on conflicts; not for clean branch merges.
 argument-hint: |-
   "[--file PATH] [--all] [--json] -- extract compact conflict hunks and commit intent"
 metadata:

@@ -1,7 +1,7 @@
 ---
 name: gh-router
 description: >-
-  GitHub delivery router for PR lifecycle, branch state, and releases. Reconciles merge/rebase conflicts, creates and merges PRs, watches CI, and dispatches releases. Use when a PR needs submitting, watching, or merging, a branch has conflicts or needs orienting, CI fails, or a release needs cutting.
+  GitHub delivery router for PRs, branches, CI, and releases. Reconciles merge and rebase conflicts, then squash-merges. Use when submitting or merging PRs, fixing conflicts, watching CI, or cutting a release.
 argument-hint: |-
   gh-release [--dry-run] -- changelog and publish via dispatch
   pr-conflict [--file PATH] [--all] [--json] -- extract conflict hunks and commit intent

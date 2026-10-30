@@ -1,7 +1,7 @@
 ---
 name: docs-scraper
 description: >-
-  Docs scraper and skill compiler for LSP, PTX, CUDA, Rust, sites, skill.sh, and local book files. Fetches unfamiliar documentation, converts it into two-layer skills, and gates quality deterministically. Use when scraping docs, converting docs into a skill, or composing skills from skill.sh.
+  Docs scraper and skill compiler for LSP, PTX, CUDA, docs sites, and books. Builds two-layer skills behind deterministic quality gates. Use when scraping unfamiliar docs, fixing stale pages, or composing skills from skill.sh.
 argument-hint: |-
   [auto|lsp|ptx|runtime|driver|rust|site|skills|book] [--output-dir <path>] [--force] [--base-url <url>] [--staging <path>] [--run <slug>]
   to-skill <doc-dir|url> [--name <skill>] [--supplementary <paths-or-urls>] [--fold-into <skill-dir>] [--output-dir <path>]

@@ -1,7 +1,7 @@
 ---
 name: typescript-scaffolding
 description: >-
-  TypeScript project scaffolding with pnpm v12, .nvmrc, package.json/tsconfig, Vite v8 + oxlint/oxfmt/vitest wiring (TS v7). Use when initializing or retrofitting a TS repo (lib, CLI, or pi-extension) or selecting its toolchain.
+  TypeScript project scaffolder: configures pnpm, tsconfig, Vite, and Oxlint/Vitest tooling. Use when initializing or retrofitting a TS project or wiring its test gate.
 metadata:
   managed-by: scaffold
 ---

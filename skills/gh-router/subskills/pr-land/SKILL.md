@@ -1,7 +1,7 @@
 ---
 name: pr-land
 description: >-
-  Create PR, watch verification checks, and squash-merge via gh api. Use when opening pull requests, monitoring CI check-runs, or merging approved PRs.
+  PR automation engine: opens PRs, monitors CI checks, and squash-merges via gh API. Use when a PR is ready to land, CI fails, or checks need watching.
 argument-hint: |-
   "[--title '…'] [--body '…' | --body-file FILE] [--base main] [--head BRANCH] [--check] [--status] [--sync] [--json] [--out LEAF] [--force-scaffold] [--watch] [--verbose] [--merge] [--draft] [--no-stamp] [--squash-message '…' | --squash-message-file FILE]"
 metadata:

@@ -1,7 +1,7 @@
 ---
 name: writing-for-humans
 description: >-
-  Writing reference for human-judged GitHub issues, discussions, RFCs, and proposals — problem-first framing, evidence grounding, scannability, explicit asks. Use when drafting or reviewing an issue, RFC, or proposal, fixing vague or over-long drafts, triage fatigue, or stalled proposals.
+  Writing guide for human-judged GitHub issues, RFCs, and proposals: problem-first framing and evidence grounding. Use when drafting or reviewing issues or proposals, or fixing vague drafts.
 metadata:
   managed-by: ai-engineering-expert
 ---

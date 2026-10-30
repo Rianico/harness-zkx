@@ -1,7 +1,7 @@
 ---
 name: subagent-engineering
 description: >-
-  Subagent execution methodology — context isolation firewalls, speculative drafting, dispatch timing, fresh versus inherited context, action space scoping, and orchestration constraints. Use when designing agents, managing context bloat, or coordinating subagents.
+  Subagent execution methodology: context firewalls, speculative drafting, and action scoping. Use when designing multi-agent workflows, fixing context bloat, or diagnosing a failed subagent.
 metadata:
   managed-by: ai-engineering-expert
 ---

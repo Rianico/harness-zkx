@@ -1,7 +1,7 @@
 ---
 name: scaffold
 description: >-
-  Deterministic project scaffolding for Git, Python, Rust, TypeScript, and CI — conventional commits, semantic-release, and runtime wiring. Use when initializing or retrofitting a repo, wiring release flow, or selecting a toolchain.
+  Deterministic project scaffolding for Git, Python, Rust, TypeScript, and CI. Wires conventional commits, semantic-release, and runtime config. Use when initializing or retrofitting a repo, or selecting a toolchain.
 arguments: flavor
 argument-hint: |-
   git-scaffolding -- loads conventional commits, semantic-release, changelog, and branch hygiene

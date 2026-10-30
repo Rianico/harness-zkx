@@ -28,7 +28,8 @@ This project implements the methodology in `skills/ai-engineering-expert/SKILL.m
 
 ## Navigation & Architecture
 
-- **Skills**: Authored in `skills/<name>/SKILL.md`. Exposed via symlinks under `~/.agents/skills/<name>`.
+- **Skills**: Authored in `skills/<name>/SKILL.md`; subskills in `skills/<parent>/subskills/<name>/SKILL.md`. Exposed via symlinks under `~/.agents/skills/<name>`.
+  - Subskill descriptions enter the prompt through skill routers, so the context-load budget and Tripartite formula apply to them: `skills/ai-engineering-expert/subskills/skill-authoring/references/context-load-policy.md`.
   - Authoring & Verification: `skills/ai-engineering-expert/SKILL.md`.
   - Session Retros, Patterns & Audit: `skills/harness-audit/SKILL.md`.
 - **Rules**: Authored under `rules/`:

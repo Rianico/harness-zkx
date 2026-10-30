@@ -2,7 +2,7 @@
 argument-hint: |-
   [topic]
 description: >-
-  Git worktree lifecycle CLI for branch-addressed parallel worktrees with hooks and templates. Use when switching, listing, removing, or merging worktrees, configuring hooks, or automating per-branch dev servers.
+  Worktrunk (wt) guide for branch-addressed parallel git worktrees and hooks. Use when creating or removing worktrees, or a worktree merge conflicts.
 metadata:
   managed-by: toolchain-wiki
 name: worktrunk

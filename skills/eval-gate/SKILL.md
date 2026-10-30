@@ -1,7 +1,7 @@
 ---
 name: eval-gate
 description: >-
-  Eval-driven verification gate for deterministic pass/fail decisions. Synthesizes native test and quality runners across polyglot stacks, executing capability, contract, and regression checks. Use when defining acceptance criteria, validating implementations, or running gates; not for code reviews.
+  Eval-driven gate for deterministic pass/fail checks on polyglot stacks. Runs capability, contract, and regression evals. Use when defining acceptance criteria or validating implementations; not for code review.
 arguments: action feature source
 argument-hint: |-
   [define <feature> [source]|check <feature>|quick|report <feature>|list|clean] [topic_root=<path>]

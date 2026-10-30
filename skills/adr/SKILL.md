@@ -1,7 +1,7 @@
 ---
 name: adr
 description: >-
-  ADR lifecycle manager via `adr` CLI. Initiates, links, supersedes, and verifies architecture decision records. Use when documenting architectural decisions, evaluating technical trade-offs, or diagnosing ADR drift.
+  ADR lifecycle manager via the `adr` CLI. Creates, links, supersedes, and verifies decision records. Use when recording architectural decisions, weighing trade-offs, or diagnosing ADR drift.
 argument-hint: |-
   [init [dir]|create <title>|link <source> <forward-link> <target> <reverse-link>|supersede <old-ref...> <new-title>|list|read <ref|query>]
 ---

@@ -1,7 +1,7 @@
 ---
 name: basedpyright-expert
 description: >-
-  Domain expertise for basedpyright Python type checker: configuration, inference, and diagnostics. Use when configuring type checking, authoring stubs, or migrating from mypy.
+  Python typing guide: annotations, stubs, inference, and narrowing. Use when typing Python code or fixing Unknown or Any reports; not for repo config (typecheck).
 argument-hint: |-
   [topic]
 metadata:

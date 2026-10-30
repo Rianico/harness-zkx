@@ -1,7 +1,7 @@
 ---
 name: handoff
 description: >-
-  Aggregates mission intent and artifact pointers into a phase handoff document. Use when ending a session, switching agent phases, or preparing context displacement for a peer agent.
+  Phase handoff compiler: mission intent and artifact pointers in one document. Use when ending a session, switching phases, or migrating context to a peer agent.
 argument-hint: |-
   What will the next session be used for?
 ---

@@ -1,7 +1,7 @@
 ---
 name: adr-scaffolding
 description: >-
-  ADR path scaffolding — writes `.adr-dir` to point the `adr` CLI at `docs/adr` and keeps `.adr-dir` out of version control. Use when initializing or retrofitting an ADR repository, wiring the adr-tools location, or fixing a repo whose `.adr-dir` is missing or tracked.
+  ADR path scaffolder: configures `.adr-dir` to point `adr` CLI at `docs/adr`. Use when setting up an ADR repository, configuring adr-tools, or fixing missing or tracked `.adr-dir` paths.
 metadata:
   managed-by: scaffold
 ---

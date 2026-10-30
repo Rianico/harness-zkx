@@ -1,7 +1,7 @@
 ---
 name: rust-scaffolding
 description: >-
-  Rust project scaffolding with Cargo, rust-toolchain, and fmt/clippy/test wiring. Use when initializing or retrofitting a Rust repo or selecting its toolchain.
+  Rust project scaffolder: sets up Cargo, rust-toolchain, and fmt/clippy checks. Use when initializing or retrofitting a Rust repository, or fixing Cargo build wiring.
 metadata:
   managed-by: scaffold
 ---
