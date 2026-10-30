@@ -14,7 +14,9 @@ applied-tier ``W_*`` warnings separately, and flag diagnostic patterns (numeric
 line-number anchors, cross-file leaked anchors). Read-only.
 
 Accepts both record shapes: native ``type == "message"`` and the pi event-stream
-``message_end``.
+``message_end``. pi-subagents transcripts (``recordType`` in ``message`` /
+``tool_start`` / ``tool_end``, no ``type`` key) are scanned too, either directly or
+auto-discovered under ``<session_dir>/subagent-artifacts/*_transcript.jsonl``.
 """
 
 from __future__ import annotations
@@ -34,6 +36,9 @@ WARNING_RE = re.compile(r"\b(W_[A-Z_]+)\b")
 QUOTED_RE = re.compile(r'"([^"]+)"')
 SERVED_FOR_RE = re.compile(r"served for ([^;\s]+)")
 NUMERIC_RE = re.compile(r"^\d+$")
+
+# Mirrors audit.py: scanned records whose schema is unrecognized are not a clean result.
+EXIT_SCHEMA = 3
 
 # Source of truth: pi-better-edit src/domain-errors.ts:32-51 (``DomainErrorCode``, 19 codes).
 # A ``[E_*]`` line reports a rejection.
@@ -94,6 +99,8 @@ class EditFailure(BaseModel):
     numeric_anchors: list[str] = Field(default_factory=list)
     foreign_served_for: str | None = None
     message_preview: str = ""
+    source_file: str = ""
+    context_key: str = ""
     next_turns: list[NextTurn] = Field(default_factory=list)
 
     model_config: ClassVar[ConfigDict] = {"strict": True}
@@ -108,6 +115,8 @@ class EditWarning(BaseModel):
     code: str
     is_error: bool
     message_preview: str = ""
+    source_file: str = ""
+    context_key: str = ""
 
     model_config: ClassVar[ConfigDict] = {"strict": True}
 
@@ -129,6 +138,10 @@ class EditAuditResult(BaseModel):
     warnings: list[EditWarning] = Field(default_factory=list)
     warning_count: int = Field(default=0, ge=0)
     by_warning_code: dict[str, int] = Field(default_factory=dict)
+    transcripts: list[str] = Field(default_factory=list)
+    transcript_count: int = Field(default=0, ge=0)
+    schema_recognized: bool = True
+    skipped_files: list[str] = Field(default_factory=list)
 
     model_config: ClassVar[ConfigDict] = {"strict": True}
 
@@ -301,11 +314,242 @@ def categorize(code: str, numeric_anchors: list[str], is_leak: bool) -> str:
     return "?"
 
 
-def scan(path: Path, with_context: int = 0) -> dict[str, Any]:
-    calls: dict[str, dict[str, Any]] = {}
-    failures: list[dict[str, Any]] = []
+def _parse_args_payload(raw: Any) -> dict[str, Any]:
+    """Decode a pi-subagents ``tool_start.argsPayload`` (a JSON string) to a dict."""
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str) and raw.strip():
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+        if isinstance(parsed, dict):
+            return parsed
+    return {}
+
+
+def _ingest_transcript(
+    rec: dict[str, Any],
+    record_type: str,
+    idx: int,
+    calls: dict[tuple[str, str], dict[str, Any]],
+    results: dict[tuple[str, str], dict[str, Any]],
+) -> None:
+    """Collect one pi-subagents transcript record into ``calls`` / ``results``.
+
+    Canonical counting rule for transcripts:
+    * call args (file, anchors) come from ``tool_start.argsPayload``; the
+      assistant ``toolCall`` is a fallback when a transcript omits ``tool_start``;
+    * the result body and error flag come from the ``message`` / ``toolResult``
+      record; ``tool_end.isError`` is the fallback when no message record exists;
+    * results are keyed by ``(runId, toolCallId)`` so the ``tool_end`` +
+      ``message`` pair for a single call is counted exactly once.
+    """
+    run_id = str(rec.get("runId") or "")
+    if record_type == "tool_start" and rec.get("toolName") == "edit":
+        tc_id = str(rec.get("toolCallId") or "")
+        if not tc_id:
+            return
+        args = _parse_args_payload(rec.get("argsPayload"))
+        calls[(run_id, tc_id)] = {
+            "jsonl_line": idx,
+            "file": str(args.get("file") or ""),
+            "anchors": _call_anchors(args),
+        }
+        return
+    if record_type == "tool_end" and rec.get("toolName") == "edit":
+        tc_id = str(rec.get("toolCallId") or "")
+        if not tc_id:
+            return
+        key = (run_id, tc_id)
+        if key in results:
+            return  # the message/toolResult record is canonical
+        results[key] = {
+            "jsonl_line": idx,
+            "toolCallId": tc_id,
+            "run_id": run_id,
+            "text": "",
+            "is_error": bool(rec.get("isError")),
+            "source": "tool_end",
+        }
+        return
+    if record_type != "message":
+        return
+    nested = rec.get("message")
+    msg = nested if isinstance(nested, dict) else rec
+    role = msg.get("role") or rec.get("role")
+    tool_name = msg.get("toolName") or rec.get("toolName")
+    if role == "assistant":
+        content = msg.get("content")
+        if not isinstance(content, list):
+            return
+        for item in content:
+            if not isinstance(item, dict):
+                continue
+            if item.get("type") != "toolCall" or item.get("name") != "edit":
+                continue
+            tc_id = str(item.get("id") or "")
+            args = item.get("arguments")
+            if tc_id and isinstance(args, dict):
+                _ = calls.setdefault(
+                    (run_id, tc_id),
+                    {
+                        "jsonl_line": idx,
+                        "file": str(args.get("file") or ""),
+                        "anchors": _call_anchors(args),
+                    },
+                )
+        return
+    if role != "toolResult" or tool_name != "edit":
+        return
+    tc_id = str(msg.get("toolCallId") or rec.get("toolCallId") or "")
+    if not tc_id:
+        return
+    text = _result_text(msg)
+    if not text:
+        text = str(rec.get("text") or "")
+    is_error = bool(msg.get("isError") if "isError" in msg else rec.get("isError"))
+    results[(run_id, tc_id)] = {
+        "jsonl_line": idx,
+        "toolCallId": tc_id,
+        "run_id": run_id,
+        "text": text,
+        "is_error": is_error,
+        "source": "message",
+    }
+
+
+def _context_message(rec: dict[str, Any]) -> dict[str, Any] | None:
+    """The body-bearing message for context previews, native or transcript."""
+    msg = message_of(rec)
+    if msg is not None:
+        return msg
+    if rec.get("recordType") == "message":
+        nested = rec.get("message")
+        return nested if isinstance(nested, dict) else rec
+    return None
+
+
+def _process_edit_result(
+    idx: int,
+    tc_id: str,
+    text: str,
+    is_error: bool,
+    call: dict[str, Any] | None,
+    source_file: str,
+    context_key: str,
+    failures: list[dict[str, Any]],
+    warnings: list[dict[str, Any]],
+    by_code: dict[str, int],
+    by_file: dict[str, int],
+    by_warning_code: dict[str, int],
+    unknown_codes: set[str],
+) -> tuple[int, int, int, int]:
+    """Tally one edit result; returns (edit, success, numeric, leak) deltas."""
+    file = str(call.get("file") or "") if call else ""
+    if not file:
+        pm = re.search(r"\(([^)]+)\)", text)
+        if pm:
+            file = pm.group(1)
+    for wcode in _warning_codes(text):
+        by_warning_code[wcode] = by_warning_code.get(wcode, 0) + 1
+        warnings.append(
+            {
+                "jsonl_line": idx,
+                "toolCallId": tc_id,
+                "file": file,
+                "code": wcode,
+                "is_error": is_error,
+                "message_preview": text[:240].replace("\n", " ⏎ "),
+                "source_file": source_file,
+                "context_key": context_key,
+            }
+        )
+    if not is_error:
+        return 1, 1, 0, 0
+    code = classify(text)
+    if code not in (*KNOWN_CODES, "E_NO_CODE", "E_EMPTY_RESULT"):
+        unknown_codes.add(code)
+    by_code[code] = by_code.get(code, 0) + 1
+    if file:
+        by_file[file] = by_file.get(file, 0) + 1
+    quoted = QUOTED_RE.findall(text)
+    call_anchors = call.get("anchors", []) if call else []
+    seen: list[str] = []
+    for a in [*quoted, *call_anchors]:
+        if a not in seen:
+            seen.append(a)
+    numeric = [a for a in seen if NUMERIC_RE.match(a)]
+    numeric_failures = 1 if numeric else 0
+    served_for: str | None = None
+    served_matches = SERVED_FOR_RE.findall(text)
+    if served_matches:
+        served_for = served_matches[-1].rstrip(";,.")
+    is_leak = code == "E_FOREIGN_ANCHOR" or (served_for is not None and file and served_for != file)
+    leaks = 1 if is_leak else 0
+    failures.append(
+        {
+            "jsonl_line": idx,
+            "toolCallId": tc_id,
+            "file": file,
+            "code": code,
+            "category": categorize(code, numeric, bool(is_leak)),
+            "anchors": seen,
+            "numeric_anchors": numeric,
+            "foreign_served_for": served_for if is_leak else None,
+            "message_preview": text[:240].replace("\n", " ⏎ "),
+            "source_file": source_file,
+            "context_key": context_key,
+        }
+    )
+    return 1, 0, numeric_failures, leaks
+
+
+def discover_transcripts(session_path: Path) -> list[Path]:
+    """Transcripts pi-subagents writes beside a session file.
+
+    Returns ``<session_dir>/subagent-artifacts/*_transcript.jsonl`` when that
+    directory exists. A path already inside ``subagent-artifacts`` is treated as
+    a transcript and discovers nothing, so pointing at one file stays scoped.
+    """
+    parent = session_path.parent
+    if parent.name == "subagent-artifacts":
+        return []
+    artifacts = parent / "subagent-artifacts"
+    if not artifacts.is_dir():
+        return []
+    return sorted(artifacts.glob("*_transcript.jsonl"))
+
+
+def _lookup_call(
+    calls: dict[tuple[str, str], dict[str, Any]], run_id: str, tc_id: str
+) -> dict[str, Any] | None:
+    """Resolve a call by ``(runId, toolCallId)``.
+
+    Falls back to the run-less key (``run_id == ""``) for main-session records that
+    carry no ``runId``, then to the ``|``-split id variants Pi provider bridges emit.
+    """
+    candidates = [(run_id, tc_id)]
+    if run_id:
+        candidates.append(("", tc_id))
+    for rid, cid in candidates:
+        call = calls.get((rid, cid))
+        if call is not None:
+            return call
+        if "|" in cid:
+            prefix, suffix = cid.split("|", 1)
+            call = calls.get((rid, prefix)) or calls.get((rid, suffix))
+            if call is not None:
+                return call
+    return None
+
+
+def _scan_one(path: Path, with_context: int = 0) -> dict[str, Any]:
+    calls: dict[tuple[str, str], dict[str, Any]] = {}
+    results: dict[tuple[str, str], dict[str, Any]] = {}
     parse_errors = 0
     record_count = 0
+    schema_recognized = False
     edit_count = 0
     success_count = 0
     by_code: dict[str, int] = {}
@@ -315,7 +559,8 @@ def scan(path: Path, with_context: int = 0) -> dict[str, Any]:
     unknown_codes: set[str] = set()
     warnings: list[dict[str, Any]] = []
     by_warning_code: dict[str, int] = {}
-    full_by_line: dict[int, list[dict[str, Any]]] = {}
+    failures: list[dict[str, Any]] = []
+    full_by_line: dict[str | int, list[dict[str, Any]]] = {}
     fp = path.open("r", encoding="utf-8", errors="replace")
     with fp:
         for idx, raw in enumerate(fp, start=1):
@@ -330,6 +575,14 @@ def scan(path: Path, with_context: int = 0) -> dict[str, Any]:
                 continue
             if not isinstance(rec, dict):
                 continue
+            record_type = rec.get("recordType")
+            if isinstance(record_type, str):
+                if record_type in ("message", "tool_start", "tool_end"):
+                    schema_recognized = True
+                _ingest_transcript(rec, record_type, idx, calls, results)
+                continue
+            if rec.get("type") in ("session", "message", "message_end"):
+                schema_recognized = True
             msg = message_of(rec)
             if msg is None:
                 continue
@@ -347,79 +600,46 @@ def scan(path: Path, with_context: int = 0) -> dict[str, Any]:
                         if not isinstance(args, dict):
                             args = {}
                         if tc_id:
-                            calls[tc_id] = {
+                            calls[("", tc_id)] = {
                                 "jsonl_line": idx,
                                 "file": str(args.get("file") or ""),
                                 "anchors": _call_anchors(args),
                             }
             elif role == "toolResult" and msg.get("toolName") == "edit":
                 tc_id = str(msg.get("toolCallId") or "")
-                text = _result_text(msg)
-                is_error = bool(msg.get("isError"))
-                edit_count += 1
-                call = calls.get(tc_id)
-                if call is None and "|" in tc_id:
-                    prefix, suffix = tc_id.split("|", 1)
-                    call = calls.get(prefix) or calls.get(suffix)
-                file = ""
-                if call:
-                    file = call.get("file") or ""
-                if not file:
-                    pm = re.search(r"\(([^)]+)\)", text)
-                    if pm:
-                        file = pm.group(1)
-                for wcode in _warning_codes(text):
-                    by_warning_code[wcode] = by_warning_code.get(wcode, 0) + 1
-                    warnings.append(
-                        {
-                            "jsonl_line": idx,
-                            "toolCallId": tc_id,
-                            "file": file,
-                            "code": wcode,
-                            "is_error": is_error,
-                            "message_preview": text[:240].replace("\n", " ⏎ "),
-                        }
-                    )
-                if not is_error:
-                    success_count += 1
-                    continue
-                code = classify(text)
-                if code not in (*KNOWN_CODES, "E_NO_CODE", "E_EMPTY_RESULT"):
-                    unknown_codes.add(code)
-                by_code[code] = by_code.get(code, 0) + 1
-                if file:
-                    by_file[file] = by_file.get(file, 0) + 1
-                quoted = QUOTED_RE.findall(text)
-                call_anchors = call.get("anchors", []) if call else []
-                seen: list[str] = []
-                for a in [*quoted, *call_anchors]:
-                    if a not in seen:
-                        seen.append(a)
-                numeric = [a for a in seen if NUMERIC_RE.match(a)]
-                if numeric:
-                    numeric_anchor_failures += 1
-                served_for: str | None = None
-                served_matches = SERVED_FOR_RE.findall(text)
-                if served_matches:
-                    served_for = served_matches[-1].rstrip(";,.")
-                is_leak = code == "E_FOREIGN_ANCHOR" or (
-                    served_for is not None and file and served_for != file
-                )
-                if is_leak:
-                    foreign_leak_failures += 1
-                failures.append(
-                    {
-                        "jsonl_line": idx,
-                        "toolCallId": tc_id,
-                        "file": file,
-                        "code": code,
-                        "category": categorize(code, numeric, bool(is_leak)),
-                        "anchors": seen,
-                        "numeric_anchors": numeric,
-                        "foreign_served_for": served_for if is_leak else None,
-                        "message_preview": text[:240].replace("\n", " ⏎ "),
-                    }
-                )
+                results[("", tc_id)] = {
+                    "jsonl_line": idx,
+                    "toolCallId": tc_id,
+                    "run_id": "",
+                    "text": _result_text(msg),
+                    "is_error": bool(msg.get("isError")),
+                    "source": "message",
+                }
+    for res in sorted(results.values(), key=lambda r: int(r["jsonl_line"])):
+        tc_id = str(res["toolCallId"])
+        run_id = str(res.get("run_id") or "")
+        call = _lookup_call(calls, run_id, tc_id)
+        line = int(res["jsonl_line"])
+        context_key = f"{path.name}:{line}"
+        edit_delta, success_delta, numeric_delta, leak_delta = _process_edit_result(
+            int(res["jsonl_line"]),
+            tc_id,
+            str(res["text"]),
+            bool(res["is_error"]),
+            call,
+            path.name,
+            context_key,
+            failures,
+            warnings,
+            by_code,
+            by_file,
+            by_warning_code,
+            unknown_codes,
+        )
+        edit_count += edit_delta
+        success_count += success_delta
+        numeric_anchor_failures += numeric_delta
+        foreign_leak_failures += leak_delta
     if with_context > 0 and failures:
         line_to_preview: dict[int, dict[str, Any]] = {}
         ordered_lines: list[int] = []
@@ -435,11 +655,13 @@ def scan(path: Path, with_context: int = 0) -> dict[str, Any]:
                         continue
                     if not isinstance(rec2, dict):
                         continue
-                    msg2 = message_of(rec2)
+                    msg2 = _context_message(rec2)
                     if msg2 is None:
                         continue
                     preview = _preview_for_msg(msg2)
-                    role2 = str(msg2.get("role") or rec2.get("type") or "?")
+                    role2 = str(
+                        msg2.get("role") or rec2.get("recordType") or rec2.get("type") or "?"
+                    )
                     t2 = str(msg2.get("toolName") or msg2.get("type") or role2)
                     line_to_preview[idx2] = {
                         "jsonl_line": idx2,
@@ -470,11 +692,15 @@ def scan(path: Path, with_context: int = 0) -> dict[str, Any]:
                         }
                     )
             f["next_turns"] = ctx
-            full_by_line[f["jsonl_line"]] = [
+            ctx_full = [
                 line_to_preview[ln]["full"]
                 for ln in [c["jsonl_line"] for c in ctx]
                 if ln in line_to_preview
             ]
+            # Canonical key is the ``file:line`` context_key; the int jsonl_line alias
+            # keeps int-keyed consumers working and makes single/merged shapes uniform.
+            full_by_line[f["context_key"]] = ctx_full
+            full_by_line[f["jsonl_line"]] = ctx_full
     typed_failures: list[EditFailure] = []
     for f in failures:
         if "next_turns" not in f:
@@ -514,6 +740,10 @@ def scan(path: Path, with_context: int = 0) -> dict[str, Any]:
         "warning_count": len(typed_warnings),
         "by_warning_code": by_warning_code,
         "full_context_by_line": full_by_line,
+        "transcripts": [],
+        "transcript_count": 0,
+        "schema_recognized": schema_recognized,
+        "skipped_files": [],
     }
     try:
         _ = EditAuditResult.model_validate(audit_raw)
@@ -521,6 +751,98 @@ def scan(path: Path, with_context: int = 0) -> dict[str, Any]:
         eprint(f"audit result validation failed: {ve}")
         raise
     return audit_raw
+
+
+def _merge_audits(
+    main_path: Path, transcript_paths: list[Path], audits: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Merge the main-session audit with one audit per discovered transcript."""
+    merged: dict[str, Any] = {
+        "session_path": str(main_path),
+        "session_file": main_path.name,
+        "record_count": 0,
+        "parse_errors": 0,
+        "edit_count": 0,
+        "success_count": 0,
+        "failure_count": 0,
+        "failure_rate": 0.0,
+        "by_code": {},
+        "by_file": {},
+        "numeric_anchor_failures": 0,
+        "foreign_leak_failures": 0,
+        "failures": [],
+        "warnings": [],
+        "warning_count": 0,
+        "by_warning_code": {},
+        "full_context_by_line": {},
+        "transcripts": [str(p) for p in transcript_paths],
+        "transcript_count": len(transcript_paths),
+        "schema_recognized": True,
+        "skipped_files": [],
+    }
+    skipped: list[str] = []
+    recognized_nonempty = False
+    for audit in audits:
+        source_file = str(audit["session_file"])
+        if audit["record_count"] > 0 and not audit["schema_recognized"]:
+            skipped.append(source_file)
+            eprint(
+                f"warning: skipping {source_file}: unrecognized schema "
+                "(expected pi session 'type'/'message' records or pi-subagents "
+                "'recordType'/'tool_start'/'tool_end' transcripts)"
+            )
+            continue
+        if audit["record_count"] > 0:
+            recognized_nonempty = True
+        merged["record_count"] += audit["record_count"]
+        merged["parse_errors"] += audit["parse_errors"]
+        merged["edit_count"] += audit["edit_count"]
+        merged["success_count"] += audit["success_count"]
+        merged["failure_count"] += audit["failure_count"]
+        merged["numeric_anchor_failures"] += audit["numeric_anchor_failures"]
+        merged["foreign_leak_failures"] += audit["foreign_leak_failures"]
+        for key in ("by_code", "by_file", "by_warning_code"):
+            for code, n in audit[key].items():
+                merged[key][code] = merged[key].get(code, 0) + n
+        for f in audit["failures"]:
+            merged["failures"].append(dict(f))
+        for w in audit["warnings"]:
+            merged["warnings"].append(dict(w))
+        for ctx_key, ctx in audit["full_context_by_line"].items():
+            merged["full_context_by_line"][ctx_key] = ctx
+    merged["failure_rate"] = (
+        merged["failure_count"] / merged["edit_count"] if merged["edit_count"] else 0.0
+    )
+    merged["warning_count"] = len(merged["warnings"])
+    # Exit non-zero iff NO scanned file yielded recognized records; a single bad file
+    # among good ones is skipped (named on stderr) and does not poison valid signal.
+    merged["schema_recognized"] = recognized_nonempty
+    merged["skipped_files"] = skipped
+    try:
+        _ = EditAuditResult.model_validate(merged)
+    except ValidationError as ve:
+        eprint(f"audit result validation failed: {ve}")
+        raise
+    return merged
+
+
+def scan(path: Path, with_context: int = 0, transcripts: bool = True) -> dict[str, Any]:
+    """Audit one session file, auto-including pi-subagents transcripts beside it.
+
+    When ``transcripts`` is set (default) and ``<session_dir>/subagent-artifacts/``
+    holds ``*_transcript.jsonl`` files, their edit traffic is merged into the
+    result. Additive ``--json`` keys: ``transcripts`` / ``transcript_count`` (the
+    discovered paths) and ``skipped_files`` (unrecognized files, excluded from
+    counts and named on stderr); each failure/warning carries ``source_file`` and a
+    ``<source_file>:<line>`` ``context_key``. Pass ``transcripts=False`` to audit only
+    the given file.
+    """
+    extra = discover_transcripts(path) if transcripts else []
+    if not extra:
+        return _scan_one(path, with_context=with_context)
+    audits = [_scan_one(path, with_context=with_context)]
+    audits.extend(_scan_one(t, with_context=with_context) for t in extra)
+    return _merge_audits(path, extra, audits)
 
 
 def format_text(audit: dict[str, Any]) -> str:
@@ -533,7 +855,11 @@ def format_text(audit: dict[str, Any]) -> str:
     )
     if audit["parse_errors"]:
         lines.append(f"parse errors (skipped lines): {audit['parse_errors']}")
-    lines.append("")
+    if audit.get("transcripts"):
+        lines.append(f"transcripts scanned: {audit['transcript_count']}")
+        for t in audit["transcripts"]:
+            lines.append(f"  {t}")
+        lines.append("")
     if audit["edit_count"] == 0:
         lines.append("No edit toolResults found.")
         lines.append("")
@@ -592,7 +918,10 @@ def format_text(audit: dict[str, Any]) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser(
         prog="audit_edits.py",
-        description="Scan pi session JSONL for edit tool failures.",
+        description=(
+            "Scan pi session JSONL for edit tool failures, including pi-subagents "
+            "transcripts found in subagent-artifacts/ beside the session."
+        ),
     )
     _ = ap.add_argument("target", help="session id (uuid) or path to *.jsonl")
     _ = ap.add_argument(
@@ -609,6 +938,15 @@ def main() -> None:
         type=str,
         default=None,
         help="write per-failure context JSON to dir (implies --with-context 3 when unset)",
+    )
+    _ = ap.add_argument(
+        "--no-transcripts",
+        action="store_true",
+        dest="no_transcripts",
+        help=(
+            "do not auto-scan <session_dir>/subagent-artifacts/*_transcript.jsonl; "
+            "audit only the resolved session file"
+        ),
     )
     args = ap.parse_args()
     if args.with_context < 0 and args.dump_context is None:
@@ -629,10 +967,21 @@ def main() -> None:
         eprint(f"error: resolved path is not a file: {resolved}")
         sys.exit(2)
     try:
-        audit = scan(resolved, with_context=args.with_context)
+        audit = scan(resolved, with_context=args.with_context, transcripts=not args.no_transcripts)
     except OSError as exc:
         eprint(f"error: cannot read {resolved}: {exc}")
         sys.exit(2)
+    schema_recognized = bool(audit.pop("schema_recognized", True))
+    skipped_files = list(audit.get("skipped_files") or [])
+    if (audit["record_count"] > 0 or skipped_files) and not schema_recognized:
+        detail = f" Skipped: {', '.join(skipped_files)}." if skipped_files else ""
+        eprint(
+            "WARNING: scanned input but the schema was not recognized (expected pi session "
+            "'type'/'message' records or pi-subagents 'recordType'/'tool_start'/'tool_end' "
+            "transcripts). Exit 3 means 'scanned, nothing recognized'; it is NOT a clean "
+            f"result.{detail}"
+        )
+        sys.exit(EXIT_SCHEMA)
     full_by_line = audit.pop("full_context_by_line", {})
     will_dump = args.dump_context is not None
     if will_dump:
@@ -640,8 +989,11 @@ def main() -> None:
         dump_dir = Path(args.dump_context).expanduser()
         dump_dir.mkdir(parents=True, exist_ok=True)
         for f in audit["failures"]:
-            full_ctx = full_by_line.get(f["jsonl_line"], [])
-            out = dump_dir / f"edit-failure-{f['jsonl_line']}.json"
+            key = f.get("context_key") or f["jsonl_line"]
+            full_ctx = full_by_line.get(key, [])
+            stem = str(f.get("context_key") or f["jsonl_line"])
+            safe_stem = re.sub(r"[^A-Za-z0-9._-]+", "_", stem)
+            out = dump_dir / f"edit-failure-{safe_stem}.json"
             payload = {
                 "failure": f,
                 "next_turns_full": full_ctx,
