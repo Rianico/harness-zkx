@@ -537,3 +537,521 @@ def test_scan_accepts_event_stream(tmp_path: Path) -> None:
     assert res["edit_count"] == 1
     assert res["failure_count"] == 1
     assert res["failures"][0]["code"] == "E_UNKNOWN_ANCHOR"
+
+
+# --- pi-subagents transcripts (recordType schema) ---
+def transcript_tool_start(
+    call_id: str,
+    file: str,
+    edits: list[dict[str, Any]],
+    run_id: str = "run-1",
+    tool_name: str = "edit",
+) -> dict[str, Any]:
+    return {
+        "version": 1,
+        "recordType": "tool_start",
+        "source": "async",
+        "runId": run_id,
+        "agent": "worker",
+        "childIndex": 0,
+        "cwd": "/tmp",
+        "sourceEventType": "tool_execution_start",
+        "toolCallId": call_id,
+        "toolName": tool_name,
+        "argsPayload": json.dumps({"file": file, "edits": edits}),
+        "argsPreview": f"file={file}",
+    }
+
+
+def transcript_tool_end(
+    call_id: str, is_error: bool, run_id: str = "run-1", tool_name: str = "edit"
+) -> dict[str, Any]:
+    return {
+        "version": 1,
+        "recordType": "tool_end",
+        "source": "async",
+        "runId": run_id,
+        "agent": "worker",
+        "childIndex": 0,
+        "cwd": "/tmp",
+        "sourceEventType": "tool_execution_end",
+        "toolCallId": call_id,
+        "toolName": tool_name,
+        "isError": is_error,
+    }
+
+
+def transcript_result(
+    call_id: str,
+    text: str,
+    is_error: bool,
+    run_id: str = "run-1",
+    tool_name: str = "edit",
+) -> dict[str, Any]:
+    return {
+        "version": 1,
+        "recordType": "message",
+        "source": "async",
+        "runId": run_id,
+        "agent": "worker",
+        "childIndex": 0,
+        "cwd": "/tmp",
+        "sourceEventType": "message_end",
+        "role": "toolResult",
+        "toolCallId": call_id,
+        "toolName": tool_name,
+        "isError": is_error,
+        "text": text,
+        "message": {
+            "role": "toolResult",
+            "toolCallId": call_id,
+            "toolName": tool_name,
+            "isError": is_error,
+            "content": [{"type": "text", "text": text}],
+        },
+    }
+
+
+def test_scan_transcript_counts_and_failures(tmp_path: Path) -> None:
+    p = tmp_path / "worker_transcript.jsonl"
+    write_jsonl(
+        p,
+        [
+            transcript_tool_start(
+                "call_1", "/tmp/a.ts", [{"anchor_from": "aBc", "anchor_to": "aBc"}]
+            ),
+            transcript_tool_end("call_1", False),
+            transcript_result("call_1", "Edited /tmp/a.ts", False),
+            transcript_tool_start(
+                "call_2", "/tmp/a.ts", [{"anchor_from": "833", "anchor_to": "833"}]
+            ),
+            transcript_tool_end("call_2", True),
+            transcript_result(
+                "call_2",
+                '[MODEL] [E_UNKNOWN_ANCHOR] has not served the anchor "833"',
+                True,
+            ),
+        ],
+    )
+    res = audit_edits.scan(p)
+    assert res["edit_count"] == 2
+    assert res["success_count"] == 1
+    assert res["failure_count"] == 1
+    assert res["failure_rate"] == 0.5
+    assert res["by_code"] == {"E_UNKNOWN_ANCHOR": 1}
+    assert res["failures"][0]["file"] == "/tmp/a.ts"
+    assert res["failures"][0]["category"] == "N"
+
+
+def test_scan_transcript_dedupes_tool_end_and_message(tmp_path: Path) -> None:
+    p = tmp_path / "dedup_transcript.jsonl"
+    write_jsonl(
+        p,
+        [
+            transcript_tool_start(
+                "call_1", "/tmp/a.ts", [{"anchor_from": "aBc", "anchor_to": "aBc"}]
+            ),
+            transcript_tool_end("call_1", True),
+            transcript_result("call_1", "[MODEL] [E_UNKNOWN_ANCHOR] nope", True),
+        ],
+    )
+    res = audit_edits.scan(p)
+    assert res["edit_count"] == 1  # not 2: tool_end + message share a toolCallId
+    assert res["failure_count"] == 1
+
+
+def test_scan_transcript_tool_end_fallback(tmp_path: Path) -> None:
+    p = tmp_path / "fallback_transcript.jsonl"
+    write_jsonl(
+        p,
+        [
+            transcript_tool_start(
+                "call_1", "/tmp/a.ts", [{"anchor_from": "aBc", "anchor_to": "aBc"}]
+            ),
+            transcript_tool_end("call_1", True),
+        ],
+    )
+    res = audit_edits.scan(p)
+    assert res["edit_count"] == 1
+    assert res["failure_count"] == 1
+    assert res["failures"][0]["file"] == "/tmp/a.ts"
+
+
+def test_scan_transcript_ignores_markers_in_read_and_bash(tmp_path: Path) -> None:
+    p = tmp_path / "read_bash_transcript.jsonl"
+    write_jsonl(
+        p,
+        [
+            transcript_tool_start("call_r", "/tmp/a.ts", [], tool_name="read"),
+            transcript_result(
+                "call_r", "bundled JS contains [E_FOO] and [W_BAR]", False, tool_name="read"
+            ),
+            transcript_tool_start("call_b", "", [], tool_name="bash"),
+            transcript_result("call_b", "[E_BAZ] [W_QUX]", False, tool_name="bash"),
+        ],
+    )
+    res = audit_edits.scan(p)
+    assert res["edit_count"] == 0
+    assert res["failure_count"] == 0
+    assert res["warning_count"] == 0
+    assert res["by_code"] == {}
+
+
+def test_scan_transcript_numeric_anchor_malformed(tmp_path: Path) -> None:
+    p = tmp_path / "malformed_transcript.jsonl"
+    text = (
+        '[MODEL] edit[1] (/tmp/a.ts) failed: [E_MALFORMED_ANCHOR] The anchor "155" '
+        'is not valid: Use the hash alone (e.g. "aB3x") — no line numbers.'
+    )
+    write_jsonl(
+        p,
+        [
+            transcript_tool_start(
+                "call_1",
+                "/tmp/a.ts",
+                [{"anchor_from": "155", "anchor_to": "156"}],
+            ),
+            transcript_tool_end("call_1", True),
+            transcript_result("call_1", text, True),
+        ],
+    )
+    res = audit_edits.scan(p)
+    assert res["numeric_anchor_failures"] >= 1
+    assert res["failures"][0]["code"] == "E_MALFORMED_ANCHOR"
+    assert res["failures"][0]["category"] == "N"
+    assert "155" in res["failures"][0]["numeric_anchors"]
+
+
+def test_scan_transcript_evidence_failure_codes(tmp_path: Path) -> None:
+    p = tmp_path / "evidence_transcript.jsonl"
+    cases = [
+        (
+            "call_f",
+            "/b/types.ts",
+            [{"anchor_from": "AUj", "anchor_to": "AUj"}],
+            '[MODEL] edit[0] (/b/types.ts) failed: [E_FOREIGN_ANCHOR] the anchor "AUj" '
+            "is inconsistent with /b/types.ts; served for /b/session.ts; nothing was written.",
+        ),
+        (
+            "call_r",
+            "/tmp/missing.ts",
+            [{"anchor_from": "VowA", "anchor_to": "KTMv"}],
+            "[MODEL] [E_NOT_FOUND] File not found: /tmp/missing.ts.",
+        ),
+        (
+            "call_p",
+            "/tmp/a.ts",
+            [{"anchor_from": "nTEL", "anchor_to": "I52c"}],
+            "[MODEL] [E_BAD_PAYLOAD] The edit payload is not valid: edit[0] has "
+            'unsupported field(s) "text_unchanged_check".',
+        ),
+        (
+            "call_m",
+            "/tmp/a.ts",
+            [{"anchor_from": "155", "anchor_to": "156"}],
+            '[MODEL] edit[1] (/tmp/a.ts) failed: [E_MALFORMED_ANCHOR] The anchor "155" '
+            "is not valid.",
+        ),
+    ]
+    records: list[dict[str, Any]] = []
+    for call_id, file, edits, text in cases:
+        records += [
+            transcript_tool_start(call_id, file, edits),
+            transcript_tool_end(call_id, True),
+            transcript_result(call_id, text, True),
+        ]
+    write_jsonl(p, records)
+    res = audit_edits.scan(p)
+    assert set(res["by_code"]) == {
+        "E_FOREIGN_ANCHOR",
+        "E_NOT_FOUND",
+        "E_BAD_PAYLOAD",
+        "E_MALFORMED_ANCHOR",
+    }
+    cats = {f["code"]: f["category"] for f in res["failures"]}
+    assert cats["E_FOREIGN_ANCHOR"] == "F"
+    assert cats["E_NOT_FOUND"] == "R"
+    assert cats["E_BAD_PAYLOAD"] == "P"
+    # Intrinsic category for the code is M; a numeric anchor overrides to N.
+    assert audit_edits.categorize("E_MALFORMED_ANCHOR", [], False) == "M"
+    assert cats["E_MALFORMED_ANCHOR"] == "N"
+
+
+def test_scan_auto_discovers_transcripts(tmp_path: Path) -> None:
+    session = tmp_path / "sess.jsonl"
+    write_jsonl(session, [session_header()])
+    artifacts = tmp_path / "subagent-artifacts"
+    artifacts.mkdir()
+    transcript = artifacts / "abc_worker_transcript.jsonl"
+    write_jsonl(
+        transcript,
+        [
+            transcript_tool_start(
+                "call_1", "/tmp/a.ts", [{"anchor_from": "aBc", "anchor_to": "aBc"}]
+            ),
+            transcript_tool_end("call_1", False),
+            transcript_result("call_1", "Edited /tmp/a.ts", False),
+        ],
+    )
+    res = audit_edits.scan(session)
+    assert res["edit_count"] == 1
+    assert res["transcript_count"] == 1
+    assert res["transcripts"] == [str(transcript)]
+    assert res["schema_recognized"] is True
+
+
+def test_scan_transcripts_can_be_disabled(tmp_path: Path) -> None:
+    session = tmp_path / "sess.jsonl"
+    write_jsonl(session, [session_header()])
+    artifacts = tmp_path / "subagent-artifacts"
+    artifacts.mkdir()
+    write_jsonl(
+        artifacts / "abc_worker_transcript.jsonl",
+        [
+            transcript_tool_start(
+                "call_1", "/tmp/a.ts", [{"anchor_from": "aBc", "anchor_to": "aBc"}]
+            ),
+            transcript_tool_end("call_1", False),
+            transcript_result("call_1", "Edited /tmp/a.ts", False),
+        ],
+    )
+    res = audit_edits.scan(session, transcripts=False)
+    assert res["edit_count"] == 0
+    assert res["transcript_count"] == 0
+
+
+def test_scan_transcript_assistant_toolcall_fallback(tmp_path: Path) -> None:
+    p = tmp_path / "assistant_transcript.jsonl"
+    write_jsonl(
+        p,
+        [
+            {
+                "version": 1,
+                "recordType": "message",
+                "sourceEventType": "message_end",
+                "runId": "run-1",
+                "role": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "toolCall",
+                            "id": "call_1",
+                            "name": "edit",
+                            "arguments": {
+                                "file": "/tmp/from-assistant.ts",
+                                "edits": [{"anchor_from": "zzz", "anchor_to": "zzz"}],
+                            },
+                        }
+                    ],
+                },
+            },
+            transcript_result("call_1", '[MODEL] [E_UNKNOWN_ANCHOR] anchor "zzz" not served', True),
+        ],
+    )
+    res = audit_edits.scan(p)
+    assert res["edit_count"] == 1
+    assert res["failures"][0]["file"] == "/tmp/from-assistant.ts"
+
+
+def test_cli_transcript_json(tmp_path: Path) -> None:
+    p = tmp_path / "worker_transcript.jsonl"
+    write_jsonl(
+        p,
+        [
+            transcript_tool_start(
+                "call_1", "/tmp/a.ts", [{"anchor_from": "aBc", "anchor_to": "aBc"}]
+            ),
+            transcript_tool_end("call_1", False),
+            transcript_result("call_1", "Edited /tmp/a.ts", False),
+        ],
+    )
+    res = subprocess.run(
+        [sys.executable, str(_SCRIPT), str(p), "--json"],
+        capture_output=True,
+        text=True,
+    )
+    assert res.returncode == 0
+    data = json.loads(res.stdout)
+    assert data["edit_count"] == 1
+    assert data["failure_count"] == 0
+
+
+def test_cli_unrecognized_schema_exits_3(tmp_path: Path) -> None:
+    p = tmp_path / "mystery.jsonl"
+    write_jsonl(p, [{"foo": "bar"}, {"baz": 1}])
+    res = subprocess.run(
+        [sys.executable, str(_SCRIPT), str(p)],
+        capture_output=True,
+        text=True,
+    )
+    assert res.returncode == 3
+    assert "schema" in res.stderr.lower()
+
+
+def test_cli_help_mentions_transcripts() -> None:
+    res = subprocess.run(
+        [sys.executable, str(_SCRIPT), "--help"],
+        capture_output=True,
+        text=True,
+    )
+    assert res.returncode == 0
+    assert "transcript" in res.stdout.lower()
+
+
+# --- T3: merge semantics, provenance uniformity, call attribution ---
+def test_scan_merged_skips_unrecognized_file(tmp_path: Path, capsys: Any) -> None:
+    session = tmp_path / "sess.jsonl"
+    write_jsonl(
+        session,
+        [
+            session_header(),
+            edit_call(
+                "a1", None, "call_1", "/tmp/a.ts", [{"anchor_from": "aBc", "anchor_to": "aBc"}]
+            ),
+            ok_result("r1", "a1", "call_1"),
+        ],
+    )
+    artifacts = tmp_path / "subagent-artifacts"
+    artifacts.mkdir()
+    bad = artifacts / "bad_worker_transcript.jsonl"
+    write_jsonl(bad, [{"foo": "bar"}, {"baz": 1}])
+    res = audit_edits.scan(session)
+    assert res["edit_count"] == 1  # counts come from the recognized main file only
+    assert res["failure_count"] == 0
+    assert res["schema_recognized"] is True
+    assert res["skipped_files"] == [bad.name]
+    err = capsys.readouterr().err
+    assert "bad_worker_transcript.jsonl" in err
+    assert "unrecognized schema" in err
+
+
+def test_scan_merged_all_unrecognized_schema(tmp_path: Path, capsys: Any) -> None:
+    session = tmp_path / "mystery.jsonl"
+    write_jsonl(session, [{"foo": "bar"}])
+    artifacts = tmp_path / "subagent-artifacts"
+    artifacts.mkdir()
+    bad = artifacts / "bad_worker_transcript.jsonl"
+    write_jsonl(bad, [{"baz": 1}])
+    res = audit_edits.scan(session)
+    assert res["schema_recognized"] is False
+    assert res["record_count"] == 0  # skipped files are excluded from counts
+    assert res["skipped_files"] == [session.name, bad.name]
+    err = capsys.readouterr().err
+    assert "mystery.jsonl" in err
+    assert "bad_worker_transcript.jsonl" in err
+
+
+def test_cli_merged_good_and_bad_transcript_exits_0(tmp_path: Path) -> None:
+    session = tmp_path / "sess.jsonl"
+    write_jsonl(
+        session,
+        [
+            session_header(),
+            edit_call(
+                "a1", None, "call_1", "/tmp/a.ts", [{"anchor_from": "aBc", "anchor_to": "aBc"}]
+            ),
+            ok_result("r1", "a1", "call_1"),
+        ],
+    )
+    artifacts = tmp_path / "subagent-artifacts"
+    artifacts.mkdir()
+    write_jsonl(artifacts / "bad_worker_transcript.jsonl", [{"foo": "bar"}])
+    res = subprocess.run(
+        [sys.executable, str(_SCRIPT), str(session), "--json"],
+        capture_output=True,
+        text=True,
+    )
+    assert res.returncode == 0
+    data = json.loads(res.stdout)
+    assert data["edit_count"] == 1
+    assert "bad_worker_transcript.jsonl" in res.stderr
+
+
+def test_cli_merged_all_unrecognized_exits_3(tmp_path: Path) -> None:
+    session = tmp_path / "mystery.jsonl"
+    write_jsonl(session, [{"foo": "bar"}])
+    artifacts = tmp_path / "subagent-artifacts"
+    artifacts.mkdir()
+    write_jsonl(artifacts / "bad_worker_transcript.jsonl", [{"baz": 1}])
+    res = subprocess.run(
+        [sys.executable, str(_SCRIPT), str(session)],
+        capture_output=True,
+        text=True,
+    )
+    assert res.returncode == 3
+    assert "schema" in res.stderr.lower()
+
+
+def test_scan_provenance_uniform_single_vs_merged(tmp_path: Path) -> None:
+    session = tmp_path / "sess.jsonl"
+    write_jsonl(session, [session_header()])
+    artifacts = tmp_path / "subagent-artifacts"
+    artifacts.mkdir()
+    transcript = artifacts / "abc_worker_transcript.jsonl"
+    write_jsonl(
+        transcript,
+        [
+            transcript_tool_start(
+                "call_1", "/tmp/a.ts", [{"anchor_from": "zzz", "anchor_to": "zzz"}]
+            ),
+            transcript_tool_end("call_1", True),
+            transcript_result("call_1", '[MODEL] [E_UNKNOWN_ANCHOR] anchor "zzz" not served', True),
+            {
+                "recordType": "message",
+                "runId": "run-1",
+                "sourceEventType": "message_end",
+                "role": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "retry after read"}],
+                },
+            },
+        ],
+    )
+    single = audit_edits.scan(transcript, with_context=1)
+    merged = audit_edits.scan(session, with_context=1)
+    assert single["failures"][0]["source_file"] == transcript.name
+    assert merged["failures"][0]["source_file"] == transcript.name
+    assert isinstance(single["failures"][0]["context_key"], str)
+    assert single["failures"][0]["context_key"] == merged["failures"][0]["context_key"]
+    single_types = {type(k) for k in single["full_context_by_line"]}
+    merged_types = {type(k) for k in merged["full_context_by_line"]}
+    assert single_types == merged_types
+    assert len(single["failures"][0]["next_turns"]) == 1
+
+
+def test_scan_runid_collision_attributes_own_call(tmp_path: Path) -> None:
+    p = tmp_path / "collision_transcript.jsonl"
+    write_jsonl(
+        p,
+        [
+            transcript_tool_start(
+                "call_dup",
+                "/tmp/run1.ts",
+                [{"anchor_from": "aaaa", "anchor_to": "aaaa"}],
+                run_id="run-1",
+            ),
+            transcript_tool_start(
+                "call_dup",
+                "/tmp/run2.ts",
+                [{"anchor_from": "bbbb", "anchor_to": "bbbb"}],
+                run_id="run-2",
+            ),
+            transcript_tool_end("call_dup", True, run_id="run-1"),
+            transcript_result(
+                "call_dup", '[MODEL] [E_UNKNOWN_ANCHOR] anchor "aaaa"', True, run_id="run-1"
+            ),
+            transcript_tool_end("call_dup", True, run_id="run-2"),
+            transcript_result(
+                "call_dup", '[MODEL] [E_UNKNOWN_ANCHOR] anchor "bbbb"', True, run_id="run-2"
+            ),
+        ],
+    )
+    res = audit_edits.scan(p)
+    assert res["edit_count"] == 2
+    assert res["failure_count"] == 2
+    assert res["failures"][0]["file"] == "/tmp/run1.ts"
+    assert res["failures"][1]["file"] == "/tmp/run2.ts"
+    assert "aaaa" in res["failures"][0]["anchors"]
+    assert "bbbb" in res["failures"][1]["anchors"]

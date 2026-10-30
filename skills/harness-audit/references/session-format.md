@@ -1,10 +1,11 @@
-# Session JSONL Formats (Pi, qodercli, agy)
+# Session JSONL Formats (Pi, pi-subagents, qodercli, agy)
 
-Deep reference for `harness-audit`'s scanner. See `SKILL.md` for usage.
-All three schemas were verified against real session files on the host. Schemas drift with
-agent versions — re-sample before trusting. Today the scripts resolve and parse only the Pi
-root; the qodercli and agy sections document the shapes for the planned polyglot scanner
-("the scanner" there means that future scanner).
+Deep reference for `harness-audit`'s scanners. See `SKILL.md` for usage.
+All four schemas were verified against real session files on the host. Schemas drift with
+agent versions — re-sample before trusting. Today the scripts resolve and parse the Pi root
+(`audit.py`, `audit_edits.py`) and, for the edit workload, pi-subagents transcripts beside it
+(`audit_edits.py`); the qodercli and agy sections document the shapes for the planned polyglot
+scanner ("the scanner" there means that future scanner).
 
 ## Pi Session JSONL Format
 
@@ -27,7 +28,12 @@ One JSON object per line, no outer array.
 | `message`                                               | Conversation turn — inspect `message.role`                   |
 | `message_end`                                           | Pi event-stream log (benchmark harness `stdout.jsonl`) — identical `message` payload; treated as `message` |
 | `custom_message`                                        | UI/provider-specific payload                                 |
+| `custom`                                                | Structured side-channel (`customType`: `session-run-time`, `timeline`, `pi-rules.scan`, `permissions`, `btw-thread-entry`, …) — not a conversation turn |
+| `context_edit`                                          | Context-window bookkeeping (`targetId`, `replacement`) — not a conversation turn |
 | `model_change`, `thinking_level_change`, `session_info` | Infra events — ignored by the scanner                        |
+
+`custom` and `context_edit` were observed on the host in the evidence session; the `customType`
+list is drift-prone like every row here — re-sample.
 
 ### Message roles relevant to bash audit
 
@@ -87,17 +93,34 @@ reference `type=message` schema. Only `message_end` carries the canonical turn:
 `message_end → message` is lossless for the scanners, so it is accepted directly (no normalizer
 needed). `tool_execution_end` carries the same `result.content` but is not used.
 
-### Delivery cap (produced vs delivered)
+### Delivery cap and paging footers (produced vs delivered)
 
-When a tool result exceeds the harness's 50 KB delivery cap the body ends with:
+Two tools emit a footer, and they are not interchangeable.
+
+**`bash` delivery cap.** When a bash result exceeds the harness's 50 KB delivery cap the body ends with:
 
 ```
-[Showing lines 1-100 of 4213 (50.0KB limit). Use offset=101 to continue]
+[Showing lines 6-84 of 84 (50.0KB limit). Full output: /var/folders/…/pi-bash-<hex>.log]
 ```
 
-`audit.py` parses that footer into `produced_lines` / `omitted_lines` (delivered = `len(text.splitlines())`,
-produced = the `of Z` field) and sums them per tool and for the session. The trailing `(N.NKB limit)` is
-load-bearing — a pattern ending at `of Z]` matches nothing.
+The trailing `(N.NKB limit)` is load-bearing, and `Full output: <path>` points at the untruncated
+log. `audit.py`'s `TRUNCATION_FOOTER_RE` (`\[Showing lines (\d+)-(\d+) of (\d+) \(([\d.]+)KB limit\)`)
+consumes this footer into the delivery-cap fields: `produced_lines` / `omitted_lines` (delivered =
+`len(text.splitlines())`, produced = the `of Z` field), summed per tool and for the session, plus
+`truncated_calls`. A pattern ending at `of Z]` matches nothing.
+
+**`read` paging footer.** A paged read result instead ends with:
+
+```
+[Showing lines 90-139 of 586. Use offset=140 to continue.]
+```
+
+This footer carries no `(N.NKB limit)` and no `Full output:` path, so `TRUNCATION_FOOTER_RE` does
+**not** match it and it never feeds `produced_lines` / `omitted_lines`. Read paging is not a delivery
+cap — the model asks for the next window with `offset=`. `audit.py` still counts the read result's
+delivered lines in `tool_census` (the `read` row), just not as truncation.
+
+Both footers appear in the evidence session; `audit.py` reads only the bash one.
 
 Output shape: the default text report gains one summary line —
 `Produced but not delivered (delivery cap): N lines omitted across M tool results, all tools` — **only
@@ -129,6 +152,122 @@ When `keep == 0`, only the marker remains. The filtered variant (`--emit-filtere
 - Unknown session id → `resolve_session` searches all `*.jsonl` under the roots, matches uuid fragment or full stem, picks newest by `mtime`.
 - Missing root → skipped silently; error only when no candidate matches.
 - Records read but no bash paired (`record_count > 0`, `bash_count == 0`) → loud schema warning on stderr and exit `3`; a scanner that cannot see must not report clean.
+
+## pi-subagents transcript format
+
+Deep reference for `audit_edits.py`'s transcript path. Verified against 22
+`*_transcript.jsonl` files in the evidence session on the host. Schemas drift with
+pi-subagents versions — re-sample before trusting.
+
+### File layout
+
+pi-subagents writes one transcript per subagent run beside the session directory:
+
+```
+<session_dir>/subagent-artifacts/<uuid>_<agent>_transcript.jsonl
+```
+
+22 files in the evidence session. `audit_edits.py` auto-discovers
+`subagent-artifacts/*_transcript.jsonl` beside the resolved session (opt out with
+`--no-transcripts`), or accepts a transcript path directly. One JSON object per line, no outer
+array.
+
+### Record types
+
+| `recordType` | Meaning |
+| ------------ | ------- |
+| `message`    | A turn body — `role` in (`user`, `system`, `assistant`, `toolResult`, `custom`); the body rides both top-level `text` and a nested `message` object |
+| `tool_start` | Tool call (`toolName`, `toolCallId`, `argsPayload` JSON string, `argsPreview`) |
+| `tool_end`   | Tool completion (`toolName`, `toolCallId`, `isError`) — no text body |
+
+`sourceEventType` is the underlying event name: `initial_prompt`, `message_end`,
+`tool_execution_start`, `tool_execution_end`.
+
+Every record also carries `version`, `source`, `runId`, `agent`, `childIndex`, `cwd`, `ts`
+(epoch ms), and `timestamp` (ISO-8601). There is **no `type` key**, so the Pi
+`type == "message"` predicate matches nothing in a transcript.
+
+### Tool calls and results
+
+`tool_start` (edit example):
+
+```json
+{
+  "recordType": "tool_start",
+  "sourceEventType": "tool_execution_start",
+  "runId": "71241daa-138b-4aef-b15e-ba7162b6ab0e",
+  "toolCallId": "call_00_vhmjchw123nwewd1wfi6hxf7",
+  "toolName": "edit",
+  "argsPayload": "{\"file\": \".pi/agent/extensions/skill-router-injector.ts\", \"edits\": [{\"anchor_from\": \"cbo7\", \"anchor_to\": \"cWkw\"}]}",
+  "argsPreview": "file=.pi/agent/extensions/skill-router-injector.ts"
+}
+```
+
+`tool_end` carries the same `toolName` / `toolCallId` plus `isError`, and no body.
+
+The result body rides a **separate** `recordType: message`, `role: toolResult` record — not the
+`tool_end`:
+
+```json
+{
+  "recordType": "message",
+  "sourceEventType": "message_end",
+  "runId": "71241daa-138b-4aef-b15e-ba7162b6ab0e",
+  "role": "toolResult",
+  "toolName": "edit",
+  "toolCallId": "call_00_e4dumgfuj5jtrbisbgtfqxlr",
+  "isError": true,
+  "text": "[MODEL] edit[0] (...) failed: [E_FOREIGN_ANCHOR] ...",
+  "message": { "role": "toolResult", "toolName": "edit", "toolCallId": "call_00_e4dumgfuj5jtrbisbgtfqxlr", "isError": true, "content": [{ "type": "text", "text": "..." }] }
+}
+```
+
+Counting rule used by `audit_edits.py` (each result appears twice — once as `tool_end`, once as
+`message`):
+
+- call args (`file`, `anchor_from` / `anchor_to`) come from `tool_start.argsPayload`; the assistant
+  `message` `toolCall` is a fallback when a transcript omits `tool_start`;
+- the result body and error flag come from the `message` / `toolResult` record; `tool_end.isError`
+  is the fallback when no message record exists;
+- results are keyed by `(runId, toolCallId)`, so the `tool_end` + `message` pair counts exactly once.
+
+### Merge contract and additive keys
+
+Auto-discovery is default-on: a scan of a session file also reads
+`subagent-artifacts/*_transcript.jsonl` beside it. `--no-transcripts` opts out and audits
+only the resolved file.
+
+A file whose schema is unrecognized is named on stderr, excluded from the counts, and the run
+continues. The exit code is `3` **iff no file yielded recognized records** — a single
+unrecognized transcript (or an all-unrecognized merge) still exits `3`, so the scanner never
+reports clean on nothing seen. One bad file among good ones no longer discards the good signal.
+
+T1 and T3 added these `--json` keys; every pre-existing key is unchanged:
+
+- `transcripts` — the discovered `*_transcript.jsonl` paths (list);
+- `transcript_count` — how many were discovered;
+- `skipped_files` — unrecognized files excluded from the counts (list);
+- `source_file` / `context_key` on each failure and warning — the origin transcript name and a
+  `<source_file>:<line>` locator.
+
+The internal `schema_recognized` flag drives the exit-3 decision and is not emitted.
+
+### Marker scoping caveat
+
+The Pi caveat applies with equal force: `[E_*]` / `[W_*]` codes also appear in `read` / `bash`
+output. A raw grep finds 16 `[E_*]` occurrences across the evidence transcripts, but only 4 sit
+inside `edit` results. `audit_edits.py` counts markers only inside `edit` results.
+
+### Edge cases handled by `audit_edits.py`
+
+- Unknown record shapes (`recordType` absent or unrecognized) → the file's `schema_recognized` flag
+  is false; the CLI exits `3` with a schema warning instead of reporting a false clean.
+- `tool_end` without a paired `message` / `toolResult` → the `isError` fallback counts the result
+  once (empty body, so `E_EMPTY_RESULT`).
+- `argsPayload` is a JSON **string**; decode it before reading `file` / `edits`.
+- A transcript path already inside `subagent-artifacts/` discovers no siblings, so pointing at one
+  file stays scoped.
+
 
 ## qodercli (QoderCN CLI) session format
 
