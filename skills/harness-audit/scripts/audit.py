@@ -40,9 +40,27 @@ EXIT_SCHEMA = 3
 # pi event-stream logs (benchmark harness stdout.jsonl) use "message_end" with the identical
 # "message" payload. Accepting both stops a stream log from being read as empty (and "clean").
 MESSAGE_RECORD_TYPES = frozenset({"message", "message_end"})
-# Delivery-cap footer: "[Showing lines A-B of Z (50.0KB limit). Use offset=… to continue]".
-# The trailing "(N.NKB limit)" is load-bearing — a stricter "of Z]" pattern never matches.
-TRUNCATION_FOOTER_RE = re.compile(r"\[Showing lines (\d+)-(\d+) of (\d+) \(([\d.]+)KB limit\)")
+# Delivery-cap footers. The installed harness emits three shapes; all are strict —
+# a bare "[Showing lines 1-10 of 100]" (no suffix, no path) must never match.
+#   1. bytes cap:  "[Showing lines A-B of Z (50.0KB limit). Full output: <path>]"
+#      (the read tool swaps the tail for ". Use offset=N to continue]")
+#   2. lines cap:  "[Showing lines A-B of Z. Full output: <path>]"
+#      (reachable when total lines exceed 2000 while bytes stay <= 51200)
+#   3. partial:    "[Showing last <size> of line N (line is <size>). Full output: <path>]"
+# The footer is the harness-appended *tail*: it must sit at the end of the text,
+# followed by nothing but whitespace or the one status line an aborted or
+# timed-out bash command appends after it. A footer-shaped string quoted
+# mid-body is prose, not a delivery cap, and must not parse.
+_FOOTER_TAIL = r"(?:\s*\Z|\n\nCommand (?:aborted|timed out)[^\n]*\s*\Z)"
+TRUNCATION_FOOTER_RE = re.compile(
+    r"\[Showing lines (\d+)-(\d+) of (\d+)"
+    r"(?: \([\d.]+KB limit\))?"
+    r"(?:\. Full output: [^\]\n]+|\. Use offset=\d+ to continue)\]" + _FOOTER_TAIL
+)
+PARTIAL_LINE_FOOTER_RE = re.compile(
+    r"\[Showing last [\d.]+(?:B|KB|MB) of line (\d+) "
+    r"\(line is [\d.]+(?:B|KB|MB)\)\. Full output: [^\]\n]+\]" + _FOOTER_TAIL
+)
 # Census rows are always emitted for these five, zero-filled when unused, so "all five tools"
 # is a stable shape rather than a set that silently drops tools with no calls.
 CENSUS_TOOLS = ("bash", "read", "edit", "write", "undo_last_edit")
@@ -223,13 +241,29 @@ def result_text(msg: dict[str, Any]) -> str:
 def truncation_of(text: str) -> tuple[int, int] | None:
     """``(produced_lines, omitted_lines)`` from a delivery-cap footer, else ``None``.
 
-    The footer is ``[Showing lines A-B of Z (50.0KB limit). Use offset=… to continue]``.
+    ``produced_lines`` is the footer's total line count; the caller derives
+    ``delivered = produced - omitted``.
+
+    The footer is appended after a blank separator line, so ``count_lines(text)``
+    counts two lines of harness chrome. For shapes 1-2 the footer states the
+    delivered range itself, so ``delivered = B - A + 1`` and chrome never inflates
+    it. Shape 3 (``[Showing last <size> of line N ...]``) delivers every line but
+    cuts the last one mid-line; line accounting counts that incomplete line as
+    omitted: ``produced = N``, ``delivered = N - 1``, ``omitted = 1``.
+
+    The footer must be the tail of ``text`` (see ``_FOOTER_TAIL``): a
+    footer-shaped string quoted in the body is prose, not a delivery cap.
     """
     m = TRUNCATION_FOOTER_RE.search(text)
-    if m is None:
-        return None
-    produced = int(m.group(3))
-    return produced, max(0, produced - count_lines(text))
+    if m is not None:
+        produced = int(m.group(3))
+        delivered = int(m.group(2)) - int(m.group(1)) + 1
+        return produced, max(0, produced - delivered)
+    m = PARTIAL_LINE_FOOTER_RE.search(text)
+    if m is not None:
+        produced = int(m.group(1))
+        return produced, 1 if produced > 0 else 0
+    return None
 
 
 def truncate_body(text: str, keep: int) -> tuple[str, int]:
@@ -357,8 +391,13 @@ def scan(path: Path, threshold: int, with_context: int = 0) -> dict[str, Any]:
                 nlines = count_lines(text)
                 nchars = len(text)
                 trunc = truncation_of(text)
-                produced = nlines if trunc is None else trunc[0]
-                omitted = 0 if trunc is None else trunc[1]
+                if trunc is None:
+                    produced, omitted = nlines, 0
+                else:
+                    produced, omitted = trunc
+                # A capped result's delivered count is footer-derived; count_lines()
+                # would add the harness's blank separator + footer line as content.
+                delivered = produced - omitted
                 row = census.setdefault(
                     tool_key,
                     {
@@ -370,16 +409,16 @@ def scan(path: Path, threshold: int, with_context: int = 0) -> dict[str, Any]:
                     },
                 )
                 row["calls"] += 1
-                row["lines"] += nlines
+                row["lines"] += delivered
                 row["chars"] += nchars
                 if trunc is not None:
                     row["truncated_calls"] += 1
                     row["omitted_lines"] += omitted
                 if tool_name != "bash":
                     continue
-                total_lines += nlines
+                total_lines += delivered
                 total_chars += nchars
-                oversized = nlines > threshold
+                oversized = delivered > threshold
                 tc_id = msg.get("toolCallId") or ""
                 cmd_preview = ""
                 if tc_id in call_commands:
@@ -399,7 +438,7 @@ def scan(path: Path, threshold: int, with_context: int = 0) -> dict[str, Any]:
                         "command_preview": (cmd_preview[:120] + "…")
                         if len(cmd_preview) > 120
                         else cmd_preview,
-                        "lines": nlines,
+                        "lines": delivered,
                         "chars": nchars,
                         "produced_lines": produced,
                         "omitted_lines": omitted,
@@ -571,7 +610,11 @@ def emit_filtered(path: Path, threshold: int, keep: int) -> Path:
                         ):
                             text_parts.append(c["text"])
                     combined = "".join(text_parts)
-                    if count_lines(combined) > threshold:
+                    # Same delivered-line rule as scan(): a capped result's footer
+                    # chrome must not push it over the threshold here alone.
+                    trunc = truncation_of(combined)
+                    delivered = count_lines(combined) if trunc is None else trunc[0] - trunc[1]
+                    if delivered > threshold:
                         truncated, _ = truncate_body(combined, keep)
                         new_content = [{"type": "text", "text": truncated}]
                         msg["content"] = new_content

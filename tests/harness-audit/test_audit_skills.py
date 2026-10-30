@@ -220,7 +220,7 @@ def test_scan_detection_of_invocations_and_dead_skills(tmp_path: Path) -> None:
         sess_file,
         [
             session_header("sess1"),
-            user_msg("m1", "Please run /skill:active_b on this code"),
+            user_msg("m1", "/skill:active_b on this code"),
             toolcall_msg("m2", "c1", "read_skill", {"path": f"{skills_root}/active_a/SKILL.md"}),
             toolcall_msg("m3", "c2", "Skill", {"skill": "active_a"}),
             toolcall_msg("m4", "c3", "active_b_skill", {}),
@@ -235,11 +235,75 @@ def test_scan_detection_of_invocations_and_dead_skills(tmp_path: Path) -> None:
     )
 
     assert result.sessions_scanned == 1
-    assert result.skill_invocations.get("active_a") == 3
+    # DELIBERATE regression-lock update (ha-fix-B): the space form and the
+    # mid-sentence colon form are plain text, so only the two toolCall hits count.
+    assert result.skill_invocations.get("active_a") == 2
     assert result.skill_invocations.get("active_b") == 2
     assert "dead_skill" in result.dead_skills
     assert "active_a" not in result.dead_skills
     assert "active_b" not in result.dead_skills
+
+
+# ── Group 2b: slash-command invocation capture (P1) ──
+def test_slash_command_accepts_only_leading_colon_form() -> None:
+    assert audit_skills._extract_slash_commands("/skill:foo do the thing") == ["foo"]
+    assert audit_skills._extract_slash_commands("   /skill:foo") == ["foo"]
+    # Pi wraps every user prompt in "[<ISO timestamp>]\n" — the command is still first.
+    assert audit_skills._extract_slash_commands("[2026-10-29T10:07:44.920Z]\n/skill:foo bar") == [
+        "foo"
+    ]
+
+
+def test_slash_command_rejects_space_form_and_prose() -> None:
+    assert audit_skills._extract_slash_commands("/skill foo") == []
+    assert audit_skills._extract_slash_commands("Also try /skill foo") == []
+    assert audit_skills._extract_slash_commands("Please run /skill:foo on this") == []
+    assert (
+        audit_skills._extract_slash_commands("they can be invoked via /skill:name commands)") == []
+    )
+    assert audit_skills._extract_slash_commands("no skill command here") == []
+
+
+def test_scan_ignores_space_form_and_prose_mentions(tmp_path: Path) -> None:
+    """BDD: space form, mid-sentence prose, and toolResult prose record nothing."""
+    skills_root = tmp_path / "skills"
+    _ = create_mock_skill(skills_root, "prose_skill")
+    sessions_root = tmp_path / "sessions"
+    sessions_root.mkdir(parents=True, exist_ok=True)
+    sess = sessions_root / "prose.jsonl"
+    write_jsonl(
+        sess,
+        [
+            session_header("prose"),
+            user_msg("m1", "Also try /skill prose_skill"),
+            user_msg("m2", "Please run /skill:prose_skill on this"),
+            toolcall_msg("m3", "c1", "bash", {"command": "cat notes"}),
+            toolresult_msg(
+                "m4", "c1", "bash", "they can be invoked via /skill:prose_skill commands"
+            ),
+        ],
+    )
+    result = audit_skills.scan(days=30, roots=[sessions_root], skill_roots=[skills_root])
+    assert result.skill_invocations == {}
+    assert "prose_skill" in result.dead_skills
+
+
+def test_scan_counts_leading_slash_command_once(tmp_path: Path) -> None:
+    """BDD: a user prompt starting with /skill:foo records foo exactly once."""
+    skills_root = tmp_path / "skills"
+    _ = create_mock_skill(skills_root, "lead_skill")
+    sessions_root = tmp_path / "sessions"
+    sessions_root.mkdir(parents=True, exist_ok=True)
+    sess = sessions_root / "lead.jsonl"
+    write_jsonl(
+        sess,
+        [
+            session_header("lead"),
+            user_msg("m1", "[2026-10-29T10:07:44.920Z]\n/skill:lead_skill go"),
+        ],
+    )
+    result = audit_skills.scan(days=30, roots=[sessions_root], skill_roots=[skills_root])
+    assert result.skill_invocations == {"lead_skill": 1}
 
 
 def test_scan_zero_skill_friction_session_detection(tmp_path: Path) -> None:
@@ -339,7 +403,7 @@ def test_scan_cli_json_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
         sess_file,
         [
             session_header("json-test"),
-            user_msg("m1", "Run /skill:mock_skill"),
+            user_msg("m1", "/skill:mock_skill"),
         ],
     )
 

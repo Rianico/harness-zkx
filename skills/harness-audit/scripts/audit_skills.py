@@ -261,8 +261,25 @@ def _extract_skill_from_tool_call(tc_name: str, args: dict[str, Any]) -> str | N
     return None
 
 
+# Pi stores each user prompt inside its own envelope, "[<ISO-8601 timestamp>]\n<text>".
+# The command pi executes is the first token of <text>, so drop that envelope first.
+_PROMPT_ENVELOPE_RE = re.compile(r"^\s*\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?\]\s*")
+# Colon form only, and only as the first token of the (envelope-stripped) prompt.
+_SKILL_COMMAND_RE = re.compile(r"\s*/skill:([a-zA-Z0-9_\-\.]+)")
+
+
 def _extract_slash_commands(text: str) -> list[str]:
-    return re.findall(r"/skill(?::|\s+)([a-zA-Z0-9_\-\.]+)", text)
+    """The skill names pi would execute from ``text``; ``[]`` when there are none.
+
+    Pi executes only the colon form ``/skill:<name>``, and only when it is the
+    first non-space token of a user prompt. The space form (``/skill foo``) is
+    plain text, and prose that merely mentions ``/skill:name`` mid-sentence is
+    not an invocation. Callers must pass user-role text only: ``toolResult`` and
+    assistant turns never execute a slash command, whatever they quote.
+    """
+    body = _PROMPT_ENVELOPE_RE.sub("", text, count=1)
+    match = _SKILL_COMMAND_RE.match(body)
+    return [match.group(1)] if match else []
 
 
 def _extract_text_content(content: Any) -> str:
@@ -325,10 +342,10 @@ def parse_session_file(path: Path) -> tuple[str, dict[str, int], int, str]:
                 if user_text:
                     root_goal = user_text
 
-            # Slash commands in text
-            msg_text = _extract_text_content(content)
-            for sk in _extract_slash_commands(msg_text):
-                invocations[sk] = invocations.get(sk, 0) + 1
+            # Slash commands pi would execute: user prompts only, colon form only.
+            if role == "user":
+                for sk in _extract_slash_commands(_extract_text_content(content)):
+                    invocations[sk] = invocations.get(sk, 0) + 1
 
             # Tool calls
             if isinstance(content, list):
