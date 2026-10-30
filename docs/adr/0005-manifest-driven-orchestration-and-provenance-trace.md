@@ -6,11 +6,14 @@ Date: 2026-05-25
 
 Accepted
 
-derives from [4. Goal-Driven Development (GDD) as Foundational Philosophy](0004-goal-driven-development-gdd-as-foundational-philosophy.md)
+Relates to [4. Goal-Driven Development (GDD) as Foundational Philosophy](0004-goal-driven-development-gdd-as-foundational-philosophy.md)
 
-refined by [6. Consolidated Orchestration Pipeline](0006-consolidated-orchestration-pipeline.md)
+Amended by [6. Consolidated Orchestration Pipeline](0006-consolidated-orchestration-pipeline.md)
 
 Clarified by [21. pr-land derives state and emits facts instead of persisting artifacts](0021-pr-land-derives-state-and-emits-facts-instead-of-persisting-artifacts.md)
+Amended by [7. Mission Manifest Schema and Update Contract](0007-mission-manifest-schema-and-update-contract.md)
+
+Clarified by [22. Agent-facing worktrees are bound to roles, not feature branches](0022-agent-facing-worktrees.md)
 
 ## Context
 

@@ -4,7 +4,9 @@ Date: 2026-05-01
 
 ## Status
 
-Superseded — Bash rewrite was reversed (2026-05-01) due to performance regression.
+Superseded
+
+Superceded by [23. Retain Python hook entrypoint](0023-retain-python-hook-entrypoint.md)
 
 ## Context
 

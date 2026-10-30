@@ -6,7 +6,7 @@ Date: 2026-05-25
 
 Accepted
 
-refines [5. Manifest-Driven Orchestration and Provenance Trace](0005-manifest-driven-orchestration-and-provenance-trace.md)
+Amends [5. Manifest-Driven Orchestration and Provenance Trace](0005-manifest-driven-orchestration-and-provenance-trace.md)
 
 ## Context
 

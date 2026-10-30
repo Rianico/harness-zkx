@@ -4,8 +4,10 @@ Date: 2026-09-10
 
 ## Status
 
-Accepted — Implements LSZ `Respect Tool Feedback` + `GDD Pillar 2 (EDD)` + `GDD Pillar 3 (Semantic vs. Deterministic Split)`.
-Refines [ADR-0004](0004-goal-driven-development-gdd-as-foundational-philosophy.md) and [ADR-0009](0009-behavioral-evals-and-manifest-indexed-handoffs.md).
+Accepted
+
+Amends [ADR-0004](0004-goal-driven-development-gdd-as-foundational-philosophy.md) and [ADR-0009](0009-behavioral-evals-and-manifest-indexed-handoffs.md).
+Amended by [16. Changelog Ledger Gate with Deterministic Floor and Adversarial Accounting](0016-changelog-ledger-gate-with-deterministic-floor-and-adversarial-accounting.md)
 
 ## Context
 
@@ -14,6 +16,7 @@ Autonomous multi-step execution (such as Codex `/goal` loops, Ralph loops, or gr
 2. **Vibes-Based Passing**: The model passes code based on superficial visual similarity rather than empirical proof.
 3. **Rigid Tooling Coupling**: Previous `eval-gate` assumed single-stack hardcoded scripts (`npm`/`basedpyright`), failing in polyglot workspaces (Rust, TypeScript, Python, Go).
 4. **Leaky Review Responsibility**: Previous `code-review` conflated language-specific diff grepping with qualitative semantic audit.
+Note: implements LSZ `Respect Tool Feedback` + `GDD Pillar 2 (EDD)` + `GDD Pillar 3 (Semantic vs. Deterministic Split)`.
 
 ## Decision
 

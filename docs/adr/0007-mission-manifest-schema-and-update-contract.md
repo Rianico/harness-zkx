@@ -7,7 +7,9 @@ Date: 2026-05-25
 Accepted
 Amends [ADR-0005](0005-manifest-driven-orchestration-and-provenance-trace.md)
 
-amended by [8. Goal Locking and Aggregated Manifest Hierarchy](0008-goal-locking-and-aggregated-manifest-hierarchy.md)
+Amended by [8. Goal Locking and Aggregated Manifest Hierarchy](0008-goal-locking-and-aggregated-manifest-hierarchy.md)
+
+Amended by [10. Versioned Phase-Run Pattern for Artifact Organization](0010-versioned-phase-run-pattern-for-artifact-organization.md)
 
 ## Context
 

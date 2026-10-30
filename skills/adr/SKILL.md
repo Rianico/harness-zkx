@@ -8,147 +8,94 @@ argument-hint: |-
 
 # Architecture Decision Records
 
-Manage ADRs through the installed `adr` command, with AI helping classify relationships, draft concise content, and explain existing decisions.
+Manage ADRs through the installed `adr` command. The model classifies relationships, drafts concise content, and explains existing decisions.
 
-This skill is reusable by other skills and agents. It does not own a parallel ADR system. The `adr` CLI is the system of record for numbering, filenames, template application, status updates, and link mechanics.
+This skill is reusable by other skills and agents. It owns no parallel ADR system. The `adr` CLI remains the system of record for numbering, filenames, templates, status updates, and link mechanics.
 
-## Fail-loudly shim (`$SKILL_DIR/bin/adr`)
+## Philosophy and Invariants
 
-adr-tools resolves its directory by walking up for `.adr-dir` and, finding none, **silently** falls back to `doc/adr` — `adr new` then mints a parallel ADR tree with fresh numbering and exit 0. `.adr-dir` is gitignored by design (see `adr-scaffolding`), so a freshly created worktree lacks it until wt's asynchronous `[post-start] copy-ignored` lands (~seconds): any `adr` call in that window misfires.
+Route every lifecycle operation through the installed `adr` command. Never invent numbering or filename schemes.
 
-`$SKILL_DIR/bin/adr` wraps the real CLI: it refuses `new`/`link`/`list`/`generate`/`upgrade-repository` (exit 2, remedy `adr init docs/adr`) when no `.adr-dir` or `doc/adr` resolves from cwd up to the repository root, and passes everything else through. Exit 64 means the real `adr` could not be resolved or shim recursion was detected (`ADR_SHIM_ACTIVE` already set). Install by putting it ahead of the real `adr` in `PATH`, or set `ADR_REAL` to the absolute path of the real binary; `ADR_ALLOW_DEFAULT=1` (exactly `1`) skips the guard for deliberate `doc/adr` projects. Tests: `tests/adr/`.
+The log is append-only. Bodies freeze once accepted. Change history only through new records, `adr new -s`, or `adr link`.
+
+Status values are `Proposed`, `Accepted`, `Rejected`, `Deprecated`, and `Superseded`. Keep `## Status` to the status word plus relationship lines.
+
+Write the ADR as `Proposed` before implementing when possible. Mark `Accepted` on agreement. Record brownfield decisions retroactively with the original decision date.
+
+Keep one decision per record. Split phased decisions into linked records. State low confidence in Consequences to flag future reconsideration.
+
+A reversal is a new record via `adr new -s`. The old record keeps its body and gains a `Superceded by` line.
+
+The repository `templates/template.md` wins when present. Otherwise install the canonical shape with `$SKILL_DIR/bin/sync-template`. Never hand-edit the installed copy.
+
+Edit `$SKILL_DIR/references/adr-template.md` and re-sync instead. That file owns nesting, depth, and examples.
+
+Prefix `PATH` with `$SKILL_DIR/bin` so the fail-loudly shim guards `adr`. It refuses directory-touching commands (exit 2) when no ADR directory resolves. It passes everything else through untouched.
+
+Fresh worktrees may lack gitignored `.adr-dir` until the asynchronous post-start copy lands. Remedy: run `adr init docs/adr` or wait for the copy, then retry.
+
+Exit 64 means the real `adr` is missing or shim recursion was detected. Set `ADR_REAL` to the real binary path. Set `ADR_ALLOW_DEFAULT=1` (exactly `1`) for deliberate `doc/adr` projects.
+
+Mechanics and exit codes live in `$SKILL_DIR/bin/adr`. Tests live in `tests/adr/`.
+
+Use exactly these verbs. Never invent custom verbs.
+
+| Forward (in the new ADR) | Reverse (inserted into the old ADR) | Use when |
+|---|---|---|
+| `Supercedes` | `Superceded by` | old decision is replaced; via `adr new -s` only |
+| `Amends` | `Amended by` | old ADR still stands, needs extension or correction |
+| `Clarifies` | `Clarified by` | new ADR narrows the interpretation of the old one |
+| `Relates to` | `Relates to` | architectural coupling, no lifecycle change |
+
+Write one link line per relation. Never duplicate the same relation to the same target.
+The CLI spells it `Supercedes` with a double 'e'. Never normalize the spelling. Tool parsing depends on the exact bytes.
 
 ## When to Use
 
-Use this skill when:
-- the user says "ADR this", "record this decision", or "why did we choose X?"
-- a design or planning workflow reaches a meaningful architectural decision
-- a new decision might amend, clarify, relate to, or supersede an older ADR
-- another skill or agent needs to list, read, or explain existing ADRs
-- another skill or agent needs to create a new ADR without inventing its own format or lifecycle rules
+- The user says "ADR this", "record this decision", or "why did we choose X?"
+- A design or planning workflow reaches an architectural decision.
+- A new decision may amend, clarify, relate to, or supersede an older ADR.
+- Another skill or agent needs to list, read, explain, or create ADRs.
+- A drifted ADR log needs unification.
 
-## Supported Operations
+Offer an ADR only when all three hold. Missing any one means a design-doc entry, a code comment, or nothing.
 
-### `init [dir]`
-Initialize an ADR repository through `adr init`, using the default adr-tools location when no directory is provided.
+1. Hard to reverse: changing course later costs real effort.
+2. Surprising without context: a future reader will ask why.
+3. The result of a real trade-off: genuine alternatives existed.
 
-### `create <title> [--supersede <ref> ...] [--link <target:forward:reverse> ...]`
-Create a new ADR through `adr new`, then rewrite the generated file content to fit the actual decision while preserving adr-tools structure and relationship metadata.
+Qualifying topics include architectural shape, integration patterns, lock-in technology choices, boundary ownership, deliberate deviations, invisible constraints, and non-obvious rejections.
 
-### `link <source> <forward-link> <target> <reverse-link>`
-Create a relationship between two existing ADRs through `adr link`.
+Skip trivial records for local details, naming, or minor refactors.
 
-### `supersede <old-ref...> <new-title>`
-Create a new ADR that supersedes one or more older ADRs through `adr new -s`.
+## Phase 1 — Establish Repository
 
-### `list`
-List existing ADRs through `adr list`.
+1. Run `adr init` with the given directory, or the default location otherwise.
+2. Read the created template and first ADR when the caller needs follow-up edits.
+3. Create no parallel README or index scheme outside the repository layout.
 
-### `read <ref|query>`
-Read ADRs by exact reference first, then fall back to keyword search and explanation when the request is phrased as a question such as "why did we choose X?"
+Completion: `adr list` exits 0 inside the repository.
 
-## Core Rules
+## Phase 2 — Discover Relationships
 
-- Always use the installed `adr` command as the backend for ADR lifecycle operations.
-- Never invent your own numbering or filename scheme. Let `adr` create filenames like `0001-the-first-decision.md`.
-- Keep the default ADR shape from `$SKILL_DIR/references/adr-template.md` (hybrid Nygard + `### Considered Options` under `## Decision`) when the repository has not customized the template:
-  - `## Status`
-  - `## Context`
-  - `## Decision` (+ optional `### Considered Options` — compact 1-3 bullets for simple trade-offs, expanded for correctness-critical / invariant proofs)
-  - `## Consequences`
-- If the ADR repository already has `templates/template.md`, respect that template instead of forcing the default shape.
-- Keep ADRs short. One page is the target. Move deep analysis to separate documents if needed.
-- Treat accepted ADRs as historical records. Prefer creating a new ADR with `-s` or `-l` over rewriting old decisions.
-- Preserve adr-tools relationship semantics exactly. If `adr` inserts `Supercedes`, `Superceded by`, `Amends`, or `Clarifies` links, do not break or relocate them.
-- When reading ADRs, include lineage and linked relationships when relevant.
-- Prefer a quick repository scan before creating a new ADR so related records are not missed.
-- Do not create trivial ADRs for local implementation details, naming choices, or minor refactors without architectural significance.
+1. Run `adr list` to see existing records.
+2. Search titles and bodies with `rg` using keywords from the request.
+3. Read the best candidate files when classification stays unclear.
+4. Classify the outcome as brand-new, superseding, amending, clarifying, or related.
+5. Bias toward relationship-aware creation over isolated creation.
 
-## When to Create
+Completion: the relationship class is named before any `adr new` runs.
 
-Offer an ADR **only when all three are true**:
+Use these heuristics to pick the class.
 
-1. **Hard to reverse** — the cost of changing your mind later is meaningful
-2. **Surprising without context** — a future reader will wonder "why did they do it this way?"
-3. **The result of a real trade-off** — there were genuine alternatives and you picked one for specific reasons
+- Supersede when an older decision stops being the active decision.
+- Amend when the earlier ADR stands but needs extension or correction.
+- Clarify when the new ADR narrows an older interpretation without replacing it.
+- Link with `Relates to` for architectural coupling without lifecycle change.
 
-If any of the three is missing, skip the ADR. The decision can be captured in a design doc's decision log, a code comment, or nowhere at all — not every decision needs a record.
+Proceed directly when the relationship is obvious from the scan. Surface candidates and ask when the choice is materially ambiguous.
 
-### What qualifies
-
-- **Architectural shape.** "We're using a monorepo." "The write model is event-sourced, the read model is projected into Postgres."
-- **Integration patterns between contexts.** "Ordering and Billing communicate via domain events, not synchronous HTTP."
-- **Technology choices that carry lock-in.** Database, message bus, auth provider, deployment target. Not every library — just the ones that would take a quarter to swap out.
-- **Boundary and scope decisions.** "Customer data is owned by the Customer context; other contexts reference it by ID only." The explicit no-s are as valuable as the yes-s.
-- **Deliberate deviations from the obvious path.** "We're using manual SQL instead of an ORM because X." Anything where a reasonable reader would assume the opposite.
-- **Constraints not visible in the code.** "We can't use AWS because of compliance requirements." "Response times must be under 200ms because of the partner API contract."
-- **Rejected alternatives when the rejection is non-obvious.** If you considered GraphQL and picked REST for subtle reasons, record it — otherwise someone will suggest GraphQL again in six months.
-
-## Default Template Shape
-
-Optimize for the hybrid template in `$SKILL_DIR/references/adr-template.md` — Nygard-core with `### Considered Options` nested under `## Decision` so simple and invariant decisions both fit without a heavyweight top-level alternatives section.
-
-```markdown
-# NUMBER. TITLE
-
-Date: DATE
-
-## Status
-
-STATUS — plus adr-tools relationship lines (Supercedes / Superceded by / Amends / Clarifies) when present
-
-## Context
-
-The issue motivating this decision, and any context that influences or constrains the decision.
-
-## Decision
-
-State the chosen decision clearly in 1-3 sentences.
-
-### Considered Options
-
-When trade-offs matter, document rejected alternatives here. Use the depth the decision warrants — compact 1-3 bullets for simple choices, expanded Pros/Cons/Why-not for correctness-critical or invariant proofs. See `$SKILL_DIR/references/adr-template.md` for the canonical shape and Nygard-vs-hybrid guidance.
-
-## Consequences
-
-What becomes easier or more difficult to do and any risks introduced by the change that will need to be mitigated. Record load-bearing assumptions that would require revisiting the decision.
-```
-
-If the ADR repository already has `templates/template.md`, respect it. After `adr` generates the file, preserve the generated structure required by that repository template and keep adr-tools status/link insertion behavior intact. Full rationale and examples: `$SKILL_DIR/references/adr-template.md`.
-
-## Init Workflow
-
-When asked to initialize ADRs:
-- Run `adr init` with the provided directory if one was given
-- Use the adr-tools default location if no directory is specified
-- After initialization, read the created template and first ADR if the caller needs explanation or follow-up edits
-- Do not create a parallel README or index scheme outside what the repository already uses
-
-## Pre-Create Discovery Pass
-
-Before creating a new ADR, do a lightweight scan to decide whether the new decision is:
-- a brand new ADR
-- a superseding ADR
-- an amending or clarifying ADR
-- a related ADR that should be linked
-
-Use this cheap discovery sequence:
-1. Run `adr list`
-2. Run `rg` against ADR titles and bodies using keywords from the requested decision
-3. Read the best candidate ADR files if relationship classification is still unclear
-
-Bias toward relationship-aware creation instead of isolated creation.
-
-## Relationship Heuristics
-
-Use these heuristics when choosing between plain creation, supersession, and links:
-
-- **Supersede** when an older decision is being replaced and should no longer be treated as the active decision.
-- **Amends** when the earlier ADR still stands but needs a meaningful extension or correction.
-- **Clarifies** when the newer ADR explains or narrows the interpretation of an older ADR without replacing it.
-- **Related link** when there is architectural coupling but no lifecycle replacement.
-
-If the relationship is obvious from the repository scan, proceed with the right `adr` command. If it is materially ambiguous, surface the likely candidates and ask for confirmation using this dialog:
+Ask with this dialog when ambiguity blocks creation.
 
 ```yaml
 Dialog:
@@ -166,106 +113,69 @@ Dialog:
       description: "No relationship to existing ADRs"
 ```
 
-## Create Workflow
+## Phase 3 — Create, Link, or Supersede
 
-When asked to create an ADR:
+### Create
 
 1. Extract the decision title and core intent.
-2. Run the pre-create discovery pass.
-3. Decide whether to use:
-   - `adr new <title>`
-   - `adr new -s <ref> ... <title>`
-   - `adr new -l "<target>:<forward>:<reverse>" ... <title>`
-   - or both `-s` and `-l` together
-4. Run the `adr` command to generate the numbered file. In non-interactive or agent workflows, ensure editor invocation will not block the session before post-processing the file.
+2. Run the Phase 2 discovery pass first.
+3. Pick `adr new`, `adr new -s`, `adr new -l`, or both flags together.
+4. Generate the file with `EDITOR=true adr new` so the editor never blocks.
 5. Read the generated file.
-6. Rewrite only the section bodies so the ADR becomes concise, specific, and historically useful.
-7. Preserve:
-   - file path
-   - numbering
-   - title format created by `adr`
-   - `Date:` line
-   - `## Status` heading
-   - any inserted relationship lines under `## Status`
-8. Keep content terse and concrete (see `$SKILL_DIR/references/adr-template.md`):
-   - `Context`: constraints, forces, and why this decision is being made now
-   - `Decision`: the chosen direction in 1-3 sentences, plus `### Considered Options` nested inside `Decision` when trade-offs matter — compact 1-3 bullets for simple choices, expanded Pros/Cons/Why-not for correctness-critical / invariant proofs
-   - `Consequences`: trade-offs, operational impact, risks, and load-bearing assumptions that would require revisiting the decision
+6. Rewrite section bodies only, preserving paths, numbering, titles, dates, and status lines.
+7. Write value-neutral Context, a 1-3 sentence Decision, and Consequences with trade-offs and assumptions.
+8. Keep the record near one page. Move deep analysis to linked documents.
+9. Preserve inserted `Supercedes`, `Amends`, `Clarifies`, and `Relates to` lines exactly.
 
-Use this pattern inside `Decision` when alternatives are important (depth scales with the decision):
-```markdown
-## Decision
+Document rejected alternatives in `### Considered Options` when trade-offs matter. Use compact bullets for simple choices and expanded proof for invariant decisions.
 
-We will use X for Y because it best satisfies A and B under constraint C.
+Omit the subsection when no genuine alternative existed. Never invent pseudo-alternatives.
 
-### Considered Options
+Add no top-level alternatives, positive, negative, or risks sections. Keep proofs nested under Decision and trade-offs in Consequences.
 
-- Rejected: Option A
-  - Pros: ...
-  - Cons: ...
-  - Why not: ...
-- Rejected: Option B
-  - Pros: ...
-  - Cons: ...
-  - Why not: ...
-```
-For invariant proofs (e.g. verification model, anchor canon) expand each option as a `**Bold option** — rejected: <reason>` block with full rationale; for simple transport decisions keep it to the compact bullets above.
+Follow the canonical shape in `$SKILL_DIR/references/adr-template.md`.
 
-Do not add top-level `## Alternatives Considered`, `## Positive`, `## Negative`, or `## Risks` — use `### Considered Options` inside `## Decision` and `## Consequences` instead. Only add a top-level heavyweight section if the repository's existing `templates/template.md` already requires it.
-## Link Workflow
+Completion: the new file keeps its generated structure and relationship lines.
 
-When asked to link ADRs:
-- Prefer `adr link <source> <forward-link> <target> <reverse-link>`
-- Use exact references if available; otherwise resolve references from `adr list` output plus targeted reads
-- After linking, read the affected ADRs if needed to confirm the relationship was inserted as expected
+### Link
 
-## Supersede Workflow
+- Link with `adr link` using exact references from `adr list`.
+- Confirm insertion by reading the affected records.
 
-When asked to supersede:
-- Use `adr new -s <ref> ... <new-title>`
-- Prefer supersession over editing the old ADR's decision text
-- After creation, verify that the older ADR now contains `Superceded by [...]` and the new ADR contains `Supercedes [...]`
-- Then rewrite the new ADR's section bodies while keeping those relationship lines intact
+### Supersede
 
-## List Workflow
+- Create the replacement with `adr new -s <ref> <new-title>`.
+- Prefer supersession over editing the old decision text.
+- Verify the old record gained `Superceded by` and the new one holds `Supercedes`.
+- Rewrite the new bodies while keeping relationship lines intact.
 
-When asked to list ADRs:
-- Run `adr list`
-- Return the ADR paths or a short human summary if that is more helpful
-- If useful, group likely related ADRs around the user's query
+## Phase 4 — Read and Explain
 
-## Read Workflow
+The CLI has no `read` subcommand. Reading means inspecting the files found via `adr list` or `rg`.
 
-When asked to read or explain ADRs:
-1. Try exact lookup first by number, partial filename, or direct path
-2. If exact lookup is not enough, run keyword fallback:
-   - `adr list`
-   - `rg` for keywords from the query
-   - read the most relevant ADRs
-3. Summarize:
-   - the decision
-   - the context that led to it
-   - the current status
-   - related lineage such as `Supercedes`, `Superceded by`, `Amends`, `Clarifies`
-4. If no ADR matches, say so directly and suggest recording one if appropriate
+1. Try exact lookup first by number, partial filename, or direct path.
+2. Fall back to `adr list`, keyword `rg`, and reading the best matches.
+3. Summarize the decision, its context, its status, and its lineage.
+4. Group related ADRs around the query when that helps.
+5. Report no match directly and suggest recording one when appropriate.
 
-## Writing Guidance
-
-A good ADR produced by this skill should be:
-- specific rather than generic
-- concise rather than exhaustive
-- honest about trade-offs
-- include rejected alternatives in `Decision` via `### Considered Options` when they help future readers understand why the chosen option won — compact bullets for simple decisions, expanded Pros/Cons/Why-not for invariant proofs (see `$SKILL_DIR/references/adr-template.md`)
-- readable in a couple of minutes
-
-- useful to a future engineer who needs the why, not just the what
-
-Prefer compact prose over bullet sprawl unless the repository's existing template clearly prefers bullets.
+Completion: the answer names status plus lineage, or states that no ADR matches.
 
 ## Integration Guidance
 
-When another skill or agent invokes this skill:
-- use this skill as the ADR authority instead of inventing local ADR conventions
-- rely on `create`, `link`, `supersede`, `list`, and `read` operations
-- preserve the repository's existing adr-tools setup and template if present
-- prefer historical continuity through relationships over in-place rewrites of older ADRs
+Treat this skill as the ADR authority. Invent no local ADR conventions.
+
+Rely on create, link, supersede, list, and read operations.
+
+Preserve the existing adr-tools setup and repository template.
+
+Prefer historical continuity through relationships over in-place rewrites.
+
+Unify a drifted log via `$SKILL_DIR/references/remediation.md` (inventory, remap, audit, verify).
+
+## References
+
+- [adr-template.md](references/adr-template.md) — canonical hybrid template and depth guidance. Use when drafting or reviewing ADR bodies.
+- [remediation.md](references/remediation.md) — drifted-log unification procedure. Use when a log predates the canonical template or shows dangling links.
+- `$SKILL_DIR/bin/adr` — fail-loudly shim source and exit-code contract. Use when diagnosing refused commands or exit 2 and 64.
+- `$SKILL_DIR/bin/sync-template` — template installer from the marked region. Use when a repository template is missing or stale.

@@ -7,9 +7,7 @@ Date: 2026-05-25
 Accepted
 Amends [ADR-0007](0007-mission-manifest-schema-and-update-contract.md)
 
-amends [7. Mission Manifest Schema and Update Contract](0007-mission-manifest-schema-and-update-contract.md)
-
-enforced by [9. Behavioral Evals and Manifest-Indexed Handoffs](0009-behavioral-evals-and-manifest-indexed-handoffs.md)
+Relates to [9. Behavioral Evals and Manifest-Indexed Handoffs](0009-behavioral-evals-and-manifest-indexed-handoffs.md)
 
 ## Context
 

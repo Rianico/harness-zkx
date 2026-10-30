@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# sync-template — install the canonical hybrid ADR template into a repository.
+#
+# The single source of truth is the marked region (TEMPLATE-START/END) of
+# ../references/adr-template.md. This script extracts it to
+# <adr-dir>/templates/template.md so `adr new` emits it deterministically.
+# Never hand-edit the installed copy: edit the references file and re-sync.
+# Requires: bash >= 3.2 (macOS system bash), awk, grep.
+
+set -Eeuo pipefail
+IFS=$'\n\t'
+
+skill_dir=$(cd -- "$(dirname -- "$0")/.." && pwd -P)
+ref="${ADR_TEMPLATE_REF:-${skill_dir}/references/adr-template.md}"
+start='<!-- TEMPLATE-START -->'
+end='<!-- TEMPLATE-END -->'
+
+fail() { printf 'sync-template: %s\n' "$1" >&2; exit "${2:-64}"; }
+
+[[ -f "${ref}" ]] || fail "references file not found: ${ref}"
+
+[[ $(grep -c -F "${start}" "${ref}") -eq 1 ]] || fail "exactly one ${start} required"
+[[ $(grep -c -F "${end}" "${ref}") -eq 1 ]] || fail "exactly one ${end} required"
+
+adr_dir="${1:-}"
+if [[ -z "${adr_dir}" ]]; then
+    reldir=.
+    while true; do
+        if [[ -f "${reldir}/.adr-dir" ]]; then
+            adr_dir="${reldir}/$(head -n 1 "${reldir}/.adr-dir")"
+            break
+        fi
+        if [[ -e "${reldir}/.git" ]]; then
+            fail "no .adr-dir found; pass ADR-DIR explicitly"
+        fi
+        abs=$(cd -- "${reldir}" && pwd -P)
+        if [[ "${abs}" == "/" ]]; then
+            fail "no .adr-dir found; pass ADR-DIR explicitly"
+        fi
+        reldir="${reldir}/.."
+    done
+fi
+
+extracted=$(awk -v s="${start}" -v e="${end}" 'index($0,s){flag=1;next} index($0,e){flag=0} flag' "${ref}")
+[[ -n "${extracted}" ]] || fail "marked region is empty"
+
+mkdir -p "${adr_dir}/templates"
+printf '%s\n' "${extracted}" > "${adr_dir}/templates/template.md"
+printf 'sync-template: wrote %s\n' "${adr_dir}/templates/template.md"
