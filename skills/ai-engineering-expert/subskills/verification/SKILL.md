@@ -1,7 +1,7 @@
 ---
 name: verification
 description: >-
-  EDD (Eval-Driven Development) methodology — deterministic vs semantic verification, AI regression patterns, test-to-reprove, eval-first loops, and environmental truth-seeking in the LSZ architecture.
+  Eval-Driven Development (EDD) methodology for deterministic verification and eval-first loops. Use when designing an evaluation strategy; not for running the gate (eval-gate).
 metadata:
   managed-by: ai-engineering-expert
 ---

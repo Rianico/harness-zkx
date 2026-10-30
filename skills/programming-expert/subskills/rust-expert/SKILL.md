@@ -1,7 +1,7 @@
 ---
 name: rust-expert
 description: >-
-  Rust domain expertise for Cargo builds, borrow checker errors, lifetimes, ownership, traits, generics, Result/error handling, async/concurrency, testing, mocks, and idiomatic review. For Rust implementation, debugging, testing, build resolution, performance refactoring, and ownership.
+  Rust engineering guide: Cargo, borrow checker, lifetimes, traits, and async error handling. Use when implementing Rust code, fixing compiler/lifetime errors, writing tests, or refactoring ownership models.
 argument-hint: |-
   [build|review|testing]
 metadata:

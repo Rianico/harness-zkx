@@ -1,7 +1,7 @@
 ---
 name: git-diff-digest
 description: >-
-  Commit-range brief payloads from local git history. Resolves a caller-supplied spec through the shared range authority and emits versioned commit, file, area, and signal rows with honest caps. Use when an agent needs what-changed context for a base..head interval without raw gh or network calls.
+  Commit-range brief generator from local git history. Emits structured commit, file, and signal summaries. Use when reviewing what changed between two refs or briefing a PR.
 arguments: range_spec
 argument-hint: |-
   "<spec> [PATH_FILTER] [--mode ..|...] [--commit SHA] [--file PATH] [--hunks] [--context N] [--max-lines N] [--group-by area|category|status] [--yaml|--json] [--pr [SPEC]] [--verify FINGERPRINT]"

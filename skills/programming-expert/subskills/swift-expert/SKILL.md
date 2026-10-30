@@ -1,7 +1,7 @@
 ---
 name: swift-expert
 description: >-
-  Swift domain expertise for Swift 6, SwiftUI, async/await, actors, Sendable, strict concurrency, protocol-oriented design, XCTest, iOS, macOS, state management, and dependency injection. Use for Swift implementation, debugging, testing, concurrency fixes, SwiftUI architecture, and refactoring.
+  Swift 6 guide: SwiftUI, async/await, actors, Sendable, strict concurrency, and XCTest. Use when implementing Swift features, debugging concurrency issues, building SwiftUI views, or fixing build errors.
 argument-hint: |-
   [concurrency|swiftui|testing]
 metadata:

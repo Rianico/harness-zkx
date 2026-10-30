@@ -1,7 +1,7 @@
 ---
 name: writing-for-agents
 description: >-
-  Writing reference for agent-consumed docs — pointers, hierarchy, completion criteria, and pruning. Use when drafting or editing SKILL.md, AGENTS.md, or CLAUDE.md, fixing prompt bloat, pruning no-ops, or clarifying agent instructions.
+  Writing guide for agent-consumed docs: pointers, hierarchy, and pruning. Use when fixing vague AGENTS.md or SKILL.md prose, prompt bloat, or ignored instructions.
 metadata:
   managed-by: ai-engineering-expert
 ---

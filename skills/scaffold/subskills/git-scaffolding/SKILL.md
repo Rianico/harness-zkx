@@ -1,7 +1,7 @@
 ---
 name: git-scaffolding
 description: >-
-  Deterministic Git scaffolding — conventional commits, semantic-release, changelog, and branch hygiene. Use when wiring release flow, commit linting, or retrofitting Git artifacts.
+  Git toolchain scaffolder: conventional commits, semantic-release, and changelogs. Use when commit linting fails or release wiring is missing.
 metadata:
   managed-by: scaffold
 ---

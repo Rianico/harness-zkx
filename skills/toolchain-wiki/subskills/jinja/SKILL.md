@@ -1,7 +1,7 @@
 ---
 name: jinja
 description: >-
-  Jinja 3.1 templating reference for Python — template language, filters/tests, Environment API, extensions, sandboxing, native types. Use when writing or debugging Jinja templates, configuring an Environment or loader, fixing autoescaping or whitespace output, or sandboxing untrusted templates.
+  Jinja 3.1 templating guide for Python: syntax, filters, Environment API, and sandboxing. Use when authoring or debugging Jinja templates, configuring loaders, or fixing whitespace/autoescaping issues.
 metadata:
   managed-by: toolchain-wiki
 argument-hint: |-

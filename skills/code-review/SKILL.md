@@ -1,7 +1,7 @@
 ---
 name: code-review
 description: >-
-  Adversarial crux code review gate auditing test refutability, domain state invariants, failure resiliency, and Clean Architecture boundaries. Evaluates semantic soundness beyond test passes. Use when reviewing code changes, auditing PRs, or verifying invariants; not for styling or lint checks.
+  Adversarial code review gate for semantic soundness, invariants, and architecture boundaries. Judges test refutability, not just passing tests. Use when reviewing diffs or PRs; not for style, lint, or test runs.
 arguments: target
 argument-hint: |-
   [target] [--diff-file <path>] [--spec <path>] [--eval-report <path>]

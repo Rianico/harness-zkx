@@ -33,6 +33,10 @@ The 300-character limit is intentionally conservative. It forces description dis
 
 Three parts are required. The negative boundary is an optional lever.
 
+### Subskill Router Budget
+
+Subskills managed by router skills (`metadata.managed-by`) enter system prompts when prompt-building extensions fold their descriptions into router blocks. Subskill descriptions target **≤205 characters** (with the same 300-character hard limit) and must adhere to the Tripartite Formula with concrete symptom keywords.
+
 ## Platform Sync Details
 
 ### Mapping Table

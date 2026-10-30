@@ -1,7 +1,7 @@
 ---
 name: onboarding
 description: >-
-  Systematically analyze a codebase at multiple scales. Use for global project onboarding (architecture map, entry points, conventions, CLAUDE.md) or for "zooming out" from a specific module to understand its neighbors and higher-level abstractions.
+  Codebase onboarding guide at repo and module scale. Maps architecture, entry points, and conventions. Use when onboarding, writing CLAUDE.md, or deciding where to start in unfamiliar code.
 argument-hint: |-
   [--zoom-out] [--global]
 ---

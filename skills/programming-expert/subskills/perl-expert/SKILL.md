@@ -1,7 +1,7 @@
 ---
 name: perl-expert
 description: >-
-  Perl 5.36+ domain expertise for CPAN modules, modern signatures, Object::Pad, Moo/Moose, taint mode, input validation, safe command execution, Test2, Test::More, prove, security review, and legacy modernization. Use for Perl implementation, debugging, testing, security hardening, and refactoring.
+  Modern Perl 5.36+ guide: CPAN modules, modern signatures, Moo/Moose, and Test2/prove. Use when writing Perl scripts, debugging runtime errors, testing, hardening security, or modernizing legacy code.
 argument-hint: |-
   [patterns|security|testing]
 metadata:

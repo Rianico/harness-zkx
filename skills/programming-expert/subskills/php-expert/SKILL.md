@@ -1,7 +1,7 @@
 ---
 name: php-expert
 description: >-
-  PHP and Laravel domain expertise: Laravel architecture, controllers, actions, services, Eloquent ORM, Form Requests, Auth/Policies, Pest/PHPUnit/factories, and security. For implementation, debugging, testing, authorization, database, and refactoring.
+  PHP and Laravel guide: controllers, Eloquent ORM, Auth/Policies, and Pest/PHPUnit testing. Use when implementing Laravel features, debugging errors, writing tests, or refactoring PHP applications.
 argument-hint: |-
   [patterns|security|testing]
 metadata:

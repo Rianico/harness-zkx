@@ -1,7 +1,7 @@
 ---
 name: ai-engineering-expert
 description: >-
-  AI engineering methodology spine for LSZ harness — context-load, skill authoring, agent design, agent-doc writing, testing, subagent-first execution. Use when creating or editing skills, agents, rules, or agent docs (SKILL.md, AGENTS.md, CLAUDE.md), or diagnosing context bloat or discovery failure.
+  AI engineering methodology spine for LSZ harness: context budgets, skill authoring, subagent design. Use when authoring skills, agents, or AGENTS.md, or fixing context bloat or weak skill discovery.
 arguments: domain
 argument-hint: |-
   skill-authoring -- loads skill design and diagnosis methodology: taxonomy, frontmatter, descriptions, invocation classes, description budgets, trigger diagnosis, progressive disclosure, rules-vs-skills boundary, platform sync, and authoring checklists

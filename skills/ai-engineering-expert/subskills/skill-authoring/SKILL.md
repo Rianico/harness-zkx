@@ -1,7 +1,7 @@
 ---
 name: skill-authoring
 description: >-
-  Methodology and structural standards for authoring LSZ skills — progressive disclosure, frontmatter schemas, trigger calibration, dependency metadata, and verification gates. Use when creating, modifying, auditing, or refactoring skills.
+  Methodology and schemas for authoring LSZ skills: progressive disclosure, frontmatter, budgets, and verification gates. Use when creating, modifying, auditing, or refactoring skills.
 metadata:
   managed-by: ai-engineering-expert
 ---
