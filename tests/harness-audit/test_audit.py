@@ -333,12 +333,15 @@ def test_cli_schema_warning_exits_nonzero(tmp_path: Path) -> None:
 
 # --- delivery-cap truncation ---
 def test_truncation_footer_requires_kb_limit_suffix() -> None:
-    # The too-strict pattern (ending at `of Z]`) must miss; the real footer must match.
+    # DELIBERATE regression-lock update (ha-fix-A): the "(N.NKB limit)" suffix is no
+    # longer the discriminator — a recognized output tail is. The bare pattern (no
+    # suffix, no path) must still miss; every real footer shape must match.
     too_strict = "[Showing lines 1-10 of 100]"
     real = "[Showing lines 1-30 of 500 (50.0KB limit). Use offset=31 to continue]"
     assert audit.TRUNCATION_FOOTER_RE.search(too_strict) is None
     assert audit.truncation_of(too_strict) is None
-    assert audit.truncation_of(real) == (500, 500 - audit.count_lines(real))
+    # Footer-derived delivered = B - A + 1 = 30; the blank separator + footer are chrome.
+    assert audit.truncation_of(real) == (500, 470)
 
 
 def test_scan_reports_produced_and_omitted(tmp_path: Path) -> None:
@@ -354,15 +357,97 @@ def test_scan_reports_produced_and_omitted(tmp_path: Path) -> None:
         ],
     )
     res = audit.scan(p, threshold=20)
-    delivered = audit.count_lines(text)
+    # DELIBERATE regression-lock update (ha-fix-A): delivered is footer-derived
+    # (B - A + 1 = 30), not count_lines(text) (which counts the footer as content).
     entry = res["oversized"][0]
-    assert entry["lines"] == delivered
+    assert entry["lines"] == 30
     assert entry["produced_lines"] == 500
-    assert entry["omitted_lines"] == 500 - delivered
-    assert res["total_omitted_lines"] == 500 - delivered
+    assert entry["omitted_lines"] == 470
+    assert res["total_omitted_lines"] == 470
     assert res["truncated_count"] == 1
     out = audit.format_text(res, keep=10)
     assert "Produced but not delivered (delivery cap)" in out
+
+
+# --- delivery-cap footer shapes (P3/P4) ---
+def _cap_session(tmp_path: Path, name: str, text: str) -> Path:
+    """One bash toolCall/result pair whose result text carries a delivery-cap footer."""
+    p = tmp_path / name
+    write_jsonl(
+        p,
+        [
+            session_header(),
+            toolcall_msg("a1", None, "c1", "seq 1 500"),
+            toolresult_msg("r1", "a1", "c1", text),
+        ],
+    )
+    return p
+
+
+def test_capped_delivered_count_excludes_footer_chrome(tmp_path: Path) -> None:
+    """P3: the blank separator + footer line must not count as delivered content.
+
+    Evidence session jsonl line 56: A=6, B=84, Z=84, count_lines(text)=81. The old
+    rule reported 3 omitted; the footer implies 84 - (84 - 6 + 1) = 5.
+    """
+    body = "\n".join(f"line {i}" for i in range(79))
+    footer = "[Showing lines 6-84 of 84 (50.0KB limit). Full output: /tmp/pi-bash-x.log]"
+    text = body + "\n\n" + footer
+    p = _cap_session(tmp_path, "chrome.jsonl", text)
+    res = audit.scan(p, threshold=20)
+    assert audit.count_lines(text) == 81  # 79 delivered + blank separator + footer
+    entry = res["oversized"][0]
+    assert entry["lines"] == 79
+    assert entry["produced_lines"] == 84
+    assert entry["omitted_lines"] == 5
+    assert res["total_omitted_lines"] == 5
+    assert res["truncated_count"] == 1
+
+
+def test_lines_cap_footer_without_kb_suffix_is_counted(tmp_path: Path) -> None:
+    """P4 shape 2: "[Showing lines A-B of Z. Full output: <path>]" (no KB suffix)."""
+    body = "\n".join(f"line {i}" for i in range(30))
+    footer = "[Showing lines 1-30 of 5000. Full output: /tmp/pi-bash-lines.log]"
+    text = body + "\n\n" + footer
+    assert audit.truncation_of(text) == (5000, 4970)
+    p = _cap_session(tmp_path, "lines-cap.jsonl", text)
+    res = audit.scan(p, threshold=20)
+    entry = res["oversized"][0]
+    assert entry["lines"] == 30
+    assert entry["produced_lines"] == 5000
+    assert entry["omitted_lines"] == 4970
+    assert res["total_produced_lines"] == 5000
+    assert res["total_omitted_lines"] == 4970
+    assert res["truncated_count"] == 1
+
+
+def test_partial_last_line_footer_is_counted(tmp_path: Path) -> None:
+    """P4 shape 3: "[Showing last <size> of line N (line is <size>). Full output: <path>]".
+
+    The footer guarantees N total lines; the last one is delivered only in part.
+    Line accounting: produced = N, the incomplete last line counts as omitted.
+    """
+    body = "\n".join(f"line {i}" for i in range(41))
+    footer = (
+        "[Showing last 50.0KB of line 42 (line is 120.0KB). Full output: /tmp/pi-bash-partial.log]"
+    )
+    text = body + "\n" + ("z" * 100) + "\n\n" + footer
+    assert audit.truncation_of(text) == (42, 1)
+    p = _cap_session(tmp_path, "partial.jsonl", text)
+    res = audit.scan(p, threshold=20)
+    entry = res["oversized"][0]
+    assert entry["lines"] == 41
+    assert entry["produced_lines"] == 42
+    assert entry["omitted_lines"] == 1
+    assert res["total_produced_lines"] == 42
+    assert res["total_omitted_lines"] == 1
+    assert res["truncated_count"] == 1
+
+
+def test_read_lines_cap_footer_without_kb_suffix_is_counted() -> None:
+    """P4: the read tool's lines-cap tail ("Use offset=") counts too."""
+    text = "x\n[Showing lines 1-10 of 100. Use offset=11 to continue]"
+    assert audit.truncation_of(text) == (100, 90)
 
 
 # --- tool census ---
@@ -416,9 +501,9 @@ def test_default_text_locks_delivery_cap_line(tmp_path: Path) -> None:
         ],
     )
     out_capped = audit.format_text(audit.scan(capped, threshold=20), keep=10)
-    # exact line + arithmetic: delivered 31, produced 500, omitted 469
+    # exact line + arithmetic: delivered 30 (B-A+1), produced 500, omitted 470
     assert (
-        "Produced but not delivered (delivery cap): 469 lines omitted across 1 tool results, all tools"
+        "Produced but not delivered (delivery cap): 470 lines omitted across 1 tool results, all tools"
         in out_capped
     )
 
@@ -433,3 +518,42 @@ def test_default_text_locks_delivery_cap_line(tmp_path: Path) -> None:
     )
     out_plain = audit.format_text(audit.scan(plain, threshold=20), keep=10)
     assert "Produced but not delivered" not in out_plain
+
+
+# --- text report is byte-identical for a truncation-free session (ha-fix-A guard) ---
+def test_text_report_byte_identical_without_truncation(tmp_path: Path) -> None:
+    """A session with no delivery-cap footer renders the same bytes as before the fix."""
+    p = tmp_path / "plain.jsonl"
+    write_jsonl(
+        p,
+        [
+            session_header(),
+            toolcall_msg("a1", None, "c1", "seq 1 25"),
+            toolresult_msg("r1", "a1", "c1", "\n".join(f"x {i}" for i in range(25)) + "\n"),
+            toolcall_msg("a2", None, "c2", "echo hi"),
+            toolresult_msg("r2", "a2", "c2", "hi\n"),
+        ],
+    )
+    out = audit.format_text(audit.scan(p, threshold=20), keep=10)
+    expected = (
+        f"session: {p}\n"
+        "records: 5  bash toolResults: 2  threshold: >20 lines\n"
+        "\n"
+        "Oversized bash outputs: 1 / 2\n"
+        "\n"
+        "  #  jsonl  lines    chars  command\n"
+        "────────────────────────────────────────────────────────────────────────\n"
+        "  1      3     25      115  seq 1 25\n"
+        "\n"
+        "Truncation preview (keep 10 head + 10 tail + marker):\n"
+        "  line 3: 25 → 21 lines (−4)\n"
+        "\n"
+        "Next turns after each oversized (with --with-context):\n"
+        "\n"
+        "Total bash output: 26 lines / 118 chars\n"
+        "Estimated savings if truncated (keep 10 each side): −4 lines / −18 chars  (~4 tokens @ 4 chars/token)\n"
+        "\n"
+        "Refine: oversized outputs above are trimtable — use --emit-filtered to write a filtered copy,\n"
+        "or adjust --threshold / --keep-head-tail to taste.\n"
+    )
+    assert out == expected
