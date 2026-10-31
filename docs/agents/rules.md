@@ -23,16 +23,18 @@ Two properties decide where a rule belongs:
 command: `rg`, `fd`, `eza`, `uv`, `pnpm`, `tsx`, `oxlint`, `oxfmt`. The file stays
 separate so a harness tree can drop it whole.
 
-`rules/common/tool-preferences.md` keeps what the extension does not cover: one
-command per call, `read` over `cat`, line endings, paths, code navigation,
-`$SKILL_DIR` resolution, and runtime build/test commands (`tsc`, `vitest`, `vite`,
-cargo, go, asdf).
+`rules/common/tool-preferences.md` keeps every preference a binary check cannot
+enforce: version pinning and workspaces (`.python-version`, `.tool-versions`,
+`pnpm -r`, `packageManager`, `.nvmrc`), one command per call, `read` over `cat`,
+line endings, paths, code navigation, `$SKILL_DIR` resolution, and runtime
+build/test commands (`tsc`, `vitest`, `vite`, cargo, go, asdf).
 
 ## Authoring rule
 
 Add a bash binary preference to `rules/common/tool-preferences-bash.md`. Add any
-other tool preference to `rules/common/tool-preferences.md`. Keep the split
-file-granular: a harness must be able to drop one file without a content edit.
+other tool preference to `rules/common/tool-preferences.md`. Split a bullet that
+mixes both: the binary choice moves, the workflow rule stays. Keep the split
+file-granular, so a harness can drop one file without a content edit.
 
 ## Blocked: dropping one file for pi
 

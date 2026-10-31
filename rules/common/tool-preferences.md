@@ -20,7 +20,8 @@
 
 Commit the project version file alongside tool configurations.
 
-- **TypeScript / Node:**
+- **Python:** Respect `.python-version` and `.tool-versions`.
+- **TypeScript / Node:** Use `pnpm -r` workspaces. Read pinned versions from `packageManager` and `.nvmrc`.
   - Type check: Run `tsc --noEmit` (`tsc -b` for parallel project builds).
   - Test: Run `vitest` or `node --test`.
   - Build: Run `vite` with Rolldown and Oxc.

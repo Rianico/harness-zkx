@@ -8,7 +8,7 @@ Which binary a shell command should use.
 
 ## Runtimes — Package Manager and Runner
 
-- **Python:** Prefer `uv` over `pip`, `poetry`, or `pipenv` (`uv run`, `uv add`, `uv sync`). Respect `.python-version` and `.tool-versions`.
-- **TypeScript / Node:** Prefer `pnpm` over `npm` or `yarn`. Use `pnpm -r` workspaces. Read pinned versions from `packageManager` and `.nvmrc`.
+- **Python:** Prefer `uv` over `pip`, `poetry`, or `pipenv` (`uv run`, `uv add`, `uv sync`).
+- **TypeScript / Node:** Prefer `pnpm` over `npm` or `yarn`.
   - Runner: Prefer `tsx` over `ts-node`.
   - Lint and format: Use `oxlint` and `oxfmt` with Prettier fallback (`biome` remains as deprecated compatibility).
