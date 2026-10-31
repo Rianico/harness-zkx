@@ -1231,6 +1231,10 @@ def main():
         fix_ok = fix_skills(root, skill_map, dry_run=args.dry_run)
         sys.exit(0 if fix_ok else 1)
     elif args.command == "rename":
+        print(
+            "DEPRECATION: 'validate-deps.py rename' is deprecated. Use 'skill.py rename' for full file moves and reference cascading.",
+            file=sys.stderr,
+        )
         rename_ok = rename_skill(args.old_name, args.new_name, root, dry_run=args.dry_run)
         sys.exit(0 if rename_ok else 1)
     elif args.command == "sync":

@@ -1,6 +1,6 @@
 # Glossary — Skill Authoring
 
-The domain model for what makes a skill great, extended with LSZ context-load policy terms. A skill exists to wrangle determinism out of a stochastic system; the root virtue is **Predictability**.
+The domain model for what makes a skill great, extended with LSZ context-load policy terms. A skill exists to wrangle determinism out of a stochastic system. The root virtue is **Predictability**.
 
 Terms are grouped by axis: **Invocation**, **Information Hierarchy**, **Steering**, **Pruning**, and **Context-Load Policy**.
 
@@ -18,12 +18,12 @@ _Avoid_: Ability, tool, capability.
 
 ### User-Invoked
 
-A skill with `disable-model-invocation: true` — invisible to the agent's autonomous selection and reachable only by the human typing its name (`/skill:name`). An enhancement beyond the open Agent Skills spec, shared by Claude Code and Pi. **Pi ≥0.84.4 semantics are the default:** `formatSkillsForPrompt` removes the entry from the `<available_skills>` XML, so the skill pays **zero context load / zero metadata cost** — the model never learns its name until the human invokes it. (Claude's gating is selection-only; description stays listed.)
+A skill with `disable-model-invocation: true`. It is invisible to autonomous selection and reachable only when the human types its name (`/skill:name`). An enhancement beyond the open Agent Skills spec, shared by Claude Code and Pi. **Pi ≥0.84.4 semantics are the default:** `formatSkillsForPrompt` removes the entry from `<available_skills>` XML. The skill pays **zero context load / zero metadata cost**. The model never learns its name until the human invokes it. (Claude's gating is selection-only. The description stays listed.)
 _Avoid_: Procedure, workflow, command.
 
 ### Description
 
-The skill's machine-readable trigger. Its mere presence _is_ the invocation axis on Claude Code: omit `disable-model-invocation` and the skill is model-invoked; set it to `true` and the skill is user-invoked (description still listed — selection-only). **On Pi ≥0.84.4**, `disable-model-invocation: true` removes the description from the `<available_skills>` XML entirely, so user-invoked skills do **not** contribute to initial metadata. The source of a model-invoked skill's context load; absent for Pi user-invoked skills.
+The skill's machine-readable trigger. Its presence defines the invocation axis on Claude Code. Omit `disable-model-invocation` and the skill is model-invoked. Set it to `true` and the skill is user-invoked (description still listed, selection-only). **On Pi ≥0.84.4**, `disable-model-invocation: true` removes the description from `<available_skills>` XML entirely. User-invoked skills do not contribute to initial metadata. This is the source of a model-invoked skill's context load. It is absent for Pi user-invoked skills.
 _Avoid_: Frontmatter, summary.
 
 ### Description Budget
@@ -33,7 +33,7 @@ _Avoid_: Description length, char limit.
 
 ### Context Pointer
 
-A reference held in the agent's context that names out-of-context material and encodes the condition for reaching it. The description is the top-level context pointer (context window → skill); pointers to disclosed files are the same object one level down.
+A reference held in the agent's context that names out-of-context material and encodes the condition for reaching it. The description is the top-level context pointer (context window → skill). Pointers to disclosed files are the same object one level down.
 _Avoid_: Link, reference, import.
 
 ### Context Load
@@ -43,22 +43,22 @@ _Avoid_: Token cost, context bloat.
 
 ### Cognitive Load
 
-The cost a user-invoked skill imposes on the human — what they must hold in their head: which skills exist and when to reach for each. What model-invocation removes by being agent-discoverable. Not a cost to minimise: it is the price of human agency.
+The cost a user-invoked skill imposes on the human. The human must remember which skills exist and when to reach for each. Model-invocation removes this burden by being agent-discoverable. Not a cost to minimise: it is the price of human agency.
 _Avoid_: Human index, burden, overhead.
 
 ### Router Skill
 
-A user-invoked skill whose job is to point at other user-invoked skills — naming each and when to reach for it — so the human has one skill to remember instead of many.
+A user-invoked skill that points at other user-invoked skills. It names each skill and when to reach for it. The human remembers one skill instead of many.
 _Avoid_: Dispatcher, menu, registry, index.
 
 ### Granularity
 
-How finely you divide skills. Finer division spends one of two loads: more model-invoked skills spend context load; more user-invoked skills spend cognitive load.
+How finely you divide skills. Finer division spends one of two loads. More model-invoked skills spend context load. More user-invoked skills spend cognitive load.
 _Avoid_: Chunking, modularity.
 
 ### Invocation Class
 
-Whether a skill is reachable by model inference (`implicit-allowed`) or only by explicit name (`explicit-only`). Declared via the `disable-model-invocation` enhancement field (beyond the open spec; Pi's zero-load semantics are the default). **Claude Code:** controls selection, not metadata presence. **Pi ≥0.84.4:** controls both — `true` removes the skill from `<available_skills>` XML.
+Whether a skill is reachable by model inference (`implicit-allowed`) or only by explicit name (`explicit-only`). Declared via the `disable-model-invocation` enhancement field beyond the open spec, with Pi zero-load semantics as default. **Claude Code:** controls selection, not metadata presence. **Pi ≥0.84.4:** controls both — `true` removes the skill from `<available_skills>` XML.
 _Avoid_: Invocation mode, trigger mode.
 
 ### Selection Mode
@@ -68,7 +68,7 @@ _Avoid_: Discovery mode, pick mode.
 
 ### Metadata Cost
 
-The context consumed by a skill's name and description being listed in the initial available-skills inventory. **Claude Code (origin):** paid even when implicit invocation is disabled — the key principle was selection ≠ metadata cost. **Pi ≥0.84.4 (advanced):** `disable-model-invocation: true` skills are omitted from `<available_skills>` XML, so on Pi metadata cost is **zero** for explicit-only skills; selection and metadata cost collapse.
+The context consumed by a skill's name and description listed in the initial available-skills inventory. **Claude Code (origin):** paid even when implicit invocation is disabled. The key principle was selection ≠ metadata cost. **Pi ≥0.84.4 (advanced):** `disable-model-invocation: true` skills are omitted from `<available_skills>` XML. On Pi, metadata cost is **zero** for explicit-only skills. Selection and metadata cost collapse.
 _Avoid_: Listing cost, inventory cost.
 
 ## Information Hierarchy
@@ -85,7 +85,7 @@ _Avoid_: Workflow, instructions, choreography.
 
 ### Reference
 
-Material the agent refers to on demand — definitions, facts, parameters, examples. When a skill has steps it is secondary to them; when a skill has none it is the entire content.
+Material the agent refers to on demand — definitions, facts, parameters, examples. When a skill has steps, reference is secondary to them. When a skill has none, reference is the entire content.
 _Avoid_: Supporting material, docs, background.
 
 ### External Reference
@@ -100,17 +100,17 @@ _Avoid_: Lazy loading, chunking.
 
 ### Co-location
 
-Keeping the material an agent needs at once in one place — a concept's definition, rules, and caveats under a single heading — so reading one part brings its neighbours with it.
+Keeping the material an agent needs at once in one place. Group a concept's definition, rules, and caveats under a single heading. Reading one part brings its neighbours with it.
 _Avoid_: Grouping, clustering, cohesion.
 
 ### 80/20 Principle
 
-A recursive content-architecture rule: a SKILL.md holds the 20% of knowledge that solves 80% of problems; references hold the deep 80%. Applied at every level — parent spine, subskills, and subskill references.
+A recursive content-architecture rule: a SKILL.md holds the 20% of knowledge that solves 80% of problems. References hold the deep 80%. Applied at every level — parent spine, subskills, and subskill references.
 _Avoid_: Pareto content, essential-first.
 
 ### Sprawl
 
-_Failure mode._ A skill that is simply too long — even an all-live, all-unique skill can sprawl. The cure is the information hierarchy: push reference down behind pointers, split by branch or sequence.
+_Failure mode._ A skill that grows too long. Even an all-live, all-unique skill can sprawl. The cure is the information hierarchy: push reference down behind pointers, split by branch or sequence.
 _Avoid_: Bloat, length, size, verbosity.
 
 ## Steering
@@ -122,7 +122,7 @@ _Avoid_: Path, case, fork.
 
 ### Leading Word
 
-A compact concept already living in the model's pretraining that the agent thinks with while running the skill. It encodes a behavioural principle in the fewest possible tokens by invoking priors the model already holds (e.g. _lesson_, _tracer bullets_). Serves predictability twice: in the body it anchors execution; in the description it anchors invocation.
+A compact concept already living in the model's pretraining that the agent thinks with while running the skill. It encodes a behavioural principle in the fewest possible tokens by invoking priors the model already holds (e.g. _lesson_, _tracer bullets_). Serves predictability twice: in the body it anchors execution. In the description it anchors invocation.
 _Avoid_: Keyword, term, motif.
 
 ### Completion Criterion
@@ -132,12 +132,12 @@ _Avoid_: Done condition, exit condition, stopping rule.
 
 ### Legwork
 
-The work an agent does behind the scenes within a single step — reading files, exploring the codebase, digging up what it needs rather than offloading to the user.
+The work an agent does behind the scenes within a single step. This includes reading files, exploring the codebase, and digging up details rather than offloading to the user.
 _Avoid_: Scope, effort, diligence, coverage.
 
 ### Post-Completion Steps
 
-The steps that follow the current step. Visible, they pull the agent forward into premature completion; the defence is to hide them by splitting.
+The steps that follow the current step. Visible, they pull the agent forward into premature completion. The defence is to hide them by splitting.
 _Avoid_: Horizon, fog of war, lookahead.
 
 ### Premature Completion
@@ -147,7 +147,7 @@ _Avoid_: Premature closure, the rush, rushing, shortcutting.
 
 ### Negation
 
-_Failure mode._ Steering by prohibition — telling the agent what _not_ to do — which drags the forbidden behaviour into context and makes it _more_ available. Cure: prompt the positive.
+_Failure mode._ Steering by prohibition — telling the agent what _not_ to do. This drags forbidden behaviour into context and makes it _more_ available. Cure: prompt the positive.
 _Avoid_: Ironic rebound, don't-prompting, the pink elephant.
 
 ## Pruning
@@ -174,7 +174,7 @@ _Avoid_: Accretion, bloat, cruft, rot.
 
 ### No-Op
 
-_Failure mode._ An instruction that changes nothing because the model already does it by default — you pay load to tell the agent what it would do anyway. The test: does a line change behaviour versus the default?
+_Failure mode._ An instruction that changes nothing because the model already does it by default. You pay load to tell the agent what it would do anyway. The test: does a line change behaviour versus the default?
 _Avoid_: Redundant instruction, restating the obvious, belaboring.
 
 ## Context-Load Policy

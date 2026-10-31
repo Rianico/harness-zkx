@@ -752,37 +752,12 @@ def do_rename_skill(old: str, new: str, repo_root: pathlib.Path, dry_run: bool) 
             for sub in sd.iterdir():
                 if sub.is_dir():
                     files_to_patch.append(sub / "SKILL.md")
-        for sub in ["oxc", "typecheck", "worktree"]:
-            p = dst / "subskills" / sub / "SKILL.md"
-            if p not in files_to_patch:
-                files_to_patch.append(p)
-            p2 = (old_dir if dry_run else dst) / "subskills" / sub / "SKILL.md"
-            if p2 not in files_to_patch:
-                files_to_patch.append(p2)
     for f in skills_dir.rglob("SKILL.md"):
         if f not in files_to_patch:
             files_to_patch.append(f)
     for f in skills_dir.rglob("README.md"):
         if f not in files_to_patch:
             files_to_patch.append(f)
-    files_to_patch.append(
-        repo_root / "skills" / "scaffold" / "subskills" / "typescript-scaffolding" / "SKILL.md"
-    )
-    files_to_patch.append(
-        repo_root
-        / "skills"
-        / "scaffold"
-        / "subskills"
-        / "typescript-scaffolding"
-        / "references"
-        / "README.md"
-    )
-    files_to_patch.append(dst / "subskills" / "oxc" / "references" / "README.md")
-    files_to_patch.append(
-        skills_dir / new / "subskills" / "oxc" / "references" / "README.md"
-        if not dry_run
-        else skills_dir / old / "subskills" / "oxc" / "references" / "README.md"
-    )
     seen_p: set[pathlib.Path] = set()
     uniq_patch: list[pathlib.Path] = []
     for f in files_to_patch:
