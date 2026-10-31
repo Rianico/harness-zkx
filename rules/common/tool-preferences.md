@@ -1,5 +1,6 @@
 # Tool Preferences
 
+- **Bash binary choices:** Package managers, runners, formatters, `rg`/`fd`/`eza`, and `uv`/`pnpm`/`tsx`/`oxlint`/`oxfmt` live in [tool-preferences-bash.md](tool-preferences-bash.md).
 - **Shell execution:**
   - **Atomic commands:** Run one command per tool call. Avoid compound chaining (`&&`, `;`). Use `&&` only when a subsequent command strictly depends on the previous exit status.
   - **No redundant navigation:** Never prefix commands with `cd <cwd>` or `cd .`. The tool runs in the current workspace directory.
@@ -9,9 +10,6 @@
 - **Line endings & non-printing characters:** Never assume GNU `cat -A` on macOS. BSD `cat` rejects `-A`. Use `cat -vet`, `gcat -A` (Homebrew coreutils), `od -c`, or `xxd`. The `-A` display-tail is GNU-only and deferred (#176).
 - **Paths:** Use absolute paths only. The working directory resets between subagent turns.
 - **Code navigation:** Use AST or treesitter for code structure overviews. Use LSP for cross-file renames and references (`rename`, `references`).
-- **Search:** Prefer `rg` over `grep` or `grep -r`. Ripgrep respects `.gitignore` rules and supports fast scoped queries with `--glob`, `-g`, or `--type`.
-- **File discovery:** Prefer `fd` over `find`. It respects ignore files and provides simple syntax (`fd <pattern> <path>`). Use `fd --type f` or `fd --type d`.
-- **Listing:** Prefer `eza` over `ls` or `tree` (`eza -la` or `eza --tree`). When `eza` is unavailable, fall back to `ls` or `tree`.
 - **Skill paths & `$SKILL_DIR`:** The system prompt's `<skills>` block defines the skill directory as `parent of SKILL.md / dirname of the path`. In skill instructions, `$SKILL_DIR` refers to this directory.
   - **Bash substitution:** Bash does not export `$SKILL_DIR` by default. Replace `$SKILL_DIR` with the resolved absolute path in shell commands. An unexpanded `$SKILL_DIR/scripts/x` evaluates to `/scripts/x` and crashes.
   - **Top-level skill:** Read `<location>` from the system prompt's `<skill>` XML block. `$SKILL_DIR` is `dirname(<location>)` (e.g. `<location>/path/to/foo/SKILL.md</location>` → `/path/to/foo`).
@@ -22,11 +20,9 @@
 
 Commit the project version file alongside tool configurations.
 
-- **Python:** Prefer `uv` over `pip`, `poetry`, or `pipenv` (`uv run`, `uv add`, `uv sync`). Respect `.python-version` and `.tool-versions`.
-- **TypeScript / Node:** Prefer `pnpm` over `npm` or `yarn`. Use `pnpm -r` workspaces. Read pinned versions from `packageManager` and `.nvmrc`.
-  - Runner: Prefer `tsx` over `ts-node`.
+- **Python:** Respect `.python-version` and `.tool-versions`.
+- **TypeScript / Node:** Use `pnpm -r` workspaces. Read pinned versions from `packageManager` and `.nvmrc`.
   - Type check: Run `tsc --noEmit` (`tsc -b` for parallel project builds).
-  - Lint and format: Use `oxlint` and `oxfmt` with Prettier fallback (`biome` remains as deprecated compatibility).
   - Test: Run `vitest` or `node --test`.
   - Build: Run `vite` with Rolldown and Oxc.
 - **Rust:** Use `cargo` for builds, tests, and checks (`cargo test`, `cargo clippy`, `cargo fmt`). Specify versions in `rust-toolchain.toml`.
