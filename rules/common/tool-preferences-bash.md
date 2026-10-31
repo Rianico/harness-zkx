@@ -1,3 +1,10 @@
+---
+agents:
+  - claude
+  - codex
+  - agy
+---
+
 # Tool Preferences — Bash Tool Choices
 
 Which binary a shell command should use.

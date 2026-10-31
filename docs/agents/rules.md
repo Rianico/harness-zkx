@@ -1,7 +1,8 @@
 # Rules — Authoring and Harness Scoping
 
-Rules are Markdown files under `rules/`. A `paths:` frontmatter list scopes a rule
-to matching project files. A rule without `paths:` is always-on.
+Rules are Markdown files under `rules/`. Frontmatter scopes a rule: `paths:` by
+touched project files, `agents:` by harness. A rule without either key is
+always-on and loads everywhere.
 
 ## Who reads which tree
 
@@ -15,13 +16,34 @@ Two properties decide where a rule belongs:
 
 1. pi walks the directories symlinked under `~/.pi/agent/rules`, so every `*.md` in
    a linked directory reaches every pi system prompt.
-2. `pi-better-rules` honours only `paths:` (`~/development/ai/pi-better-rules/src/scanner.ts`). It has no harness key and no per-file exclude.
+2. `pi-better-rules` honours `paths:` and `agents:`
+   (`~/development/ai/pi-better-rules/src/scanner.ts`). A rule reaches pi only when
+   both filters allow it.
+
+## Harness scoping
+
+`agents:` frontmatter scopes a rule to named harnesses. The harness ids are `pi`,
+`claude`, `codex`, and `agy`.
+
+| `agents:` value | Behaviour |
+| --------------- | --------- |
+| absent | every harness loads the rule |
+| list of ids | only the listed harnesses load it |
+| empty list | no harness loads it |
+| malformed | the loader warns and loads the rule |
+
+`paths:` still applies independently. A rule loads only when both filters pass.
+
+`rules/common/tool-preferences-bash.md` declares `agents: [claude, codex, agy]`.
+pi skips the bash block; the non-pi trees keep it. `Rianico/pi-better-rules` owns
+the loader change (`src/scanner.ts` `parseRule`, and `docs/rules-authoring.md`).
+Until that release lands, pi still loads the file.
 
 ## Bash tool choices vs everything else
 
 `rules/common/tool-preferences-bash.md` owns the preferred binary for a shell
-command: `rg`, `fd`, `eza`, `uv`, `pnpm`, `tsx`, `oxlint`, `oxfmt`. The file stays
-separate so a harness tree can drop it whole.
+command: `rg`, `fd`, `eza`, `uv`, `pnpm`, `tsx`, `oxlint`, `oxfmt`. It declares
+the non-pi harnesses, so pi drops the file whole.
 
 `rules/common/tool-preferences.md` keeps every preference a binary check cannot
 enforce: version pinning and workspaces (`.python-version`, `.tool-versions`,
@@ -35,24 +57,3 @@ Add a bash binary preference to `rules/common/tool-preferences-bash.md`. Add any
 other tool preference to `rules/common/tool-preferences.md`. Split a bullet that
 mixes both: the binary choice moves, the workflow rule stays. Keep the split
 file-granular, so a harness can drop one file without a content edit.
-
-## Blocked: dropping one file for pi
-
-pi and the non-pi harnesses read the same `rules/common` directory today. No file
-edit can omit the bash block for pi alone. One of two external contracts closes
-the gap:
-
-1. **Loader key — `pi-better-rules`** (local `~/development/ai/pi-better-rules`,
-   vendored at `~/.pi/agent/extensions/rules-injector.ts` and
-   `extensions/rules/scanner.ts`). `parseRule` gains an `agents:`
-   frontmatter allowlist. An absent key loads for every harness, which keeps
-   today's default. A present key loads only when the running harness id is
-   listed. pi's id is `pi`. `rules/common/tool-preferences-bash.md` then declares
-   `agents: [claude, codex, agy]`. Non-pi assemblies ignore the unknown key, so
-   they keep loading the file.
-2. **Assembly exclusion — dotfiles tree** (`~/stowfiles/dotfiles/.pi/agent/rules`).
-   Replace the `common` directory symlink with per-file symlinks that omit
-   `tool-preferences-bash.md`, or materialize a pi tree without it. This works
-   with the current loader and needs no code change.
-
-Track the chosen contract in `Rianico/harness-zkx#340`.
