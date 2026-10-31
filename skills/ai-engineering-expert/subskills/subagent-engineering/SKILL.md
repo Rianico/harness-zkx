@@ -115,6 +115,13 @@ Declare explicit tool boundaries for every subagent. Define action spaces by fun
 - **Strip Recursive Delegation:** If configuring subagents, mask out subagent dispatch tools. Enforce depth = 1.
 - **Return Structured Blockers:** If a subagent encounters an impasse, return a structured blocker to the orchestrator.
 
+### Skeptic Reviewer Archetype
+
+- **Purpose**: Clean-room adversarial review against invariants, anti-laziness, and Clean Architecture.
+- **Action space**: Read-only inspection tools (`read_file`, `grep_search`). Grant zero mutation tools and zero delegation tools.
+- **Context**: Fresh context only. Include diff and intent contract or spec only. Exclude exploratory history.
+- **Authority & Implementation**: Follow [`code-review`](../../../code-review/SKILL.md) for gate execution.
+
 ## 6. Inter-Agent Return Protocol
 
 Subagents, peer agents, and workflow callbacks return through the canonical dual-mode envelope in [inter-agent-message-contract.md](references/inter-agent-message-contract.md). The reference carries the prose template, the JSON schema, the route decision matrix, and the severity taxonomy.

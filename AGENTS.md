@@ -8,7 +8,9 @@ Plain English: short sentences (≤25 words), active voice, specific verbs, conc
 
 This project implements the methodology in `skills/ai-engineering-expert/SKILL.md`:
 
-- **Goal-Driven Development (GDD)**:
+- **Intent-Driven & Goal-Driven Development (IDD → GDD)**:
+  - **IDD for Human Intent**: Source of authority. Look before asking, excavate unknown unknowns, say defaults out loud, settle the Intent Contract before execution.
+  - **GDD for Milestone Derivation**: Derive verifiable milestone states from intent.
   - **BDD for Intent Alignment**: Bridge the intent-code gap with shared contracts (Given/When/Then).
   - **EDD for Empirical Truth**: Environmental truth is supreme authority. Trust only what the environment (tests, linters, compilers) says, never what the model claims.
 - **Formal Substrate vs. Semantic Reasoner Split**:

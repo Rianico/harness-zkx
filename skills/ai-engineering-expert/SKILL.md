@@ -105,6 +105,16 @@ Parametric recall supplies shape, not proof. Confirm specifics against a check.
 - **Invoke the Skill**: When a task needs domain methodology, invoke the installed skill for that domain. Keep the methodology out of the prompt.
 - **Separate the Scopes**: The agent owns identity and action space. The skill supplies domain methodology. The rule holds repo-wide constraints. The phase prompt covers one step.
 
+#### Core Sibling Skills
+
+Invoke installed sibling skills when a workflow enters their specialized domain:
+
+- `code-review`: Adversarial gate for invariants and semantic soundness (the Skeptic reviewer).
+- `eval-gate`: Deterministic gate execution (EDD) across polyglot stacks.
+- `keel`: Architectural governance for load-bearing boundaries and structural seams.
+- `codebase-design`: Interface depth and information hiding vocabulary (Ousterhout).
+- `tdd`: Red-green-refactor loop execution (Beck).
+
 ### Context Pressure Asymmetry
 
 Split implementation from review. Each side carries a different context load:
@@ -121,7 +131,7 @@ Every change must preserve or improve organization. Accumulation creates bloat.
 - **One concept, one canonical location**: Group by topic. Reference the canonical source instead of copying it.
 - **Signals of failure**: Files over the size budget, duplicated concepts, catch-all sections, unclear ordering.
 - **Normalize paths**: Always use forward slashes.
-- **Gate structural changes**: Run `validate-deps.py check` after a rename, move, or dependency change. Run `lint` after a metadata edit.
+- **Gate structural changes**: Run `validate-deps.py check` and `validate-deps.py refs` after a rename, move, link, or dependency change. Run `lint` after a metadata edit.
 - **Tooling Preference**: Use `rg` for content search and `fd` for file discovery. Reserve `ls` and `tree` for structure.
 
 ## Execution & Delegation Boundaries

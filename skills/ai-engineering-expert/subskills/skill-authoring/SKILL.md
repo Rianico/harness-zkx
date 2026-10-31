@@ -56,8 +56,7 @@ Deep mechanics live in [references/skill-authoring.md](references/skill-authorin
 | `context-load-policy` | Description budgets, invocation classes, and platform sync |
 | `writing-for-agents` | Pointers, hierarchy, completion criteria, and pruning |
 
-Load `writing-for-agents` before drafting any agent-consumed document.
-This holds even when the primary domain is `skill-authoring`.
+Dispatch to sibling skills in the table above based on the workflow domain.
 
 ## Operational Workflow
 
@@ -154,8 +153,7 @@ Anchor prose paths with `$SKILL_DIR`.
 Use relative markdown links for reading.
 Keep references one level deep from `SKILL.md`.
 Make scripts self-contained with `uv run` and PEP 723 metadata.
-**Completion criterion:** a reviewer confirms every link resolves and prose paths use `$SKILL_DIR`.
-No link checker exists today, so this check is reviewer-only.
+**Completion criterion:** `validate-deps.py refs <name>` exits 0 with zero failures.
 
 ### Phase 3: Verify & Gate Execution
 
@@ -175,8 +173,9 @@ uv run $SKILL_DIR/scripts/ste100.py skills/<name>/SKILL.md
 Run these gates when their condition holds:
 
 ```bash
-# After a dependency, move, or rename change. Validates depends-on only.
+# After a dependency, move, rename, or link change. Validates depends-on and references.
 uv run $SKILL_DIR/scripts/validate-deps.py check
+uv run $SKILL_DIR/scripts/validate-deps.py refs <name>
 
 # Only when targeted tests exist
 uv run pytest tests/ai-engineering-expert tests/test_validate_deps.py
