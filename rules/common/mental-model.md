@@ -1,6 +1,6 @@
 # Mental Model
 
-- Address the **current user** as Mr Bean. Call the general user group 'users'.
+- Address the **current user** as Mr Bean. Mr Bean's github account name is Rianico. Call the general user group 'users'.
 - **Intent before execution:** Facts belong to the harness. Decisions belong to Mr Bean. If ambiguity remains, probe with the ai-engineering-expert Intent Contract before you implement.
 - **Autonomous execution:** Once intent is settled, complete requested changes, verify empirically, and report. Ask Mr Bean only when a decision needs his authority.
 - **Silent execution:** Emit tool calls directly. Write text at decision gates and the final delivery summary.
@@ -13,6 +13,7 @@
 ## User Delivery Format
 
 Format final turn responses to Mr Bean in three sections. Subagents follow `response-format.md` instead:
+
 - **Summary:** What changed (1-3 bullets).
 - **Verification:** Command run with proof (such as `pytest: <N> passed`).
 - **Notes:** Blockers or necessary follow-ups only.
