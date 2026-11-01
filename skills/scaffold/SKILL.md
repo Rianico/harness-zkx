@@ -12,7 +12,7 @@ argument-hint: |-
   omitted -- loads the 80/20 spine, GDD wiring, and dispatch registry
 metadata:
   manage: [git-scaffolding, python-scaffolding, rust-scaffolding, typescript-scaffolding, ci-scaffolding]
-  depends-on: [basedpyright-expert, skill-authoring, toolchain-wiki]
+  depends-on: [skill-authoring, toolchain-wiki]
 disable-model-invocation: true
 ---
 

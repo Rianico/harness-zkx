@@ -16,11 +16,11 @@ argument-hint: |-
   php-expert -- Laravel, Eloquent, Pest
   perl-expert -- modern Perl, Moo, security
   bash-expert -- strict mode, quoting, defensive patterns, ShellCheck/Bats/shfmt, portability, templates
-  basedpyright-expert -- type checker config, diagnostics, stubs
+  basedpyright-expert -- now in the toolchain-wiki skill (type checker config, diagnostics, stubs)
   omitted -- loads router spine and dispatch table only
 metadata:
-  manage: [python-expert, typescript-expert, rust-expert, go-expert, lua-expert, cpp-expert, java-expert, kotlin-expert, swift-expert, php-expert, perl-expert, bash-expert, basedpyright-expert]
-  depends-on: [skill-authoring]
+  manage: [python-expert, typescript-expert, rust-expert, go-expert, lua-expert, cpp-expert, java-expert, kotlin-expert, swift-expert, php-expert, perl-expert, bash-expert]
+  depends-on: [skill-authoring, toolchain-wiki]
 ---
 
 # Programming Expert
@@ -114,7 +114,7 @@ Read `$SKILL_DIR/subskills/<name>/SKILL.md` for the language you need. Use `Read
 | [php-expert](subskills/php-expert/SKILL.md)                     | Laravel, Eloquent, Pest, auth/policies                                                                                          |
 | [perl-expert](subskills/perl-expert/SKILL.md)                   | modern Perl 5.36+, Moo, taint, Test2                                                                                            |
 | [bash-expert](subskills/bash-expert/SKILL.md)                   | defensive Bash, strict mode, quoting, file/temp safety, args, portability, ShellCheck/Bats                                      |
-| [basedpyright-expert](subskills/basedpyright-expert/SKILL.md)   | pyright config, diagnostics, stubs, migration                                                                                   |
+| [basedpyright-expert](../toolchain-wiki/subskills/basedpyright-expert/SKILL.md) | moved to `toolchain-wiki` — pyright config, diagnostics, stubs, migration |
 
 An omitted argument loads only the spine above. For an unknown language, use the closest subskill or escalate. Do not invent a new projection in place.
 
@@ -123,11 +123,11 @@ An omitted argument loads only the spine above. For an unknown language, use the
 - **This router:** language-idiomatic implementation, debugging, testing, review. It applies the principles above within each language.
 - **`adr`:** owns the ADR lifecycle and the full decision log process. This router owns the architecture foundations (boundaries, trade-offs, DDD) and the lightweight ADR principle.
 - **`sysops-expert` / `safety-guard`:** ops, security, privacy — not code style.
-- **`basedpyright-expert` vs `tdd-expert`:** type checker config lives here. Test strategy lives in `tdd-expert`.
+- **`basedpyright-expert` vs `tdd-expert`:** type checker config lives in `toolchain-wiki`. Test strategy lives in `tdd-expert`.
 
 ## Migration
 
-**Status: Complete.** The router manages 13 subskills: 12 language experts plus `basedpyright-expert`. Legacy top-level `skills/*-expert` directories are retired. Subskills are canonical.
+**Status: Complete.** The router manages 12 language experts. `basedpyright-expert` moved to `toolchain-wiki`. Legacy top-level `skills/*-expert` directories are retired. Subskills are canonical.
 
 Adding a new language: create `$SKILL_DIR/subskills/<new>-expert/SKILL.md` with `name: <new>-expert` and `managed-by: programming-expert`. Append it to `manage`. Run `validate-deps.py check`, `lint`, and `context-check`.
 

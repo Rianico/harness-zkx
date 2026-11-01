@@ -12,7 +12,7 @@ metadata:
 
 Domain knowledge for production Python — typed, observable, resilient, well-structured. Scale Pydantic-first type safety outward through boundaries, concurrency, persistence, and delivery.
 
-> **Pydantic-first type safety is the spine.** Every other section assumes it. For checker config, diagnostic scope, and stub authoring, delegate to **basedpyright-expert** (lives beside this skill, not inside it).
+> **Pydantic-first type safety is the spine.** Every other section assumes it. For checker config, diagnostic scope, and stub authoring, delegate to **basedpyright-expert** (managed by the `toolchain-wiki` skill).
 
 ## When to Use — Trigger Matrix
 
@@ -117,7 +117,7 @@ print(user.name)  # User, not User | None
 valid = [x for x in items if x is not None]  # list[Item] narrowed
 ```
 
-See [type-safety-pydantic.md](references/type-safety-pydantic.md) for `TypeVar` bounds, `@overload`, `Callable`/`Awaitable` protocols, generic `Result[T,E]`, and the strict-mode checklist. For layering violations, premature `model_dump`, and `Any` vs `object` patterns, see [type-safety-patterns.md](references/type-safety-patterns.md). For checker knobs and the suppression ladder, use **basedpyright-expert**.
+See [type-safety-pydantic.md](references/type-safety-pydantic.md) for `TypeVar` bounds, `@overload`, `Callable`/`Awaitable` protocols, generic `Result[T,E]`, and the strict-mode checklist. For layering violations, premature `model_dump`, and `Any` vs `object` patterns, see [type-safety-patterns.md](references/type-safety-patterns.md). For checker knobs and the suppression ladder, use **basedpyright-expert** under `toolchain-wiki`.
 
 ## 2. Configuration — Typed Settings, Fail Fast
 
@@ -444,7 +444,7 @@ SDK and service integrations require production hygiene. Manage singleton client
 
 ## Type Checker Routing
 
-For `basedpyright`/`pyright` config, `typeCheckingMode`, `baseline.json`, `report*` diagnostics, `py.typed`, and mypy migration, use **basedpyright-expert** directly. That material stays out of this skill. Local deep dives: [diagnostic-resolution.md](references/diagnostic-resolution.md) — decision framework for basedpyright and ruff warnings. [stub-files.md](references/stub-files.md) — `.pyi` authoring guide.
+For `basedpyright`/`pyright` config, `typeCheckingMode`, `baseline.json`, `report*` diagnostics, `py.typed`, and mypy migration, use **basedpyright-expert** under `toolchain-wiki`. That material stays out of this skill. Local deep dives: [diagnostic-resolution.md](references/diagnostic-resolution.md) — decision framework for basedpyright and ruff warnings. [stub-files.md](references/stub-files.md) — `.pyi` authoring guide.
 
 ## 13. Verification
 

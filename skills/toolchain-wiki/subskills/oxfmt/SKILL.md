@@ -44,7 +44,7 @@ Prettier compat: CLI follows Prettier conventions, 100% JS/TS conformance — di
 oxfmt  [-c <path>] [PATH]  --check|--write|--list-different  --migrate prettier|biome  --lsp  --stdin-filepath <PATH>
 ```
 
-Ignore: `.gitignore` + `.prettierignore` + `node_modules`; `ignorePatterns` in config.
+Ignore: `.gitignore` + `.prettierignore` + `node_modules`. Set `ignorePatterns` in config.
 
 See `$SKILL_DIR/references/oxc-raw/010-cli.md` for full flags.
 
@@ -57,7 +57,7 @@ See `$SKILL_DIR/references/oxc-raw/010-cli.md` for full flags.
 | raw          | `$SKILL_DIR/references/oxc-raw/`            | 7-page formatter scrape `2026-09-08` via `scrape.py site` — self-contained                                           |
 | linter       | `$SKILL_DIR/../oxlint/SKILL.md`             | sibling — Oxlint (lint) lives separately                                                                             |
 
-For freshness, re-scrape via `uv run skills/docs-scraper/scripts/scrape.py site https://oxc.rs/docs/guide/usage/formatter.md https://oxc.rs/docs/guide/usage/formatter/config.md https://oxc.rs/docs/guide/usage/formatter/cli.md https://oxc.rs/docs/guide/usage/formatter/config-file-reference.md https://oxc.rs/docs/guide/usage/formatter/generated-config.md --output-dir .lsz/tmp/oxc-raw --force` — see `references/oxc-raw/README.md`.
+For freshness, re-scrape via the `docs-scraper` skill → `scrape.py site https://oxc.rs/docs/guide/usage/formatter.md https://oxc.rs/docs/guide/usage/formatter/config.md https://oxc.rs/docs/guide/usage/formatter/cli.md https://oxc.rs/docs/guide/usage/formatter/config-file-reference.md https://oxc.rs/docs/guide/usage/formatter/generated-config.md --output-dir .lsz/tmp/oxc-raw --force` — see `references/oxc-raw/README.md`.
 
 ## When to Use Raw
 

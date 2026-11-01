@@ -38,12 +38,12 @@ Read `$SKILL_DIR/references/oxc-raw/003-linter.md` for intent first.
 
 - Categories left-to-right: `-D correctness -A no-debugger`, `-A all -D no-debugger` (`-A/--allow`, `-W/--warn`, `-D/--deny`).
 - Plugins built-in (no dep tree). Enable via flags (`--import-plugin`, `--react-plugin`, etc.) or `plugins` in config. Disable with `--disable-unicorn-plugin`. Ruleset 500+. List via `oxlint --rules`.
-- JS plugins (**alpha**) for ESLint compat — `jsPlugins` in config; see `$SKILL_DIR/references/oxc-raw/004-config.md` + <https://oxc.rs/docs/guide/usage/linter/js-plugins>.
+- JS plugins (**alpha**) for ESLint compat — set `jsPlugins` in config. See `$SKILL_DIR/references/oxc-raw/004-config.md` + <https://oxc.rs/docs/guide/usage/linter/js-plugins>.
 - **Custom rules:** canonical doc is <https://oxc.rs/docs/contribute/linter/adding-rules> — scrape to `.lsz/tmp/oxc-rules` then curate to `references/linter-rules.md` if needed. Current snapshot lacks `adding-rules.md` — run `scrape.py site https://oxc.rs/docs/contribute/linter/adding-rules.md --output-dir .lsz/tmp/oxc-rules --force` before writing rules.
-- Type-aware: `oxlint --type-aware` / `--type-check` (tsgo, TS 7); `options: { typeAware: true }`.
+- Type-aware: `oxlint --type-aware` / `--type-check` (tsgo, TS 7). Set `options: { typeAware: true }`.
 - Fixes: `--fix` (safe), `--fix-suggestions`, `--fix-dangerously`. Verify via `oxlint --print-config src/file.ts`.
 
-**Template:** `oxlint --init` for starter `.oxlintrc.json`; TypeScript config wraps with `defineConfig` from `oxlint`.
+**Template:** run `oxlint --init` for starter `.oxlintrc.json`. TypeScript config wraps with `defineConfig` from `oxlint`.
 
 ## CLI Cheatsheet
 
@@ -51,7 +51,7 @@ Read `$SKILL_DIR/references/oxc-raw/003-linter.md` for intent first.
 oxlint [-c <config>] [PATH]  -A/-W/-D <rule|category>  --fix/--fix-suggestions/--fix-dangerously  --ignore-pattern <PAT>  -f <format>  --type-aware  --print-config --rules
 ```
 
-Ignore: `.eslintignore` / `.gitignore` + `node_modules`; `ignorePatterns` in config.
+Ignore: `.eslintignore` / `.gitignore` + `node_modules`. Set `ignorePatterns` in config.
 
 See `$SKILL_DIR/references/oxc-raw/005-cli.md` for full flags.
 
@@ -65,7 +65,7 @@ See `$SKILL_DIR/references/oxc-raw/005-cli.md` for full flags.
 | writing rules | `references/linter-rules.md`                | _to scrape_ `https://oxc.rs/docs/contribute/linter/adding-rules.md`                                         |
 | formatter     | `$SKILL_DIR/../oxfmt/SKILL.md`              | sibling — Oxfmt (format) lives separately                                                                   |
 
-For freshness, re-scrape via `uv run skills/docs-scraper/scripts/scrape.py site https://oxc.rs/docs/guide/usage/linter.md https://oxc.rs/docs/guide/usage/linter/config.md https://oxc.rs/docs/guide/usage/linter/cli.md https://oxc.rs/docs/guide/usage/linter/config-file-reference.md https://oxc.rs/docs/guide/usage/linter/quickstart.md --output-dir .lsz/tmp/oxc-raw --force` — see `references/oxc-raw/README.md`.
+For freshness, re-scrape via the `docs-scraper` skill → `scrape.py site https://oxc.rs/docs/guide/usage/linter.md https://oxc.rs/docs/guide/usage/linter/config.md https://oxc.rs/docs/guide/usage/linter/cli.md https://oxc.rs/docs/guide/usage/linter/config-file-reference.md https://oxc.rs/docs/guide/usage/linter/quickstart.md --output-dir .lsz/tmp/oxc-raw --force` — see `references/oxc-raw/README.md`.
 
 ## When to Use Raw
 

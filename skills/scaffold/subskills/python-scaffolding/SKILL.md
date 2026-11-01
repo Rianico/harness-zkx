@@ -47,7 +47,7 @@ Byte view: `uv run $SKILL_DIR/../../scripts/scaffold.py --flavor python --dry-ru
 ## Steps — Tool Owns Determinism
 
 1. Generate: `uv run $SKILL_DIR/../../scripts/scaffold.py --flavor python --project-name <name>` (handles `--cwd`, infers name, normalizes, warns on mixed).
-2. Install: `uv sync --group dev` (pins `uv.lock`; `basedpyright` over `mypy` per the `basedpyright-expert` skill, under `programming-expert`).
+2. Install: `uv sync --group dev` (pins `uv.lock`; `basedpyright` over `mypy` per the `basedpyright-expert` skill, under `toolchain-wiki`).
 3. Proofread mixed warnings: `pyproject.toml` name/description, `AGENTS.md` 3-section preservation.
 4. Wire verification: `ruff check`, `ruff format --check`, `basedpyright`, `pytest` via `uv run`.
 5. Verify: `uv run $SKILL_DIR/../../scripts/scaffold.py --flavor python --dry-run` + `uv sync && uv run ruff check . && uv run ruff format --check . && uv run basedpyright --warnings && uv run pytest`
