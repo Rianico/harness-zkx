@@ -48,4 +48,4 @@ When deep methodology or architectural patterns are needed, use the `Read` tool 
 - **Resource management:** Read §5 Resources and `references/resource-management.md` (`AsyncExitStack`, context managers, streaming cleanup).
 - **Errors & resilience:** Read §6 Errors & Resilience, `references/error-handling.md`, and `references/resilience.md` (custom errors, tenacity retries, jitter).
 - **Testing strategy:** Read §8 Testing and `references/testing-patterns.md` (fixtures, containers over mocks, coverage).
-- **Type checker diagnostics:** Read `skills/programming-expert/subskills/basedpyright-expert/SKILL.md` for `basedpyright`/`pyright` configuration and suppression ladders.
+- **Type checker diagnostics:** Read the `basedpyright-expert` skill under `toolchain-wiki` for `basedpyright`/`pyright` configuration and suppression ladders.

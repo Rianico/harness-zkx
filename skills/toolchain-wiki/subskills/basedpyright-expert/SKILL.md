@@ -1,11 +1,11 @@
 ---
 name: basedpyright-expert
 description: >-
-  Python typing guide: annotations, stubs, inference, and narrowing. Use when typing Python code or fixing Unknown or Any reports; not for repo config (typecheck).
+  Python typing guide: annotations, stubs, inference, and narrowing. Use when typing Python code or fixing Unknown or Any reports; not for repo config (toolchain-wiki).
 argument-hint: |-
   [topic]
 metadata:
-  managed-by: programming-expert
+  managed-by: toolchain-wiki
 ---
 
 # Basedpyright Expert

@@ -8,7 +8,7 @@ argument-hint: |-
   [implementation-area]
 ---
 
-# LSP Guideline
+# LSP
 
 Key implementation patterns and pitfalls for LSP 3.17. Use when implementing diagnostic handling, version tracking, progress streaming, or server lifecycle management.
 
@@ -251,7 +251,7 @@ Don't await it. Results arrive via `$/progress` notifications using `partialResu
 
 ## Reference Files
 
-`reference/` contains LSP 3.17 spec excerpts. Start with `reference/INDEX.md`.
+`references/` contains LSP 3.17 spec excerpts. Start with `references/INDEX.md`, then use [cheatsheet.md](cheatsheet.md) for decision rules and smells.
 
 ---
 

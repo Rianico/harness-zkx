@@ -45,12 +45,12 @@ print(env.get_template("page.html").render(users=users))
 
 ## Authoring Rules
 
-1. Build the `Environment` once at application start; never per request or per render.
+1. Build the `Environment` once at application start. Never per request or per render.
 2. Set `autoescape=select_autoescape()` for markup. Never add `|safe` or `Markup` around user input.
 3. Reuse a loader (`FileSystemLoader`, `PackageLoader`, `DictLoader`) instead of `Template("…")` strings — only loaders enable inheritance, caching and bytecode caching.
 4. Control whitespace at `Environment` level (`trim_blocks`, `lstrip_blocks`) before sprinkling `{%- -%}` markers through templates.
-5. Use `StrictUndefined` while developing so typos fail loudly; the default `Undefined` silently prints nothing.
-6. Treat templates as untrusted input only through [sandbox](references/sandbox.md); a plain `Environment` executes arbitrary Python.
+5. Use `StrictUndefined` while developing so typos fail loudly. The default `Undefined` silently prints nothing.
+6. Treat templates as untrusted input only through [sandbox](references/sandbox.md). A plain `Environment` executes arbitrary Python.
 
 ## Verification Gates
 
@@ -95,7 +95,7 @@ print(env.get_template('page.html').render(users=[]))"
 {% include "footer.html" ignore missing %}
 ```
 
-`{% macro field(name, value='') %}…{% endmacro %}` defines reusable markup; call blocks via `{% call render_thing() %}`. Details: [inheritance](references/inheritance.md).
+`{% macro field(name, value='') %}…{% endmacro %}` defines reusable markup. Call blocks via `{% call render_thing() %}`. Details: [inheritance](references/inheritance.md).
 
 ### Most-used filters
 
@@ -180,7 +180,7 @@ Writing your own extension (Extension, Parser, AST APIs): [extensions](reference
 Raw upstream docs (authoritative for flag-level and edge-case detail): `$SKILL_DIR/references/jinja-raw/` — `001-stable`, `002-intro`, `003-api`, `004-sandbox`, `005-nativetypes`, `006-templates`, `007-extensions`, `008-integration`, `009-switching`, `010-tricks`, `011-faq`, `013-changes`.
 
 - Prose pointer: `$SKILL_DIR/references/jinja-raw/006-templates.md` (cwd unknown).
-- Markdown link: from this file `[for](references/jinja-raw/006-templates.md)`; from `references/<module>.md` the same target is the bare path `jinja-raw/006-templates.md`.
+- Markdown link: from this file `[for](references/jinja-raw/006-templates.md)`. From `references/<module>.md` the same target is the bare path `jinja-raw/006-templates.md`.
 - If a curated file conflicts with observation, raw wins.
 
 ## When Answering Questions
