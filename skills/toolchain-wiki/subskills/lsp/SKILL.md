@@ -1,7 +1,9 @@
 ---
-name: lsp-guideline
+name: lsp
 description: >-
-  LSP 3.17 guide for diagnostics and server lifecycle. Covers request/notification patterns and progress tokens. Use when building LSP servers, client integrations, or daemon tools.
+  LSP 3.17 protocol guide for server and client lifecycles. Use when debugging client integrations, handling orphaned daemon processes, fixing stale diagnostics, or streaming progress.
+metadata:
+  managed-by: toolchain-wiki
 argument-hint: |-
   [implementation-area]
 ---
@@ -61,7 +63,7 @@ await transport.stop()  # Then stop transport
 | **Lazy** (on-demand) | First LSP request | Fast daemon startup, resource efficient | First request latency spike |
 | **Eager** (at startup) | With daemon start | Server ready immediately | Slower startup, wasted resources if unused |
 
-**Recommendation**: Lazy initialization for CLI tools; eager for IDE-like persistent clients.
+**Recommendation**: Lazy initialization for CLI tools. Use eager initialization for IDE-like persistent clients.
 
 ---
 
