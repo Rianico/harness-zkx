@@ -148,7 +148,7 @@ def test_changelog_gate_copies_the_verbatim_ledger_floor_block() -> None:
     )
 
 
-# --- the squash-subject precondition and the dedupe marker (#311, #312) ---------------------
+# --- the title-edit retrigger and the dedupe marker (#311, #312) -----------------------------
 
 
 def test_changelog_check_reruns_on_a_title_edit() -> None:
@@ -173,22 +173,3 @@ def test_the_comment_body_and_the_dedupe_probe_share_one_marker() -> None:
     assert "'Changelog ledger floor failed'" not in text, "the stale probe phrase survived"
     assert text.index("MARKER,") < text.index("c.body.includes(MARKER)")
     assert "const MARKER" in TWIN_CHANGELOG_CHECK.read_text(encoding="utf-8")
-
-
-def test_the_squash_subject_step_asserts_the_repo_setting() -> None:
-    """The ledger gate reads the PR title, so the repo must squash with it (#312).
-
-    Mutation: make the step unconditional -> a main push reads a null pull_request
-    event and the job fails for the wrong reason.
-    """
-    for path in (CHANGELOG_CHECK, TWIN_CHANGELOG_CHECK):
-        steps = _doc(path)["jobs"]["check"]["steps"]
-        matches = [s for s in steps if s.get("name") == "Squash subject is the PR title"]
-        assert len(matches) == 1, f"{path} has no single squash-subject step"
-        step = matches[0]
-        assert step["if"] == "github.event_name == 'pull_request'", f"{path}: not PR-only"
-        assert step["env"] == {"GH_TOKEN": "${{ github.token }}"}, f"{path}: no GH_TOKEN"
-        run = step["run"]
-        assert "squash_merge_commit_title" in run, f"{path}: does not name the setting"
-        assert "PR_TITLE" in run, f"{path}: does not assert the expected value"
-        assert "remedy:" in run, f"{path}: carries no remedy"

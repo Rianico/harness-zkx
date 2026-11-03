@@ -49,6 +49,8 @@ uv run $SKILL_DIR/scripts/pr.py --title '…' --watch --merge --body-file .lsz/g
 
 `--check` is the preflight and drafting pass. It runs the Title Budget, Title Shape, Squash Shape, Body Required, Fail-Closed Squash Message, and Raw Token gates. Facts go to stdout — counts, title facts, the squash preview, and one curation hint (`--json` for machine reading) — commentary goes to stderr, and nothing is persisted except the body-less scaffold below. Run it before creating a PR, and again after each description edit. Before a PR exists, no PR number is known, so the title length check runs against the worst case — the title plus a five-digit ` (#99999)` suffix — and refuses when that exceeds the budget; both lengths are always reported. Re-run `--check` after creating the PR to validate any declared Links section against the known PR link.
 
+The squash subject must be the PR title: `--check` reads `squash_merge_commit_title` and refuses a readable value not `PR_TITLE`, naming the value and the patch remedy. An unreadable value — a token without repository settings, CI's or a contributor's — prints one advisory line and continues.
+
 ```bash
 uv run $SKILL_DIR/scripts/pr.py --check --body-file .lsz/gh-router/feat-x.md
 uv run $SKILL_DIR/scripts/pr.py --check --out custom/leaf.md

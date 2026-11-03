@@ -464,6 +464,11 @@ def main(argv: list[str] | None = None) -> int:
         if options.check:
             # Advisory-only: a Closes #N on an already-closed issue warns, never refuses.
             _ = warn_closed_issues(repo, body, squash_override or "")
+            # The squash subject must be the PR title: the ledger gate reads the PR
+            # title, so any other setting makes the two disagree silently. The read is
+            # permission-gated, so an unreadable setting advises and continues.
+            _github.check_squash_setting(repo)
+
             return run_draft_phase(
                 options=options,
                 repo=repo,

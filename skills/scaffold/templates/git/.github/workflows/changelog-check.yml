@@ -105,23 +105,3 @@ jobs:
               issue_number: pr,
               body
             });
-      # The squash subject must be the PR title: the ledger gate reads the
-      # PR title as the squash subject, so any other setting makes the two
-      # disagree silently. Asserted after the comment step, so a setting
-      # failure never posts the ledger comment, and PR-only, so a main push
-      # never reads a null pull_request event.
-      - name: Squash subject is the PR title
-        if: github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          actual=$(gh api "repos/${{ github.repository }}" \
-            --jq .squash_merge_commit_title)
-          if [ "$actual" != "PR_TITLE" ]; then
-            echo "::error::squash_merge_commit_title='$actual', want PR_TITLE"
-            echo "The ledger gate reads the PR title as the squash subject, so"
-            echo "another setting makes the two disagree."
-            echo "remedy: gh api -X PATCH repos/${{ github.repository }}" \
-              "-f squash_merge_commit_title=PR_TITLE"
-            exit 1
-          fi
