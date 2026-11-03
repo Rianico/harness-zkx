@@ -328,7 +328,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Continuous Integration
 
 * **check:** run `changelog-gate.py ticket` as gate 1, so a ledger shape drift fails locally before a PR sees it, and derive the banner count from one `TOTAL` constant so a stale `/8` cannot outlive a new gate (#347)
-* **changelog-check:** dedupe the failure comment through one `MARKER` constant shared by the posted body and the dedupe probe, re-audit a retitled PR via `edited`, and assert `squash_merge_commit_title == PR_TITLE` in a PR-only step that prints the actual value and the remedy (#347)
+* **changelog-check:** dedupe the failure comment through one `MARKER` constant shared by the posted body and the dedupe probe, re-audit a retitled PR via `edited`, and move the `squash_merge_commit_title == PR_TITLE` assertion into `pr.py --check`, where the operator's token can read the permission-gated field: a readable mismatch refuses with the actual value and the remedy, an unreadable field prints one advisory line and continues (#347)
 * **cli:** guard the declared CLI surfaces against their parsers (#120)
 * **ci:** gate lint and formatting in the verify job (#113)
 * **changelog:** retire the pre-push guard from the scaffold and ship the ledger floor (#98)

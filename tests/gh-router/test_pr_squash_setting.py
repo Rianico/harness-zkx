@@ -98,7 +98,19 @@ def test_check_refuses_a_readable_wrong_squash_setting(
     assert "commits:" not in captured.out, "the guard runs before the draft phase"
 
 
-@pytest.mark.parametrize("unreadable", ["empty", "failed"])
+def _unreadable_fake(shape: str) -> _FakeRun:
+    """A fake whose squash-setting read is unreadable in one of three shapes.
+
+    `empty` is the permission-gated reduced object (a successful read that prints
+    nothing), `null` is a literal JSON `null` on stdout, and `failed` is a non-zero
+    `gh api`.
+    """
+    if shape == "failed":
+        return _FakeRun(squash_rc=1)
+    return _FakeRun(squash_setting="" if shape == "empty" else "null")
+
+
+@pytest.mark.parametrize("unreadable", ["empty", "null", "failed"])
 def test_check_advises_and_proceeds_when_the_setting_is_unreadable(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -107,13 +119,16 @@ def test_check_advises_and_proceeds_when_the_setting_is_unreadable(
 ) -> None:
     """An unreadable setting prints one advisory line and `--check` continues (exit 0).
 
-    Covers both unreadable shapes: a successful read that returns nothing (the
-    permission-gated reduced object), and a failed read.
+    Covers all three unreadable shapes: a successful read that returns nothing (the
+    permission-gated reduced object), a successful read of a literal JSON `null`, and a
+    failed read.
 
     Mutation: make the advisory a refusal -> a contributor's token, or CI's
-    `contents: read` token, blocks every run instead of printing one line.
+    `contents: read` token, blocks every run instead of printing one line. Reading a
+    literal `null` as a value instead of as unreadable fires the refusal path, so this
+    case's exit code turns 1 and the advisory disappears.
     """
-    fake = _FakeRun(squash_setting="") if unreadable == "empty" else _FakeRun(squash_rc=1)
+    fake = _unreadable_fake(unreadable)
 
     rc = _run_check(monkeypatch, tmp_path, fake)
 
@@ -121,6 +136,7 @@ def test_check_advises_and_proceeds_when_the_setting_is_unreadable(
     assert rc == 0, (captured.out, captured.err)
     assert ADVISORY in captured.err
     assert "commits:" in captured.out, "the draft phase still runs"
+    assert github_mod.read_squash_setting("test/repo") is None, "null reads as unreadable too"
     assert '"code": "squash_setting"' not in captured.out
 
 

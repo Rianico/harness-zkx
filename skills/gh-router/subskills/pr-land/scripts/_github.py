@@ -436,7 +436,7 @@ def default_branch(repo: str, cwd: Path | None = None) -> str | None:
 
 
 def read_squash_setting(repo: str, cwd: Path | None = None) -> str | None:
-    """The repo's squash-subject setting, or None when the token cannot read it.
+    """The repo's squash-subject setting, or None when it is not readable as one.
 
     `squash_merge_commit_title` is permission-gated: a token without repository
     settings read (CI's `GITHUB_TOKEN`, or a contributor's) sees the field absent —
@@ -452,7 +452,12 @@ def read_squash_setting(repo: str, cwd: Path | None = None) -> str | None:
         return None
     if res.returncode != 0:
         return None
-    return res.stdout.strip() or None
+    actual = res.stdout.strip()
+    # `gh api --jq` prints nothing for an absent field but `null` for a JSON-null one;
+    # neither is a setting, so both read as unreadable.
+    if not actual or actual == "null":
+        return None
+    return actual
 
 
 def check_squash_setting(repo: str, cwd: Path | None = None) -> None:
