@@ -106,6 +106,21 @@ class ChecksState:
 
 
 @dataclass
+class ReviewState:
+    """The `reviews` predicate: unresolved thread count plus the read's own state.
+
+    `unknown` is a distinct state, never a zero. A failed GraphQL read must not
+    look settled, because `unresolved=0` is exactly what the merge gate accepts.
+    """
+
+    state: str = "none"
+    unresolved: int = 0
+
+    def to_dict(self) -> dict[str, object]:
+        return {"state": self.state, "unresolved": self.unresolved}
+
+
+@dataclass
 class Predicates:
     """The derived landing predicates; `to_dict()` emits the pinned shape."""
 
@@ -122,6 +137,7 @@ class Predicates:
     head_pushed: bool = False
     checks: ChecksState = field(default_factory=ChecksState)
     mergeable: str = "unknown"
+    reviews: ReviewState = field(default_factory=ReviewState)
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -138,6 +154,7 @@ class Predicates:
             "head_pushed": self.head_pushed,
             "checks": self.checks.to_dict(),
             "mergeable": self.mergeable,
+            "reviews": self.reviews.to_dict(),
         }
 
 
@@ -535,6 +552,7 @@ def build_transitions(
                 "pr.py --merge --squash-message-file <path>",
                 [
                     "checks green",
+                    "reviews resolved",
                     "mergeable",
                     "title gate",
                     "squash message supplied",
@@ -705,6 +723,20 @@ def collect_status(
                 f"read checks for PR #{pr_number}",
             )
 
+    reviews = ReviewState()
+    if pr_state == "open" and pr_number is not None:
+        try:
+            threads = _github.fetch_review_threads(repo, pr_number, cwd=cwd)
+        except PrError as exc:
+            note_gh(exc, f"read review threads for PR #{pr_number}")
+            # A failed read is `unknown`, never the `none` default: the merge gate
+            # accepts a zero count, so an unread list must not look settled.
+            reviews = ReviewState(state="unknown")
+        else:
+            reviews = ReviewState(
+                state="unresolved" if threads else "green", unresolved=len(threads)
+            )
+
     mergeable = "unknown"
     merge_verdict = "unknown"
     if pr_state == "open" and pr_number is not None:
@@ -788,6 +820,16 @@ def collect_status(
                 f"PR #{pr_number}",
             )
         )
+    if reviews.state == "unresolved" and pr_number is not None:
+        refusals.append(
+            make_refusal(
+                "reviews_unresolved",
+                f"{reviews.unresolved} unresolved review thread(s) on PR #{pr_number}",
+                "resolve or reply to each thread, then re-run; `pr.py --reviews` lists them",
+                f"PR #{pr_number}",
+            )
+        )
+
     if pr_state == "open" and mergeable == "conflicting" and pr_number is not None:
         refusals.append(
             make_refusal(
@@ -855,6 +897,7 @@ def collect_status(
             head_pushed=head_pushed,
             checks=checks,
             mergeable=mergeable,
+            reviews=reviews,
         ),
         failure_states=failure_states,
         artifact=ArtifactState(path=display, stale=stale),
@@ -870,6 +913,7 @@ def render_text(report: StatusReport) -> str:
     """Human-readable `--status` facts for stdout (commentary stays on stderr)."""
     predicates = report.predicates
     checks = predicates.checks
+    reviews = predicates.reviews
     artifact = report.artifact
     title = report.title
     lines = [
@@ -886,6 +930,7 @@ def render_text(report: StatusReport) -> str:
         f"stamped={str(predicates.changelog_stamped).lower()} "
         f"head_pushed={str(predicates.head_pushed).lower()} "
         f"checks={checks.state} {checks.ok}/{checks.total} "
+        f"reviews={reviews.state} {reviews.unresolved} unresolved "
         f"mergeable={predicates.mergeable}",
         f"failure_states: {', '.join(str(entry) for entry in report.failure_states) if report.failure_states else 'none'}",
         f"artifact: {artifact.path} stale={str(artifact.stale).lower()}",

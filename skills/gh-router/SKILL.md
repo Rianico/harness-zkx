@@ -8,7 +8,7 @@ argument-hint: |-
   git-diff-digest <spec> [PATH_FILTER] [--commit SHA] [--file PATH] [--hunks] [--max-lines N] [--yaml|--json] -- brief a commit range
   pr-enhance [base|pr_url] -- PR description generation
   pr-refine <number> -- take over a contributor's PR (Flow A/B), then hand to pr-land
-  pr-land [--watch --merge] -- create PR, watch checks, squash-merge
+  pr-land [--reviews] [--watch --merge] -- create PR, inspect reviews, watch checks, squash-merge
 metadata:
   manage: [gh-release, pr-land, pr-enhance, pr-refine, pr-conflict, git-diff-digest]
 ---
@@ -35,6 +35,7 @@ Boundary: `scripts/state.sh` is human-facing orientation (its `gh pr view` query
 | Triage unmerged conflicts | `uv run $SKILL_DIR/subskills/pr-conflict/scripts/extract_conflict_context.py` | `repo: <root>` · `conflicted files: N` · one row per path: path, conflict type, stages, hunk count |
 | Inspect one conflict | `uv run $SKILL_DIR/subskills/pr-conflict/scripts/extract_conflict_context.py --file <path>` | `operation:`, `author intent:` (ours/theirs sha, author, subject), compact hunks |
 | **3: Landing & CI** | | |
+| Collect unresolved reviews | `uv run $SKILL_DIR/subskills/pr-land/scripts/pr.py --reviews [--json]` | `<path>:<line> [<author>]` plus body · `reviews: N unresolved` (exit 0 clean, 1 unresolved or no PR) |
 | Create PR, watch checks, merge | `uv run $SKILL_DIR/subskills/pr-land/scripts/pr.py --title … --watch --merge --body-file .lsz/gh-router/<slug>.md --squash-message-file .lsz/gh-router/squash_message.md` | `PR <url>` → `checks success` → `merged #N (squash) to main` |
 | Watch a workflow | `$SKILL_DIR/scripts/ci.sh watch <run-id>` | quiet poll → `✔ run <id> completed: success`, else `✘ run <id> <conclusion>` exit 1 |
 | Recent runs and step costs | `$SKILL_DIR/scripts/ci.sh runs [--branch B] [--limit N]` | one line per run (`#<id> <name> <conclusion> <dur>s`) plus its slowest steps (`Run all tests=15s`) |

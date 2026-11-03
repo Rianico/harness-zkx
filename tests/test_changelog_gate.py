@@ -65,6 +65,42 @@ def test_ledger_passes_on_a_well_formed_ledger(tmp_path: Path) -> None:
     assert result.stdout.strip() == "ledger: pass"
 
 
+def test_ticket_reports_an_invented_section_without_a_pr(tmp_path: Path) -> None:
+    """Section names need no PR, so the PR-free floor must catch them (#345).
+
+    Mutation: `check_ticket` returns only `check_entries + check_entry_shape` -> the
+    invented `### Tooling` heading passes and this assertion fails.
+    """
+    repo = _repo(
+        tmp_path,
+        _ledger("* **thing:** add a thing (#1)", section="Tooling"),
+        ["feat(thing): add a thing (#1)"],
+    )
+
+    result = _run(repo, "ticket")
+
+    assert result.returncode == 1, result.stderr
+    assert "[section-integrity] unknown section '### Tooling'" in result.stderr
+
+
+def test_ledger_reports_the_section_finding_exactly_once(tmp_path: Path) -> None:
+    """Both modes call one helper, so `ledger` must not double-report (#345).
+
+    Mutation: keep the individual calls beside the new helper -> the finding appears
+    twice and the count assertion fails.
+    """
+    repo = _repo(
+        tmp_path,
+        _ledger("* **thing:** add a thing (#1)", section="Tooling"),
+        ["feat(thing): add a thing (#1)"],
+    )
+
+    result = _run(repo, "ledger")
+
+    assert result.returncode == 1, result.stderr
+    assert result.stderr.count("unknown section '### Tooling'") == 1
+
+
 # --- well-formedness ----------------------------------------------------------------------
 
 

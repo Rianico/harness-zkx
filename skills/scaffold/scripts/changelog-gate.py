@@ -457,7 +457,7 @@ def check_ledger(
         return findings + [
             Finding("section-integrity", f"no '{UNRELEASED_HEADING}' block to check")
         ]
-    findings += check_sections(block) + check_entries(block) + check_entry_shape(block)
+    findings += check_block(block)
     sections = parse_unreleased_sections(content)
     findings += check_duplicates(sections)
 
@@ -527,12 +527,24 @@ def check_ledger(
     return findings
 
 
+def check_block(block: str) -> list[Finding]:
+    """The pre-provenance floor: section names, entry well-formedness, entry shape.
+
+    One home for the three checks that read nothing but the `## [Unreleased]`
+    block. A PR number is not an input, so the same floor is reachable from
+    `ticket` before the PR exists and from `ledger` after it does. Both modes
+    call this once, so a finding is never reported twice.
+    """
+    return check_sections(block) + check_entries(block) + check_entry_shape(block)
+
+
 def check_ticket(changelog: Path) -> list[Finding]:
     """The pre-merge audit phase: the shape-only floor over `## [Unreleased]`.
 
     Runs after the squash (ADR-0016 ticket boundary), where provenance is not yet
     resolvable: a missing ledger or block passes, the curated entries themselves must
-    be well-formed and inside the shape budget.
+    be well-formed, live under a conventional-commit section name, and sit inside
+    the shape budget. Section names need no PR, so they are checked here too.
     """
     if not changelog.exists():
         return []
@@ -543,7 +555,7 @@ def check_ticket(changelog: Path) -> list[Finding]:
     block = unreleased_block(content)
     if block is None:
         return []
-    return check_entries(block) + check_entry_shape(block)
+    return check_block(block)
 
 
 def exit_code(findings: list[Finding]) -> int:

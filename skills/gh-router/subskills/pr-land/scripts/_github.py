@@ -64,10 +64,14 @@ __all__ = [
     "failing_run_ids",
     "fetch_merge_state",
     "fetch_mergeability",
+    "fetch_review_threads",
     "finalize_squash_message",
     "issue_state",
     "MergeFetch",
     "MergeObservation",
+    "REVIEW_THREAD_PAGES_MAX",
+    "REVIEW_THREAD_QUERY",
+    "ReviewThread",
     "merge_pr",
     "merge_state_verdict",
     "pr_conflict_verdict",
@@ -829,6 +833,115 @@ def parse_checks(payload: str) -> tuple[str, int, int]:
     return state, ok, total
 
 
+REVIEW_THREAD_PAGES_MAX = 10
+REVIEW_THREAD_QUERY = """
+query($owner: String!, $name: String!, $number: Int!, $cursor: String) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      reviewThreads(first: 100, after: $cursor) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          id
+          isResolved
+          isOutdated
+          path
+          line
+          comments(first: 1) { nodes { author { login } body } }
+        }
+      }
+    }
+  }
+}
+"""
+
+
+@dataclass(frozen=True, slots=True)
+class ReviewThread:
+    """One unresolved review thread: the disposition target for the fix loop.
+
+    `line` is nullable because GitHub drops it when the cited hunk moved. The
+    disposition still applies, so the thread stays in the list with `outdated`
+    set rather than disappearing.
+    """
+
+    thread_id: str
+    path: str
+    line: int | None
+    author: str
+    body: str
+    outdated: bool = False
+
+
+def fetch_review_threads(repo: str, num: str, cwd: Path | None = None) -> list[ReviewThread]:
+    """Read every unresolved review thread on PR `num`, paginated.
+
+    Resolved threads need no disposition and are dropped. A failed read, an
+    unreadable payload, or the page cap raises `PrError`: a partial read must
+    never present as "no unresolved threads", because the merge gate and the
+    loop's stop condition both read this list.
+    """
+    owner, _, name = repo.partition("/")
+    if not owner or not name:
+        raise PrError(f"cannot read review threads: {repo!r} is not an owner/name slug")
+    cursor: str | None = None
+    threads: list[ReviewThread] = []
+    for _ in range(REVIEW_THREAD_PAGES_MAX):
+        args = [
+            "gh",
+            "api",
+            "graphql",
+            "-f",
+            f"query={REVIEW_THREAD_QUERY}",
+            "-f",
+            f"owner={owner}",
+            "-f",
+            f"name={name}",
+            "-F",
+            f"number={num}",
+        ]
+        if cursor:
+            args.extend(["-f", f"cursor={cursor}"])
+        res = run_command(args, cwd=cwd)
+        if res.returncode != 0:
+            raise PrError(
+                f"failed to read review threads for PR #{num}: "
+                f"{res.stderr.strip() or 'gh api graphql failed'}"
+            )
+        try:
+            payload = json.loads(res.stdout)
+            listing = payload["data"]["repository"]["pullRequest"]["reviewThreads"]
+            nodes = listing["nodes"]
+            page = listing["pageInfo"]
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            raise PrError(f"unreadable review-thread payload for PR #{num}: {exc}") from exc
+        for node in nodes:
+            if node.get("isResolved"):
+                continue
+            comments = (node.get("comments") or {}).get("nodes") or []
+            first = comments[0] if comments else {}
+            threads.append(
+                ReviewThread(
+                    thread_id=str(node.get("id") or ""),
+                    path=str(node.get("path") or ""),
+                    line=node.get("line"),
+                    author=((first.get("author") or {}).get("login")) or "ghost",
+                    body=str(first.get("body") or ""),
+                    outdated=bool(node.get("isOutdated")),
+                )
+            )
+        if not page.get("hasNextPage"):
+            return threads
+        cursor = page.get("endCursor")
+        if not cursor:
+            raise PrError(
+                f"review-thread pagination for PR #{num} reported another page with no cursor"
+            )
+    raise PrError(
+        f"review threads for PR #{num} exceed {REVIEW_THREAD_PAGES_MAX * 100}; "
+        "refusing to treat a partial read as settled"
+    )
+
+
 def pr_conflict_verdict(mergeable: str | None, state: str | None) -> str:
     """Verdict from the (mergeable, state) pair; kept separate from `merge_state_verdict`.
 
@@ -1399,6 +1512,22 @@ def merge_pr(
                 )
             ],
         )
+    # The loop's second stop condition: an unresolved thread owes a disposition.
+    # A failed read raises PrError, so an unread list can never pass for settled.
+    unresolved = fetch_review_threads(repo, num, cwd=cwd)
+    if unresolved:
+        raise RefusalError(
+            f"refusing to merge: {len(unresolved)} unresolved review thread(s) on PR #{num}",
+            refusals=[
+                make_refusal(
+                    "reviews_unresolved",
+                    f"{len(unresolved)} unresolved review thread(s) on PR #{num}",
+                    "resolve or reply to each thread, then re-run; `pr.py --reviews` lists them",
+                    f"PR #{num}",
+                )
+            ],
+        )
+
     header = f"{title} (#{num})"
     merge_args: list[str] = [
         "-f",

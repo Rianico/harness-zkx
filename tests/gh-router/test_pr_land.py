@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.gh_helpers import review_threads_payload
 from tests.git_env import git_env
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -257,7 +258,9 @@ def test_merge_pr_never_omits_commit_message(
     def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         calls.append(list(cmd))
         joined = " ".join(cmd)
-        if "mergeable_state" in joined:
+        if "graphql" in joined:
+            out = review_threads_payload()
+        elif "mergeable_state" in joined:
             out = "clean"
         elif "api user" in joined:
             out = "merger"
@@ -378,7 +381,9 @@ def test_merge_pr_override_counts_as_supplied_without_the_flag(
     def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         calls.append(list(cmd))
         joined = " ".join(cmd)
-        if "mergeable_state" in joined:
+        if "graphql" in joined:
+            out = review_threads_payload()
+        elif "mergeable_state" in joined:
             out = "clean"
         elif "api user" in joined:
             out = "merger"
@@ -1733,6 +1738,8 @@ class _MergeRun:
             out = "merger\n"
         elif "/commits" in joined:
             out = "ghuser\tWf Zyx\twf@x.io\n"
+        elif "graphql" in joined:
+            out = review_threads_payload() + "\n"
         elif "/merge" in joined:
             out = '{"merged":true}\n'
         return subprocess.CompletedProcess(cmd, rc, out, err)

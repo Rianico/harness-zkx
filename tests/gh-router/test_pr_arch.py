@@ -40,6 +40,7 @@ SIBLING_MODULES = [
     "_check.py",
     "_draft.py",
     "_status.py",
+    "_reviews.py",
     "_changelog.py",
     "_sync.py",
 ]
