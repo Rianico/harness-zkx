@@ -102,7 +102,7 @@ TITLE_BUMP: dict[str, int] = {
     "build": BUMP_NONE,
     "ci": BUMP_NONE,
 }
-BREAKING_ENTRY_RE = re.compile(r"\(BREAKING CHANGE\)\s*$")
+BREAKING_ENTRY_RE = re.compile(r"\(BREAKING CHANGE\)(?:\s*\(#\d+\))?\s*$")
 
 KNOWN_SECTIONS = frozenset(
     {
@@ -179,9 +179,16 @@ def parse_unreleased_sections(content: str) -> dict[str, list[str]]:
 
 
 def check_sections(block: str) -> list[Finding]:
+    """Section names, orphan bullets, and prose inside a section.
+
+    A section holds bullets and the indented lines that continue them; a blank
+    line ends a continuation. Any other non-blank line is prose the renderer
+    would never emit, so it is reported instead of shipping unread.
+    """
     findings: list[Finding] = []
     current: str | None = None
     seen: set[str] = set()
+    continued = False
     for line in block.splitlines():
         heading = SECTION_HEADING_RE.match(line)
         if heading:
@@ -198,11 +205,29 @@ def check_sections(block: str) -> list[Finding]:
                     )
                 )
             current = name
+            continued = False
             continue
-        if BULLET_RE.match(line) and current is None:
+        if BULLET_RE.match(line):
+            if current is None:
+                findings.append(
+                    Finding("section-integrity", f"entry outside any section: {line.strip()!r}")
+                )
+            continued = True
+            continue
+        if not line.strip():
+            continued = False
+            continue
+        if line[:1].isspace() and continued:
+            continue  # an indented line continues the bullet above it
+        if current is not None:
             findings.append(
-                Finding("section-integrity", f"entry outside any section: {line.strip()!r}")
+                Finding(
+                    "section-integrity",
+                    f"prose inside '### {current}': {line.strip()!r} — a section holds bullets "
+                    "and their indented continuations only",
+                )
             )
+        continued = False
     return findings
 
 

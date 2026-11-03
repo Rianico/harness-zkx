@@ -1099,3 +1099,122 @@ def test_ledger_stays_silent_without_a_squash_title(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     assert "title-grammar" not in result.stderr
+
+
+# --- prose inside a section, and the breaking-marker order (#308, #310) ---------------------
+
+
+def test_ticket_blocks_prose_inside_a_section(tmp_path: Path) -> None:
+    """A non-bullet line inside a section ships unread; it is a finding, not invisible (#308).
+
+    Mutation: report only a bullet outside a section -> the prose line passes the floor.
+    """
+    text = (
+        "# Changelog\n\n## [Unreleased]\n\n### Features\n\n"
+        "* **thing:** add a thing (#1)\n"
+        "This paragraph is not an entry.\n"
+    )
+    repo = _repo(tmp_path, text, ["feat(thing): add a thing (#1)"])
+
+    result = _run(repo, "ticket")
+
+    assert result.returncode == 1, result.stderr
+    assert "[section-integrity]" in result.stderr
+    assert "This paragraph is not an entry." in result.stderr
+
+
+def test_ticket_accepts_an_indented_continuation(tmp_path: Path) -> None:
+    """An indented line after a bullet continues it; a wrapped entry stays one entry (H3).
+
+    Mutation: report every non-bullet line -> the wrapped entry is misread as prose.
+    """
+    text = (
+        "# Changelog\n\n## [Unreleased]\n\n### Features\n\n"
+        "* **thing:** add a thing (#1)\n"
+        "  and its wrapped tail\n"
+    )
+    repo = _repo(tmp_path, text, ["feat(thing): add a thing (#1)"])
+
+    result = _run(repo, "ticket")
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_ticket_blocks_an_indented_line_after_a_blank_line(tmp_path: Path) -> None:
+    """A blank line ends the continuation, so a later indented line is prose (H3)."""
+    text = (
+        "# Changelog\n\n## [Unreleased]\n\n### Features\n\n"
+        "* **thing:** add a thing (#1)\n"
+        "\n"
+        "  orphaned indented text\n"
+    )
+    repo = _repo(tmp_path, text, ["feat(thing): add a thing (#1)"])
+
+    result = _run(repo, "ticket")
+
+    assert result.returncode == 1, result.stderr
+    assert "orphaned indented text" in result.stderr
+
+
+def test_ticket_passes_this_repos_real_changelog() -> None:
+    """H3: the new prose rule must stay silent on the real ledger (zero indented lines)."""
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "ticket"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "ticket: pass"
+
+
+def test_ledger_reads_the_breaking_marker_before_the_pr_number(tmp_path: Path) -> None:
+    """`(BREAKING CHANGE) (#96)` is breaking too; only the end anchor keeps it honest (#310).
+
+    Mutation: anchor with `\\(BREAKING CHANGE\\)\\s*$` alone -> this order stops being breaking.
+    """
+    repo = _repo(
+        tmp_path,
+        _ledger("* **store:** break a thing (BREAKING CHANGE) (#96)"),
+        ["feat(store): break a thing (#96)"],
+    )
+
+    result = _run(repo, "ledger", "--pr", "96", "--squash-title", "feat(store): break a thing")
+
+    assert result.returncode == 1, result.stderr
+    assert "bump-alignment" in result.stderr
+    assert "requires a major" in result.stderr
+
+
+def test_ledger_reads_the_breaking_marker_after_the_pr_number(tmp_path: Path) -> None:
+    """`(#96) (BREAKING CHANGE)` stays breaking; both orders share one matcher (#310)."""
+    repo = _repo(
+        tmp_path,
+        _ledger("* **store:** break a thing (#96) (BREAKING CHANGE)"),
+        ["feat(store): break a thing (#96)"],
+    )
+
+    result = _run(repo, "ledger", "--pr", "96", "--squash-title", "feat(store): break a thing")
+
+    assert result.returncode == 1, result.stderr
+    assert "requires a major" in result.stderr
+
+
+def test_ledger_ignores_a_breaking_marker_mentioned_in_prose(tmp_path: Path) -> None:
+    """`CHANGELOG.md:49` mentions the marker mid-sentence; a trailing marker alone counts (#310).
+
+    Mutation: drop the end anchor from BREAKING_ENTRY_RE -> this entry reads as breaking
+    and a patch title refuses it.
+    """
+    entry = "* **gate:** refuse a non-breaking title that carries a `(BREAKING CHANGE)` entry (#96)"
+    repo = _repo(
+        tmp_path,
+        _ledger(entry, section="Bug Fixes"),
+        ["fix(gate): refuse a non-breaking title (#96)"],
+    )
+
+    result = _run(repo, "ledger", "--pr", "96", "--squash-title", "fix(gate): refuse a title")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "ledger: pass"
