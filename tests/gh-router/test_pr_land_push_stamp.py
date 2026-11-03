@@ -601,6 +601,55 @@ def _append_and_commit(repo: Path, bullet: str, subject: str) -> None:
         )
 
 
+def test_candidate_identities_raises_on_a_failed_diff(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A failed diff is not "no candidates": it raises `PrError` naming stderr (#268).
+
+    Mutation: return `set()` on a non-zero exit -> the stamp reads a broken diff as an
+    empty candidate set, so the caller cannot tell "nothing to attribute" from "no
+    authority" and the failure is swallowed.
+    """
+
+    def _fake(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        assert cmd[:3] == ["git", "diff", "-U0"], cmd
+        return subprocess.CompletedProcess(cmd, 128, "", "fatal: bad revision 'deadbeef..HEAD'\n")
+
+    monkeypatch.setattr(github_mod, "run_command", _fake)
+
+    with pytest.raises(PrError, match="bad revision"):
+        changelog_mod._candidate_identities("deadbeef", "### Features\n* **thing:** add a thing\n")
+
+
+def test_stamp_needed_with_base_ignores_a_foreign_unstamped_bullet(tmp_path: Path) -> None:
+    """False when the only unstamped bullet sits outside the diff (#268).
+
+    Mutation: drop the `base_ref` scope in `stamp_needed` -> the foreign bullet is
+    wanted, the stamp refuses, and pr.py reports `stamp_failed` for a PR that added no
+    ledger line.
+    """
+    repo = _make_scoped_stamp_repo(tmp_path)
+
+    assert changelog_mod.stamp_needed("7", cwd=repo, base_ref="main") is False
+
+
+def test_stamp_needed_with_base_is_true_for_a_diff_added_bullet(tmp_path: Path) -> None:
+    """True when the branch itself adds an unstamped bullet (#268).
+
+    Mutation: return False whenever `base_ref` is set -> a landed entry is never
+    attributed and the ledger stays red.
+    """
+    repo = _make_scoped_stamp_repo(tmp_path)
+    _append_and_commit(repo, "* **thing:** add a thing\n", "feat(thing): add a thing")
+
+    assert changelog_mod.stamp_needed("7", cwd=repo, base_ref="main") is True
+
+
+def test_stamp_needed_without_base_keeps_the_whole_block_in_scope(tmp_path: Path) -> None:
+    """The compatibility sweep still sees a foreign bullet when no `base_ref` is given."""
+    repo = _make_scoped_stamp_repo(tmp_path)
+
+    assert changelog_mod.stamp_needed("7", cwd=repo) is True
+
+
 def test_stamp_with_base_attributes_only_the_bullet_the_diff_adds(tmp_path: Path) -> None:
     """The branch's own bullet is stamped; a pre-existing one stays unattributed (#268).
 
@@ -610,7 +659,7 @@ def test_stamp_with_base_attributes_only_the_bullet_the_diff_adds(tmp_path: Path
     repo = _make_scoped_stamp_repo(tmp_path)
     _append_and_commit(repo, "* **thing:** add a thing\n", "feat(thing): add a thing")
 
-    assert stamp_changelog("feat-x", "7", cwd=repo, base="main") is True
+    assert stamp_changelog("feat-x", "7", cwd=repo, base_ref="main") is True
 
     text = (repo / "CHANGELOG.md").read_text(encoding="utf-8")
     assert "* **thing:** add a thing (#7)" in text
@@ -633,7 +682,7 @@ def test_stamp_with_base_leaves_a_baselined_bullet_untouched(tmp_path: Path) -> 
         "feat(thing): add a thing",
     )
 
-    assert stamp_changelog("feat-x", "7", cwd=repo, base="main") is True
+    assert stamp_changelog("feat-x", "7", cwd=repo, base_ref="main") is True
 
     text = (repo / "CHANGELOG.md").read_text(encoding="utf-8")
     assert "legacy:** a baselined bullet (#7)" not in text
@@ -650,7 +699,7 @@ def test_stamp_with_base_warns_when_the_diff_shows_no_candidate(
     """
     repo = _make_scoped_stamp_repo(tmp_path)
 
-    assert stamp_changelog("feat-x", "7", cwd=repo, base="main") is False
+    assert stamp_changelog("feat-x", "7", cwd=repo, base_ref="main") is False
 
     text = (repo / "CHANGELOG.md").read_text(encoding="utf-8")
     assert "(#7)" not in text, "the stamp attributed a bullet the diff does not add"
@@ -685,7 +734,7 @@ def test_stamp_recovery_ignores_base(tmp_path: Path) -> None:
             ["git", "-C", str(repo), *args], check=True, capture_output=True, env=env
         )
 
-    assert stamp_changelog("feat-x", "7", cwd=repo, base="main") is True
+    assert stamp_changelog("feat-x", "7", cwd=repo, base_ref="main") is True
 
     head = subprocess.run(
         ["git", "-C", str(repo), "rev-parse", "HEAD"],

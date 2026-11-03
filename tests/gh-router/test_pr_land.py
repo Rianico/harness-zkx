@@ -1645,6 +1645,11 @@ sys.exit(0)
     assert "unfilled repo template" in unfilled.stderr
 
 
+# The PR base SHA the fakes answer for `gh api .../pulls/7 --jq .base.sha`; the
+# stamp's diff authority is `<BASE_SHA>..HEAD`, never a local branch name.
+BASE_SHA = "9f8e7d6c5b4a"
+
+
 def _fake_changelog_diff() -> str:
     """The `git diff -U0 <base>..HEAD -- CHANGELOG.md` a branch that added the ledger prints.
 
@@ -1665,15 +1670,27 @@ class _FakeRun:
     existing_pr selects the reuse path ("7") or the fresh-create path ("null").
     ready_rc controls the gh pr ready outcome. reuse_draft adds isDraft=true to the
     reuse payload (the same pulls?head= response the reuse path already fetches).
+    base_sha is what `gh api .../pulls/7 --jq .base.sha` returns (empty models an
+    unreadable base); changelog_diff and diff_rc override the `git diff` answer.
     """
 
     def __init__(
-        self, *, existing_pr: str = "null", ready_rc: int = 0, reuse_draft: bool = False
+        self,
+        *,
+        existing_pr: str = "null",
+        ready_rc: int = 0,
+        reuse_draft: bool = False,
+        base_sha: str = BASE_SHA,
+        changelog_diff: str | None = None,
+        diff_rc: int = 0,
     ) -> None:
         self.calls: list[list[str]] = []
         self.existing_pr = existing_pr
         self.ready_rc = ready_rc
         self.reuse_draft = reuse_draft
+        self.base_sha = base_sha
+        self.changelog_diff = changelog_diff
+        self.diff_rc = diff_rc
 
     def __call__(self, cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         self.calls.append(list(cmd))
@@ -1701,13 +1718,18 @@ class _FakeRun:
                 out = f"{self.existing_pr}\topen\t{draft_flag}\tfalse\n"
         elif "pulls -X POST" in joined:
             out = "7\n"
+        elif "base.sha" in joined:
+            out = f"{self.base_sha}\n"
         elif "html_url" in joined:
             out = "https://github.com/test/repo/pull/7\n"
         elif "pr ready" in joined:
             rc = self.ready_rc
             err = "GraphQL: Something went wrong\n" if rc != 0 else ""
         elif "diff -U0" in joined and "CHANGELOG.md" in joined:
-            out = _fake_changelog_diff()
+            rc = self.diff_rc
+            if rc:
+                err = "fatal: bad revision\n"
+            out = self.changelog_diff if self.changelog_diff is not None else _fake_changelog_diff()
         return subprocess.CompletedProcess(cmd, rc, out, err)
 
 
@@ -1803,7 +1825,7 @@ def test_draft_handshake_create_stamp_then_ready(
     assert "chore(changelog): attribute #7 in unreleased ledger" in commits[0][-1]
     assert ["git", "push", "origin", "feat-x"] in fake.calls
     scoped = [c for c in fake.calls if c[:3] == ["git", "diff", "-U0"]]
-    assert scoped and scoped[0][3] == "main..HEAD", fake.calls
+    assert scoped and scoped[0][3] == f"{BASE_SHA}..HEAD", fake.calls
 
     ready_calls = [c for c in fake.calls if "pr ready" in " ".join(c)]
     assert len(ready_calls) == 1
@@ -1812,6 +1834,111 @@ def test_draft_handshake_create_stamp_then_ready(
     err = capsys.readouterr().err
     assert "carries" not in err
     assert "no ## [Unreleased]" not in err
+
+
+def test_pr_base_sha_reads_the_sha_through_the_seam(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The PR base SHA is the stamp's diff authority, read through `gh api --jq .base.sha`.
+
+    Mutation: drop the `--jq .base.sha` selector -> the argv assertion fires, and the
+    raw pulls payload would be handed to `git diff` as a revision.
+    """
+
+    def _fake(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        assert cmd == ["gh", "api", "repos/test/repo/pulls/7", "--jq", ".base.sha"], cmd
+        return subprocess.CompletedProcess(cmd, 0, f"{BASE_SHA}\n", "")
+
+    monkeypatch.setattr(github_mod, "run_command", _fake)
+
+    assert github_mod.pr_base_sha("test/repo", "7") == BASE_SHA
+
+
+@pytest.mark.parametrize(("rc", "out"), [(1, ""), (0, ""), (0, "null\n"), (0, "  \n")])
+def test_pr_base_sha_reads_none_when_the_base_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch, rc: int, out: str
+) -> None:
+    """A failed, empty, or null read is None, so the caller skips the stamp (#268).
+
+    Mutation: return `res.stdout.strip()` unconditionally -> an unreadable base becomes
+    `""`, which is not None, and the stamp runs with no diff authority at all.
+    """
+
+    def _fake(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(cmd, rc, out, "gh: Not Found\n")
+
+    monkeypatch.setattr(github_mod, "run_command", _fake)
+
+    assert github_mod.pr_base_sha("test/repo", "7") is None
+
+
+def test_creation_never_claims_a_foreign_unstamped_bullet(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A PR that adds no ledger line is never wanted: no `stamp_failed`, the run proceeds.
+
+    Mutation: drop `base_ref` from the `stamp_needed` call -> the foreign bullet reads as
+    wanted and the run exits 1 with `stamp_failed` for an entry this PR never landed;
+    unscope `stamp_changelog` too and the foreign bullet gets committed to this PR.
+    """
+    _ = _write_changelog(tmp_path)
+    fake = _FakeRun(changelog_diff="")  # this branch adds no ledger line
+    monkeypatch.setattr(github_mod, "run_command", fake)
+    monkeypatch.chdir(tmp_path)
+
+    rc = pr_mod.main(_main_args())
+    assert rc == 0, fake.calls
+
+    err = capsys.readouterr().err
+    assert "stamp_failed" not in err
+    assert "warning: no unstamped CHANGELOG.md entry appears in the diff" in err
+    stamp_calls = [c for c in fake.calls if c[:2] in (["git", "add"], ["git", "commit"])]
+    assert not stamp_calls, f"a foreign bullet must never be stamped: {stamp_calls}"
+    assert fake.calls[-1] == ["gh", "pr", "ready", "7", "--repo", "test/repo"]
+
+
+def test_unreadable_pr_base_warns_once_and_skips_the_stamp(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """No base SHA means no diff authority: one warning, no stamp, exit unchanged (#268).
+
+    Mutation: fall back to a local branch name (or pass `base_ref=None`) -> the stamp runs
+    with whole-block scope and commits the foreign bullet to this PR.
+    """
+    _ = _write_changelog(tmp_path)
+    fake = _FakeRun(base_sha="")
+    monkeypatch.setattr(github_mod, "run_command", fake)
+    monkeypatch.chdir(tmp_path)
+
+    rc = pr_mod.main(_main_args())
+    assert rc == 0, fake.calls
+
+    err = capsys.readouterr().err
+    assert err.count("cannot read the PR base") == 1, err
+    assert not [c for c in fake.calls if c[:3] == ["git", "diff", "-U0"]]
+    assert not [c for c in fake.calls if c[:2] in (["git", "add"], ["git", "commit"])]
+    assert fake.calls[-1] == ["gh", "pr", "ready", "7", "--repo", "test/repo"]
+
+
+def test_a_failed_diff_warns_once_after_the_pr_exists(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A diff error after the PR exists warns once instead of crashing the landing (#268).
+
+    Mutation: drop the `except PrError` -> the raise escapes `main` and the run dies with a
+    traceback after the PR was already created.
+    """
+    _ = _write_changelog(tmp_path)
+    fake = _FakeRun(diff_rc=128)
+    monkeypatch.setattr(github_mod, "run_command", fake)
+    monkeypatch.chdir(tmp_path)
+
+    rc = pr_mod.main(_main_args())
+    assert rc == 0, fake.calls
+
+    err = capsys.readouterr().err
+    assert err.count("cannot diff CHANGELOG.md") == 1, err
+    assert "fatal: bad revision" in err
+    assert not [c for c in fake.calls if c[:2] in (["git", "add"], ["git", "commit"])]
+    assert fake.calls[-1] == ["gh", "pr", "ready", "7", "--repo", "test/repo"]
 
 
 def test_draft_flag_skips_ready_flip(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

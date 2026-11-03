@@ -143,13 +143,18 @@ def unreleased_attributes_pr(pr_num: str, cwd: Path | None = None) -> bool:
     return False
 
 
-def stamp_needed(pr_num: str, cwd: Path | None = None) -> bool:
+def stamp_needed(pr_num: str, cwd: Path | None = None, *, base_ref: str | None = None) -> bool:
     """True when the ledger holds an entry the stamp would attribute to this PR.
 
     The stamp's fail/hard-fail contract needs want-vs-outcome: a stamp that had
     nothing to attribute is a no-op (soft), while a stamp that tried and failed
     hard-fails after PR creation. Mirrors `stamp_changelog`'s bullet walk — an
     already-attributed block and baseline entries never count — without writing.
+
+    With `base_ref` (the PR's base SHA) only the in-section bullets
+    `_candidate_identities` shows the diff adding are candidates, mirroring the
+    stamp's own scope; without it the whole block stays in scope (the pre-#268
+    compatibility sweep the reuse and recovery paths rely on).
     """
     block = _read_unreleased_block(cwd)
     if block is None or f"(#{pr_num})" in block:
@@ -166,13 +171,19 @@ def stamp_needed(pr_num: str, cwd: Path | None = None) -> bool:
             }
         except OSError:
             baseline = set()
+    candidates = None if base_ref is None else _candidate_identities(base_ref, block, cwd)
     any_attribution_re = re.compile(r"\(#\d+\)(?:\s*\(BREAKING CHANGE\))?\s*$")
     for entry in _iter_ledger_entries(block):
         if not entry.prefix:
             continue
+        if candidates is not None and not entry.in_section:
+            continue
         if any_attribution_re.search(entry.body):
             continue
-        if _entry_identity(entry.raw) in baseline:
+        identity = _entry_identity(entry.raw)
+        if identity in baseline:
+            continue
+        if candidates is not None and identity not in candidates:
             continue
         return True
     return False
@@ -210,18 +221,23 @@ def _push_stranded_stamp(head_ref: str, pr_num: str, cwd: Path | None = None) ->
     return True
 
 
-def _added_ledger_identities(base: str, cwd: Path | None) -> set[str]:
-    """Identities of the ledger bullets `base..HEAD` adds to CHANGELOG.md.
+def _candidate_identities(base_ref: str, block: str, cwd: Path | None = None) -> set[str]:
+    """Identities of the in-section Unreleased bullets the `base_ref..HEAD` diff adds.
 
-    The diff is the stamp's authority, not the file: a bullet this branch did
-    not add belongs to another PR, so attributing it would invent provenance.
-    A failed diff reads as no candidates, and the stamp then declines to write.
+    The single home for the stamp's diff: a bullet this branch did not add belongs
+    to another PR, so attributing it would invent provenance. The range starts at
+    the PR's base SHA, so base-side and inherited changes never count. A failed
+    diff is not "no candidates": it raises PrError naming stderr, and the caller
+    decides (the PR already exists, so a warning beats a crash after creation).
     """
     result = _github.run_command(
-        ["git", "diff", "-U0", f"{base}..HEAD", "--", "CHANGELOG.md"], cwd=cwd
+        ["git", "diff", "-U0", f"{base_ref}..HEAD", "--", "CHANGELOG.md"], cwd=cwd
     )
     if result.returncode != 0:
-        return set()
+        raise PrError(
+            f"cannot diff CHANGELOG.md against {base_ref}: "
+            f"{result.stderr.strip() or 'git diff failed'}"
+        )
     added: set[str] = set()
     for line in result.stdout.splitlines():
         if not line.startswith("+") or line.startswith("+++"):
@@ -230,22 +246,28 @@ def _added_ledger_identities(base: str, cwd: Path | None) -> set[str]:
         if not _UNRELEASED_BULLET_RE.match(candidate):
             continue
         added.add(_entry_identity(candidate))
-    return added
+    in_block = {
+        _entry_identity(entry.raw)
+        for entry in _iter_ledger_entries(block)
+        if entry.prefix and entry.in_section
+    }
+    return added & in_block
 
 
 def stamp_changelog(
     head_ref: str,
     pr_num: str,
     cwd: Path | None = None,
-    base: str | None = None,
+    base_ref: str | None = None,
 ) -> bool:
     """Attribute this PR's Unreleased bullets, commit, and push.
 
-    With `base`, only the bullets the `base..HEAD` diff adds to CHANGELOG.md
-    are candidates: an unstamped bullet the diff does not show belongs to
-    another PR, and stamping it would attribute work this PR never landed.
-    Without `base`, every unstamped bullet stays a candidate (the pre-#268
-    behaviour the stranded-recovery and baseline paths rely on).
+    With `base_ref` (the PR's base SHA), only the bullets `_candidate_identities`
+    shows the diff adding to CHANGELOG.md are candidates: an unstamped bullet the
+    diff does not show belongs to another PR, and stamping it would attribute work
+    this PR never landed. Without `base_ref`, every unstamped bullet stays a
+    candidate (the pre-#268 behaviour the stranded-recovery and baseline paths
+    rely on).
     """
     root = cwd or Path.cwd()
     changelog_path = root / "CHANGELOG.md"
@@ -293,16 +315,10 @@ def stamp_changelog(
     skipped = 0
 
     candidates: set[str] | None = None
-    if base is not None:
-        # Intersect the diff with the block: a released-section bullet the diff
-        # also adds is not this PR's Unreleased entry.
-        in_block = {
-            _entry_identity(entry.raw)
-            for entry in _iter_ledger_entries(unreleased_block)
-            if entry.prefix and entry.in_section
-        }
-        candidates = _added_ledger_identities(base, cwd) & in_block
-
+    if base_ref is not None:
+        # `_candidate_identities` intersects the diff with the block, so a
+        # released-section bullet the diff also adds is not this PR's entry.
+        candidates = _candidate_identities(base_ref, unreleased_block, cwd)
     for entry in _iter_ledger_entries(unreleased_block):
         if not entry.prefix:
             new_lines.append(entry.line)
@@ -339,7 +355,7 @@ def stamp_changelog(
         if candidates is not None and skipped:
             print(
                 f"warning: no unstamped CHANGELOG.md entry appears in the diff from "
-                f"{base} ({skipped} left); nothing was stamped — attribute them by "
+                f"{base_ref} ({skipped} left); nothing was stamped — attribute them by "
                 "hand or land them in their own PR",
                 file=sys.stderr,
             )

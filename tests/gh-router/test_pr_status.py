@@ -56,6 +56,7 @@ for arg in "$@"; do
   esac
 done
 if [[ "${1:-}" == "user" ]]; then printf 'me\\n'; exit 0; fi
+if [[ " $* " == *".base.sha"* ]]; then printf '%s\\n' "${PR_BASE_SHA:-deadbeef}"; exit 0; fi
 for arg in "$@"; do
   case "$arg" in
     *'/pulls/'*) printf '%s\\n' "${MERGE_TSV:-true\\tclean\\thttps://github.com/test/repo/pull/7}"; exit 0 ;;
@@ -424,14 +425,23 @@ def test_derived_title_refusal_names_the_derivation() -> None:
 
 
 def test_stamp_failure_hard_fails_with_url_and_remedy(tmp_path: Path) -> None:
-    """Stamp half deferred from T1: a wanted stamp that fails exits 1 with url + remedy."""
+    """Stamp half deferred from T1: a wanted stamp that fails exits 1 with url + remedy.
+
+    The stamp's diff authority is the PR base SHA, so the ledger bullet must be a
+    commit on the head branch; the fake gh answers `.base.sha` with main's tip.
+    Mutation: read the whole block instead of the diff -> no stamp is wanted and the
+    run exits 0 without the `stamp_failed` refusal.
+    """
     repo = tmp_path / "repo"
     _ = _make_repo(repo)
-    env = _gh_env(tmp_path)
+    base_sha = run_git(repo, "rev-parse", "main").strip()
+    env = _gh_env(tmp_path, PR_BASE_SHA=base_sha)
     _ = (repo / "CHANGELOG.md").write_text(
         "# Changelog\n\n## [Unreleased]\n\n### Features\n* landing flow entry\n",
         encoding="utf-8",
     )
+    run_git(repo, "add", "CHANGELOG.md")
+    run_git(repo, "commit", "-m", "feat: landing flow entry")
     hook = repo / ".git" / "hooks" / "pre-commit"
     _ = hook.write_text("#!/usr/bin/env bash\nexit 1\n", encoding="utf-8")
     hook.chmod(0o755)
