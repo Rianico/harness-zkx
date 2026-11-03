@@ -149,9 +149,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **gh-router:** warn before the ready flip when ## [Unreleased] carries no entry for the new PR (#208)
 
 ### Bug Fixes
-* **changelog-gate:** read `!` after the optional scope in a squash title (`feat(store)!:`), so the bump audit no longer opts out silently; an unparseable title is now a hard `title-grammar` finding that names the retitle remedy
-* **changelog-gate:** report prose inside a `## [Unreleased]` section — any non-blank line that is neither a bullet nor its indented continuation — and accept `(BREAKING CHANGE)` on either side of `(#N)` while keeping the end anchor, so the prose mention in `CHANGELOG.md` stays non-breaking
-* **gh-router/pr-land:** the changelog stamp now attributes only the `## [Unreleased]` bullets the `base..HEAD` diff adds, so a landing can no longer claim another PR's entry; a diff with no candidate prints one warning and writes nothing, and the baseline skip still wins
+* **changelog-gate:** read `!` after the optional scope in a squash title (`feat(store)!:`), so the bump audit no longer opts out silently; an unparseable title is now a hard `title-grammar` finding that names the retitle remedy (#347)
+* **changelog-gate:** report prose inside a `## [Unreleased]` section — any non-blank line that is neither a bullet nor its indented continuation — and accept `(BREAKING CHANGE)` on either side of `(#N)` while keeping the end anchor, so the prose mention in `CHANGELOG.md` stays non-breaking (#347)
+* **gh-router/pr-land:** the changelog stamp now attributes only the `## [Unreleased]` bullets the `base..HEAD` diff adds, so a landing can no longer claim another PR's entry; a diff with no candidate prints one warning and writes nothing, and the baseline skip still wins (#347)
 * **changelog-gate:** make the PR-free floor complete — `check_block` is the one home for the three block-only checks (section names, entry well-formedness, entry shape), `ticket` mode reports an invented `### Heading` as `[section-integrity]` without a PR number, and `ledger` calls the same helper once so a finding is never reported twice, with the scaffold copy re-synced (issue #345) (#346)
 * **harness-audit:** anchor the truncation footer to the result tail and align the emit_filtered threshold — both footer regexes now require the footer at end of text (allowing only whitespace or the single status line an aborted or timed-out bash command appends), so a footer-shaped string quoted mid-body no longer parses as a delivery cap, and emit_filtered reuses truncation_of with the same delivered-over-threshold rule scan uses, closing the clean-but-rewritten gap (#337)
 * **harness-audit:** count only executable `/skill:` colon invocations — _extract_slash_commands accepts only the colon form as the first token of a user prompt (after dropping pi's timestamp envelope) and parse_session_file calls it for user messages only, so the space form, prose mentions, and toolResult or assistant text no longer inflate the skill table (#337)
@@ -326,8 +326,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Continuous Integration
 
-* **check:** run `changelog-gate.py ticket` as gate 1, so a ledger shape drift fails locally before a PR sees it, and derive the banner count from one `TOTAL` constant so a stale `/8` cannot outlive a new gate
-* **changelog-check:** dedupe the failure comment through one `MARKER` constant shared by the posted body and the dedupe probe, re-audit a retitled PR via `edited`, and assert `squash_merge_commit_title == PR_TITLE` in a PR-only step that prints the actual value and the remedy
+* **check:** run `changelog-gate.py ticket` as gate 1, so a ledger shape drift fails locally before a PR sees it, and derive the banner count from one `TOTAL` constant so a stale `/8` cannot outlive a new gate (#347)
+* **changelog-check:** dedupe the failure comment through one `MARKER` constant shared by the posted body and the dedupe probe, re-audit a retitled PR via `edited`, and assert `squash_merge_commit_title == PR_TITLE` in a PR-only step that prints the actual value and the remedy (#347)
 * **cli:** guard the declared CLI surfaces against their parsers (#120)
 * **ci:** gate lint and formatting in the verify job (#113)
 * **changelog:** retire the pre-push guard from the scaffold and ship the ledger floor (#98)
