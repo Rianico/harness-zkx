@@ -17,7 +17,7 @@ metadata:
 
 Goal: route GitHub work — diagnose, reconcile, land, release. Run one script per operation. Read its brief output instead of re-deriving it with `gh pr view`, `gh run list`, or `gh api …/jobs`.
 
-Boundary: `scripts/state.sh` is human-facing orientation (its `gh pr view` query); `pr-land --status` is the machine-readable landing state and is authoritative for landing decisions.
+Boundary: `scripts/state.sh` provides human-facing orientation; `pr-land --status` is the machine-readable landing state authoritative for landing decisions. `pr.py --watch` owns generic PR check rollups, and `ci.sh watch` owns single run-level workflows. Repo-local CI controllers supersede harness watchers when present. Never hand-roll `gh pr checks` polling.
 ## Common operations
 
 | Phase & Goal | Run | Output |
