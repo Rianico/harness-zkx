@@ -1645,6 +1645,19 @@ sys.exit(0)
     assert "unfilled repo template" in unfilled.stderr
 
 
+def _fake_changelog_diff() -> str:
+    """The `git diff -U0 <base>..HEAD -- CHANGELOG.md` a branch that added the ledger prints.
+
+    The stamp derives its candidate set from the diff, so a stubbed `run_command`
+    must answer it the way a branch that added every Unreleased bullet would.
+    """
+    try:
+        text = Path("CHANGELOG.md").read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    return "".join(f"+{line}\n" for line in text.splitlines() if line.startswith("* "))
+
+
 class _FakeRun:
     """Stub `_github.run_command` (the seam pr.py and its siblings call): records argv
     and returns canned gh/git outputs.
@@ -1693,6 +1706,8 @@ class _FakeRun:
         elif "pr ready" in joined:
             rc = self.ready_rc
             err = "GraphQL: Something went wrong\n" if rc != 0 else ""
+        elif "diff -U0" in joined and "CHANGELOG.md" in joined:
+            out = _fake_changelog_diff()
         return subprocess.CompletedProcess(cmd, rc, out, err)
 
 
@@ -1787,6 +1802,8 @@ def test_draft_handshake_create_stamp_then_ready(
     assert len(commits) == 1
     assert "chore(changelog): attribute #7 in unreleased ledger" in commits[0][-1]
     assert ["git", "push", "origin", "feat-x"] in fake.calls
+    scoped = [c for c in fake.calls if c[:3] == ["git", "diff", "-U0"]]
+    assert scoped and scoped[0][3] == "main..HEAD", fake.calls
 
     ready_calls = [c for c in fake.calls if "pr ready" in " ".join(c)]
     assert len(ready_calls) == 1

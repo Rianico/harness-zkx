@@ -210,11 +210,43 @@ def _push_stranded_stamp(head_ref: str, pr_num: str, cwd: Path | None = None) ->
     return True
 
 
+def _added_ledger_identities(base: str, cwd: Path | None) -> set[str]:
+    """Identities of the ledger bullets `base..HEAD` adds to CHANGELOG.md.
+
+    The diff is the stamp's authority, not the file: a bullet this branch did
+    not add belongs to another PR, so attributing it would invent provenance.
+    A failed diff reads as no candidates, and the stamp then declines to write.
+    """
+    result = _github.run_command(
+        ["git", "diff", "-U0", f"{base}..HEAD", "--", "CHANGELOG.md"], cwd=cwd
+    )
+    if result.returncode != 0:
+        return set()
+    added: set[str] = set()
+    for line in result.stdout.splitlines():
+        if not line.startswith("+") or line.startswith("+++"):
+            continue
+        candidate = line[1:]
+        if not _UNRELEASED_BULLET_RE.match(candidate):
+            continue
+        added.add(_entry_identity(candidate))
+    return added
+
+
 def stamp_changelog(
     head_ref: str,
     pr_num: str,
     cwd: Path | None = None,
+    base: str | None = None,
 ) -> bool:
+    """Attribute this PR's Unreleased bullets, commit, and push.
+
+    With `base`, only the bullets the `base..HEAD` diff adds to CHANGELOG.md
+    are candidates: an unstamped bullet the diff does not show belongs to
+    another PR, and stamping it would attribute work this PR never landed.
+    Without `base`, every unstamped bullet stays a candidate (the pre-#268
+    behaviour the stranded-recovery and baseline paths rely on).
+    """
     root = cwd or Path.cwd()
     changelog_path = root / "CHANGELOG.md"
     if not changelog_path.is_file():
@@ -258,6 +290,18 @@ def stamp_changelog(
     breaking_re = re.compile(r"\s*\(BREAKING CHANGE\)\s*$")
     new_lines: list[str] = []
     modified = False
+    skipped = 0
+
+    candidates: set[str] | None = None
+    if base is not None:
+        # Intersect the diff with the block: a released-section bullet the diff
+        # also adds is not this PR's Unreleased entry.
+        in_block = {
+            _entry_identity(entry.raw)
+            for entry in _iter_ledger_entries(unreleased_block)
+            if entry.prefix and entry.in_section
+        }
+        candidates = _added_ledger_identities(base, cwd) & in_block
 
     for entry in _iter_ledger_entries(unreleased_block):
         if not entry.prefix:
@@ -273,6 +317,10 @@ def stamp_changelog(
             new_lines.append(entry.line)
             continue
 
+        if candidates is not None and identity not in candidates:
+            new_lines.append(entry.line)
+            skipped += 1
+            continue
         ending = ""
         if entry.line.endswith("\r\n"):
             ending = "\r\n"
@@ -288,8 +336,14 @@ def stamp_changelog(
         modified = True
 
     if not modified:
+        if candidates is not None and skipped:
+            print(
+                f"warning: no unstamped CHANGELOG.md entry appears in the diff from "
+                f"{base} ({skipped} left); nothing was stamped — attribute them by "
+                "hand or land them in their own PR",
+                file=sys.stderr,
+            )
         return False
-
     new_unreleased = "".join(new_lines)
     new_content = before_unreleased + "## [Unreleased]" + new_unreleased + after_unreleased
 

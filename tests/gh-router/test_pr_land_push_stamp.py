@@ -546,3 +546,160 @@ def test_stamp_recovery_stays_soft_when_push_times_out(
 
     assert stamp_changelog("feat-x", "7", cwd=tmp_path) is False
     assert "warning" in capsys.readouterr().err
+
+
+# --- the base-scoped stamp (#268) -----------------------------------------------------------
+
+
+def _make_scoped_stamp_repo(base: Path) -> Path:
+    """Bare remote + repo on `feat-x`; `main` carries one baselined and one plain bullet."""
+    remote = base / "remote.git"
+    _ = subprocess.run(
+        ["git", "init", "--bare", str(remote)], check=True, capture_output=True, env=git_env()
+    )
+    repo = base / "repo"
+    _ = repo.mkdir()
+    env = git_env()
+
+    def git(*args: str) -> None:
+        _ = subprocess.run(
+            ["git", "-C", str(repo), *args], check=True, capture_output=True, env=env
+        )
+
+    _ = subprocess.run(
+        ["git", "init", "-b", "main", str(repo)], check=True, capture_output=True, env=env
+    )
+    git("config", "user.name", "Tester")
+    git("config", "user.email", "tester@example.com")
+    git("config", "commit.gpgsign", "false")
+    _ = (repo / "README.md").write_text("# Repo\n", encoding="utf-8")
+    _ = (repo / ".config").mkdir()
+    _ = (repo / ".config" / "changelog-unattributed-baseline.txt").write_text(
+        "# baseline\n**legacy:** a baselined bullet\n", encoding="utf-8"
+    )
+    _ = (repo / "CHANGELOG.md").write_text(
+        "# Changelog\n\n## [Unreleased]\n\n### Features\n"
+        "* **legacy:** a baselined bullet\n"
+        "* **other:** a pre-existing bullet\n",
+        encoding="utf-8",
+    )
+    git("add", "-A")
+    git("commit", "-m", "chore: initial")
+    git("remote", "add", "origin", str(remote))
+    git("push", "-u", "origin", "main")
+    git("checkout", "-b", "feat-x")
+    return repo
+
+
+def _append_and_commit(repo: Path, bullet: str, subject: str) -> None:
+    env = git_env()
+    changelog = repo / "CHANGELOG.md"
+    _ = changelog.write_text(changelog.read_text(encoding="utf-8") + bullet, encoding="utf-8")
+    for args in (("add", "CHANGELOG.md"), ("commit", "-m", subject)):
+        _ = subprocess.run(
+            ["git", "-C", str(repo), *args], check=True, capture_output=True, env=env
+        )
+
+
+def test_stamp_with_base_attributes_only_the_bullet_the_diff_adds(tmp_path: Path) -> None:
+    """The branch's own bullet is stamped; a pre-existing one stays unattributed (#268).
+
+    Mutation: drop the `candidates` filter -> `**other:**` gains `(#7)` and the
+    stamp claims a bullet this PR never landed.
+    """
+    repo = _make_scoped_stamp_repo(tmp_path)
+    _append_and_commit(repo, "* **thing:** add a thing\n", "feat(thing): add a thing")
+
+    assert stamp_changelog("feat-x", "7", cwd=repo, base="main") is True
+
+    text = (repo / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert "* **thing:** add a thing (#7)" in text
+    assert "* **other:** a pre-existing bullet" in text
+    assert "a pre-existing bullet (#7)" not in text
+    assert "* **legacy:** a baselined bullet" in text
+    assert text.count("(#7)") == 1
+
+
+def test_stamp_with_base_leaves_a_baselined_bullet_untouched(tmp_path: Path) -> None:
+    """The baseline skip still outranks the diff: a re-added baselined bullet stays unattributed.
+
+    Mutation: let the candidate filter bypass the baseline skip -> the baselined
+    identity the branch re-adds gains `(#7)`, attributing legacy debt to this PR (#268).
+    """
+    repo = _make_scoped_stamp_repo(tmp_path)
+    _append_and_commit(
+        repo,
+        "* **legacy:** a baselined bullet\n* **thing:** add a thing\n",
+        "feat(thing): add a thing",
+    )
+
+    assert stamp_changelog("feat-x", "7", cwd=repo, base="main") is True
+
+    text = (repo / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert "legacy:** a baselined bullet (#7)" not in text
+    assert text.count("(#7)") == 1
+
+
+def test_stamp_with_base_warns_when_the_diff_shows_no_candidate(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An unstamped bullet the diff does not show is never attributed (#268).
+
+    Mutation: stamp the matched set without the no-candidate guard -> `**other:**`
+    gains `(#7)` even though this branch added no ledger line.
+    """
+    repo = _make_scoped_stamp_repo(tmp_path)
+
+    assert stamp_changelog("feat-x", "7", cwd=repo, base="main") is False
+
+    text = (repo / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert "(#7)" not in text, "the stamp attributed a bullet the diff does not add"
+    assert "warning" in capsys.readouterr().err
+
+
+def test_stamp_without_base_keeps_the_whole_block_in_scope(tmp_path: Path) -> None:
+    """No `base` keeps the pre-#268 sweep, so the recovery and call sites stay compatible."""
+    repo = _make_scoped_stamp_repo(tmp_path)
+    _append_and_commit(repo, "* **thing:** add a thing\n", "feat(thing): add a thing")
+
+    assert stamp_changelog("feat-x", "7", cwd=repo) is True
+
+    text = (repo / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert "a pre-existing bullet (#7)" in text
+
+
+def test_stamp_recovery_ignores_base(tmp_path: Path) -> None:
+    """A stranded stamp still pushes when `base` is passed: recovery precedes the diff (#268)."""
+    repo, _ = _make_stamp_repo(tmp_path)
+    env = git_env()
+    changelog = repo / "CHANGELOG.md"
+    _ = changelog.write_text(
+        "# Changelog\n\n## [Unreleased]\n\n### Features\n* **pr-land:** entry (#7)\n",
+        encoding="utf-8",
+    )
+    for args in (
+        ("add", "CHANGELOG.md"),
+        ("commit", "-m", "chore(changelog): attribute #7"),
+    ):
+        _ = subprocess.run(
+            ["git", "-C", str(repo), *args], check=True, capture_output=True, env=env
+        )
+
+    assert stamp_changelog("feat-x", "7", cwd=repo, base="main") is True
+
+    head = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=env,
+    ).stdout.strip()
+    tracked = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "refs/remotes/origin/feat-x"],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=env,
+    ).stdout.strip()
+    assert tracked == head
+    assert changelog.read_text(encoding="utf-8").count("(#7)") == 1
