@@ -19,7 +19,7 @@ from typing import Any
 
 import pytest
 
-from tests.gh_helpers import run_git
+from tests.gh_helpers import review_thread_node, review_threads_payload, run_git
 from tests.git_env import git_env
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -43,6 +43,11 @@ for arg in "$@"; do
   esac
 done
 if [[ "$1" == "pr" && "$2" == "checks" ]]; then printf '%s' "${CHECKS_TSV:-}"; exit 0; fi
+if [[ "$1" == "api" && "$2" == "graphql" ]]; then
+  if [[ "${REVIEWS_FAIL:-0}" == "1" ]]; then echo "graphql down" >&2; exit 1; fi
+  if [[ -n "${REVIEWS_JSON:-}" ]]; then printf '%s' "$REVIEWS_JSON"; else printf '%s' '{"data":{"repository":{"pullRequest":{"reviewThreads":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[]}}}}}'; fi
+  exit 0
+fi
 for arg in "$@"; do
   case "$arg" in
     *'body // ""'*) printf '%s' "${PR_BODY:-}"; exit 0 ;;
@@ -155,6 +160,7 @@ def test_status_json_matches_pinned_schema(tmp_path: Path) -> None:
     assert predicates["head_pushed"] is False
     assert predicates["checks"] == {"state": "none", "ok": 0, "total": 0}
     assert predicates["mergeable"] == "unknown"
+    assert predicates["reviews"] == {"state": "none", "unresolved": 0}
     assert payload["failure_states"] == []
     assert payload["artifact"] == {"path": ".lsz/gh-router/feat-status.md", "stale": False}
     assert payload["title"]["text"] == "feat: two"
@@ -245,6 +251,44 @@ def test_status_never_refuses_and_attaches_ready_flip(tmp_path: Path) -> None:
     ]
     assert len(flips) == 1
     assert flips[0]["mutation"] == "remote"
+
+
+def test_status_surfaces_unresolved_reviews_and_refuses_merge(tmp_path: Path) -> None:
+    """A real thread is a refusal plus a count; the merge transition names the precondition."""
+    repo = tmp_path / "repo"
+    _ = _make_repo(repo)
+    env = _gh_env(
+        tmp_path,
+        PR_NUMBER="7",
+        PR_STATE="open",
+        REVIEWS_JSON=review_threads_payload([review_thread_node()]),
+    )
+
+    payload = _payload(_run_status(repo, env, "--json"))
+
+    assert payload["predicates"]["reviews"] == {"state": "unresolved", "unresolved": 1}
+    codes = [entry["code"] for entry in payload["refusals"]]
+    assert "reviews_unresolved" in codes
+    merges = [
+        entry for entry in payload["transitions"] if entry["command"].startswith("pr.py --merge")
+    ]
+    assert merges and "reviews resolved" in merges[0]["preconditions"]
+
+
+def test_status_marks_an_unreadable_review_list_unknown(tmp_path: Path) -> None:
+    """A failed read is `unknown`, never a zero the merge gate would accept.
+
+    Mutation: leave the default `ReviewState()` on the except path -> state reads
+    `none` with `unresolved=0`, which looks settled.
+    """
+    repo = tmp_path / "repo"
+    _ = _make_repo(repo)
+    env = _gh_env(tmp_path, PR_NUMBER="7", PR_STATE="open", REVIEWS_FAIL="1")
+
+    payload = _payload(_run_status(repo, env, "--json"))
+
+    assert payload["predicates"]["reviews"] == {"state": "unknown", "unresolved": 0}
+    assert payload["refusals"], "a failed thread read must attach an advisory refusal"
 
 
 def test_status_diverged_is_mechanical_data(tmp_path: Path) -> None:

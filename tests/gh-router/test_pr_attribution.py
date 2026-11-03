@@ -59,6 +59,10 @@ if [[ "${1:-}" == "pr" ]]; then
     checkout) exit 0 ;;
   esac
 fi
+if [[ "${1:-}" == "api" && "${2:-}" == "graphql" ]]; then
+  if [[ -n "${REVIEWS_JSON:-}" ]]; then printf '%s' "$REVIEWS_JSON"; else printf '%s' '{"data":{"repository":{"pullRequest":{"reviewThreads":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[]}}}}}'; fi
+  exit 0
+fi
 for arg in "$@"; do
   case "$arg" in
     user) printf '%s\\n' "$MERGER_LOGIN"; exit 0 ;;
@@ -93,6 +97,7 @@ exit 3
         "PR_BODY": "",
         "PR_NUMBER": NUM,
         "OBSERVE_TSV": "",
+        "REVIEWS_JSON": "",
         "OUT_DIR": str(tmp_path / "draft"),
         **env_extra,
     }

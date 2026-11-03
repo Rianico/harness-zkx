@@ -3,12 +3,12 @@
 # requires-python = ">=3.14"
 # ///
 """pr.py — create pull request, watch every check, squash-merge (deterministic bytes)
-
-Usage: pr.py [--title "…"] [--body "…" | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--verbose] [--merge|--no-merge] [--draft] [--check] [--status] [--sync] [--json] [--out LEAF] [--no-stamp] [--force-scaffold] [--squash-message MSG | --squash-message-file FILE]
+Usage: pr.py [--title "…"] [--body "…" | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--verbose] [--merge|--no-merge] [--draft] [--check] [--status] [--reviews] [--sync] [--json] [--out LEAF] [--no-stamp] [--force-scaffold] [--squash-message MSG | --squash-message-file FILE]
   --watch : poll EVERY check on the PR until all pass; one stderr line per poll (mergeable_state + verdict); a conflicting or unresolved PR fails fast, exit 1
   --merge : after a green watch, squash-merge (waits for mergeable_state clean; a conflicting or unresolved PR fails fast, refuses otherwise)
   --check : preflight + draft phase — run the merge gates and print counts, title facts, the squash preview, and one curation hint (no PR created; refusals carry reason/remedy/site on stderr)
   --status : read-only landing state — predicates, failure states, artifact, title facts, squash preview, refusals[] and transitions[] (never refuses, always exit 0; --json for the pinned schema)
+  --reviews : list every unresolved review thread on the PR (path:line, author, body); exit 1 when any remain, 0 when none; --json for the payload
   --sync : merge <remote>/<base> into the head and push a clean result; when the merge stops, print the pr-conflict dual-intent report and exit 1 before any file is edited
   --out LEAF : scaffold leaf under <repo-root>/.lsz/gh-router/ (default <head-slug>.md); a body-less --check writes it only when absent
   --force-scaffold : with a body-less --check, regenerate the scaffold leaf over an existing file (default: write nothing, report path + stale)
@@ -61,6 +61,7 @@ from _github import (
     watch_checks,
 )
 from _options import PrOptions, resolve_squash_override
+from _reviews import run_reviews
 from _squash import (
     DEFAULT_TEMPLATE_PATH,
     check_explicit_squash_message,
@@ -77,11 +78,11 @@ from _sync import run_sync
 
 def print_usage() -> None:
     usage = """pr.py — create pull request, watch every check, squash-merge (deterministic bytes)
-Usage: pr.py [--title "…"] [--body "…" | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--verbose] [--merge|--no-merge] [--draft] [--check] [--status] [--sync] [--json] [--out LEAF] [--no-stamp] [--force-scaffold] [--squash-message MSG | --squash-message-file FILE]
+Usage: pr.py [--title "…"] [--body "…" | --body-file FILE] [--base main] [--head BRANCH] [--watch] [--verbose] [--merge|--no-merge] [--draft] [--check] [--status] [--reviews] [--sync] [--json] [--out LEAF] [--no-stamp] [--force-scaffold] [--squash-message MSG | --squash-message-file FILE]
   --watch : poll EVERY check on the PR until all pass; one stderr line per poll (mergeable_state + verdict); a conflicting or unresolved PR fails fast, exit 1
   --merge : after a green watch, squash-merge (waits for mergeable_state clean; a conflicting or unresolved PR fails fast, refuses otherwise)
   --check : preflight + draft phase — run the merge gates, print counts, title facts, the squash preview, one curation hint (no PR created; body-less runs write the scaffold leaf only when absent, --force-scaffold regenerates)
-  --status : read-only landing state, always exit 0 (--json for the pinned schema); --sync : merge <remote>/<base>, push a clean result, and a stopped merge prints the pr-conflict report then exits 1
+  --status : read-only landing state, always exit 0 (--json for the pinned schema); --reviews : unresolved review threads (exit 1 when any remain, 0 when none); --sync : merge <remote>/<base>, push a clean result, and a stopped merge prints the pr-conflict report then exits 1
   --out LEAF : scaffold leaf under <repo-root>/.lsz/gh-router/ (default <head-slug>.md)
   --draft : leave the PR a draft (no gh pr ready); default / --no-draft ends a NEWLY CREATED PR ready; an existing open PR is never readied or re-drafted (a reused draft without --draft exits 1 with the manual fix)
   --no-stamp : skip auto-stamp (#<PR_NUMBER>) in CHANGELOG.md unreleased ledger; the flip to ready still happens (caller owns the changelog) — head unstamped, expect a red changelog gate
@@ -111,6 +112,7 @@ def parse_args(args: list[str]) -> PrOptions:
     merge = False
     status = False
     sync = False
+    reviews = False
     json_output = False
     check = False
     draft = False
@@ -190,6 +192,12 @@ def parse_args(args: list[str]) -> PrOptions:
         elif arg == "--no-sync":
             sync = False
             i += 1
+        elif arg == "--reviews":
+            reviews = True
+            i += 1
+        elif arg == "--no-reviews":
+            reviews = False
+            i += 1
         elif arg == "--json":
             json_output = True
             i += 1
@@ -241,6 +249,7 @@ def parse_args(args: list[str]) -> PrOptions:
         check=check,
         status=status,
         sync=sync,
+        reviews=reviews,
         json_output=json_output,
         draft=draft,
         no_stamp=no_stamp,
@@ -424,6 +433,11 @@ def main(argv: list[str] | None = None) -> int:
             # Read-only orientation first: derived state, advisory facts, always
             # exit 0 — even when the head ref or repo slug cannot be resolved.
             return run_status(options)
+        if options.reviews:
+            if options.merge or options.watch or options.check:
+                raise UsageError("--reviews is read-only: drop --merge/--watch/--check")
+            return run_reviews(options)
+
         head = resolve_head(options.head)
         title, body, title_supplied, body_supplied = resolve_title_and_body(options)
         squash_override, squash_supplied = resolve_squash_override(options)

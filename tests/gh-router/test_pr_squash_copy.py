@@ -25,7 +25,7 @@ from typing import Any
 
 import pytest
 
-from tests.gh_helpers import make_repo
+from tests.gh_helpers import make_repo, review_threads_payload
 from tests.git_env import git_env
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -542,7 +542,9 @@ def test_merge_path_refuses_a_body_copied_into_the_squash_slot(
     def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         calls.append(list(cmd))
         joined = " ".join(cmd)
-        if "mergeable_state" in joined:
+        if "graphql" in joined:
+            out = review_threads_payload()
+        elif "mergeable_state" in joined:
             out = "clean"
         elif "api user" in joined:
             out = "merger"

@@ -8,7 +8,7 @@ argument-hint: |-
   git-diff-digest <spec> [PATH_FILTER] [--commit SHA] [--file PATH] [--hunks] [--max-lines N] [--yaml|--json] -- brief a commit range
   pr-enhance [base|pr_url] -- PR description generation
   pr-refine <number> -- take over a contributor's PR (Flow A/B), then hand to pr-land
-  pr-land [--watch --merge] -- create PR, watch checks, squash-merge
+  pr-land [--reviews] [--watch --merge] -- create PR, inspect reviews, watch checks, squash-merge
 metadata:
   manage: [gh-release, pr-land, pr-enhance, pr-refine, pr-conflict, git-diff-digest]
 ---
@@ -17,7 +17,7 @@ metadata:
 
 Goal: route GitHub work — diagnose, reconcile, land, release. Run one script per operation. Read its brief output instead of re-deriving it with `gh pr view`, `gh run list`, or `gh api …/jobs`.
 
-Boundary: `scripts/state.sh` is human-facing orientation (its `gh pr view` query); `pr-land --status` is the machine-readable landing state and is authoritative for landing decisions.
+Boundary: `scripts/state.sh` provides human-facing orientation; `pr-land --status` is the machine-readable landing state authoritative for landing decisions. `pr.py --watch` owns generic PR check rollups, and `ci.sh watch` owns single run-level workflows. Repo-local CI controllers supersede harness watchers when present. Never hand-roll `gh pr checks` polling.
 ## Common operations
 
 | Phase & Goal | Run | Output |
@@ -35,6 +35,7 @@ Boundary: `scripts/state.sh` is human-facing orientation (its `gh pr view` query
 | Triage unmerged conflicts | `uv run $SKILL_DIR/subskills/pr-conflict/scripts/extract_conflict_context.py` | `repo: <root>` · `conflicted files: N` · one row per path: path, conflict type, stages, hunk count |
 | Inspect one conflict | `uv run $SKILL_DIR/subskills/pr-conflict/scripts/extract_conflict_context.py --file <path>` | `operation:`, `author intent:` (ours/theirs sha, author, subject), compact hunks |
 | **3: Landing & CI** | | |
+| Collect unresolved reviews | `uv run $SKILL_DIR/subskills/pr-land/scripts/pr.py --reviews [--json]` | `<path>:<line> [<author>]` plus body · `reviews: N unresolved` (exit 0 clean, 1 unresolved or no PR) |
 | Create PR, watch checks, merge | `uv run $SKILL_DIR/subskills/pr-land/scripts/pr.py --title … --watch --merge --body-file .lsz/gh-router/<slug>.md --squash-message-file .lsz/gh-router/squash_message.md` | `PR <url>` → `checks success` → `merged #N (squash) to main` |
 | Watch a workflow | `$SKILL_DIR/scripts/ci.sh watch <run-id>` | quiet poll → `✔ run <id> completed: success`, else `✘ run <id> <conclusion>` exit 1 |
 | Recent runs and step costs | `$SKILL_DIR/scripts/ci.sh runs [--branch B] [--limit N]` | one line per run (`#<id> <name> <conclusion> <dur>s`) plus its slowest steps (`Run all tests=15s`) |

@@ -3,7 +3,7 @@ name: pr-land
 description: >-
   PR automation engine: opens PRs, monitors CI checks, and squash-merges via gh API. Use when a PR is ready to land, CI fails, or checks need watching.
 argument-hint: |-
-  "[--title '…'] [--body '…' | --body-file FILE] [--base main] [--head BRANCH] [--check] [--status] [--sync] [--json] [--out LEAF] [--force-scaffold] [--watch] [--verbose] [--merge] [--draft] [--no-stamp] [--squash-message '…' | --squash-message-file FILE]"
+  "[--title '…'] [--body '…' | --body-file FILE] [--base main] [--head BRANCH] [--check] [--status] [--reviews] [--sync] [--json] [--out LEAF] [--force-scaffold] [--watch] [--verbose] [--merge] [--draft] [--no-stamp] [--squash-message '…' | --squash-message-file FILE]"
 metadata:
   managed-by: gh-router
 ---
@@ -19,6 +19,7 @@ Deterministic GitHub PR lifecycle via `gh api` (avoids `gh pr create` GQL `Head 
 Run `$SKILL_DIR/scripts/pr.py` with `uv run` (Python >=3.14, `GH_TOKEN` via `gh auth`). The `$SKILL_DIR/scripts/pr.sh` shim execs it. Shared Python modules resolve repository identity (`_github.repo_slug_from_url`, push remote first) and check verdicts (`_github.checks_verdict`).
 ```bash
 uv run $SKILL_DIR/scripts/pr.py --status --json
+uv run $SKILL_DIR/scripts/pr.py --reviews
 uv run $SKILL_DIR/scripts/pr.py --sync
 uv run $SKILL_DIR/scripts/pr.py --check --body-file .lsz/gh-router/feat-x.md
 uv run $SKILL_DIR/scripts/pr.py --title '…' --body-file .lsz/gh-router/feat-x.md
@@ -38,7 +39,8 @@ uv run $SKILL_DIR/scripts/pr.py --title '…' --watch --merge --body-file .lsz/g
 | `--draft` | Keep new PR as draft after stamping. Skips ready flip. |
 | `--no-stamp` | Skip auto-stamping `(#NUM)` into `CHANGELOG.md`. The ready flip still runs. |
 | `--check` | Run drafting preflight: gates plus facts on stdout. See [Draft Phase](#draft-phase). |
-| `--status` / `--json` | Read-only landing state: predicates, failure states, artifact, title facts, squash preview, `refusals[]`, `transitions[]`. `--status` never refuses (exit 0); `--json` prints the pinned schema. |
+| `--status` / `--json` | Read-only landing state: predicates (`checks`, `reviews`, `mergeable`, …), failure states, artifact, title facts, squash preview, `refusals[]`, `transitions[]`. `--status` never refuses (exit 0); `--json` prints the pinned schema. |
+| `--reviews` | List unresolved review threads (`path:line [author]` + body); exit 1 when any remain or no open PR, 0 when clean. `--json` for structured payload. |
 | `--sync` | Merge `<remote>/<base>` into the head and push a clean result; a stopped merge prints the pr-conflict dual-intent report and refuses (exit 1) before any file is edited. See [Sync](#sync). |
 | `--out LEAF` | Scaffold leaf under `.lsz/gh-router/` (default `<head-slug>.md`; see [Draft Phase](#draft-phase)). |
 | `--force-scaffold` | With a body-less `--check`, regenerate the leaf over an existing file. Otherwise the tool writes nothing and reports path + `stale`. |
@@ -58,12 +60,12 @@ Without a supplied body, the leaf is a candidate scaffold: the installed templat
 
 A with-body `--check` prints `commits: N`, `trailers: N`, the title facts (`derived`, length, budget), the `squash_body_preview`, and one `hint:` line. A body-less run prints the counts, the leaf path, the hint, and the scaffold payload itself. The hint splits the two duties: the PR body keeps the repo's installed template shape (see `install-template.sh`; prose owned by `pr-enhance`), while the squash overview — never the PR body — is the artifact under the curation spec. An open PR already carries its description: a body-less `--check` gates on the fetched PR body and persists nothing.
 
-`--status` is the machine-readable landing state: predicates (`branch_pushed`, `pr_state`, `body_state`, `checks`, `mergeable`, …), failure states (`diverged`, `head_stale`, `stamp_failed`, `base_unresolvable`), the artifact path plus `stale`, title facts, the squash preview, advisory `refusals[]`, and the legal `transitions[]` (each with its command, preconditions, and `mutation`). It never refuses and always exits 0.
+`--status` is the machine-readable landing state: predicates (`branch_pushed`, `pr_state`, `body_state`, `checks`, `reviews`, `mergeable`, …), failure states (`diverged`, `head_stale`, `stamp_failed`, `base_unresolvable`), the artifact path plus `stale`, title facts, the squash preview, advisory `refusals[]` (including `reviews_unresolved`), and the legal `transitions[]` (each with its command, preconditions, and `mutation`). It never refuses and always exits 0.
 Curate the scaffold leaf before passing it to the create phase as `--body-file`, in the repo's installed PR template shape (Summary · Root Cause for fixes · Blast Radius & Safety · Evidence · Checklist). It keeps the authored body as supplied or fetched, including human-facing Mermaid diagrams and `<details>` blocks; a merge appends `Co-authored-by` trailers itself.
 
 Author prose from the git-diff-digest brief with `pr-enhance`. The PR body is the reviewer's artifact, not the commit message. Author the squash overview as a separate file (at most 5 bullets and 15 lines). Pass that file to `--merge` with `--squash-message-file`. The merge operation never falls back to the PR body. A message that reproduces the scaffold leaf (`.lsz/gh-router/<slug>.md`) is refused.
 
-Exit: `0` gates passed · `1` a gate refused (see below) · `2` usage error, or a body-less `--check` with no open PR (scaffold path).
+Exit: `0` gates passed, or `--reviews` clean · `1` a gate refused (checks, reviews, shape, draft) · `2` usage error, or a body-less `--check` with no open PR (scaffold path).
 
 ## Sync
 
@@ -84,6 +86,7 @@ Resume after a stop: reconcile each path from the report, `git add` it, `git com
 | Reused Draft | `reused PR #N is still a draft and --draft was not passed` | 1 |
 | Ready Flip | `gh pr ready failed for PR #N` + the verbatim `gh pr ready N --repo <repo>` remediation | 1 |
 | Checks | `checks failed: failing run id(s): <ids>` + the `gh run view --run-id <id> --log-failed` pointer (slim default; `--verbose` adds the run log and `gh pr checks` tail); `checks timeout after 600s — no green verdict` | 1 |
+| Reviews | `refusing to merge: N unresolved review thread(s) on PR #N` (remedy: resolve threads or run `pr.py --reviews`) | 1 |
 | Merge State | `refusing to merge: mergeable_state=<state> (not clean)`, preceded by the shared refusal report (`PR <url>` · `<verdict>: mergeable=… merge_state_status=…` · `touched files: …` — every path the PR changes, `(none resolved)` when the read is empty or fails · the pr-conflict pointer) | 1 |
 | Pushed Head | `refusing to push <head>: remote <remote>/<head> is ahead …` (never force-pushes; reconcile, then re-run) | 1 |
 
@@ -91,6 +94,7 @@ An explicit `--squash-message` that sanitizes to nothing is a usage error, exit 
 
 The Title Shape gate matches the type case-insensitively (`FEAT:` passes) and keeps the scope and `!` optional. The header ends `(#N)`.
 
+- **Review Resolution.** The merge path requires zero unresolved review threads (`reviews_unresolved`). `fetch_review_threads` reads paginated GraphQL `reviewThreads` (`isResolved == false`). A failed read or page cap (>1000 threads) fails closed with `PrError`.
 - **Squash Body Hygiene.** Every path to `commit_message` runs `clean_squash_body`. It strips HTML comments and fenced Mermaid blocks (3+ backticks or tildes). It strips line-anchored `<details>…</details>` blocks. Inline `<details>` tags remain untouched. It strips review-only `## Architecture` and `## Verification Evidence` sections. It also removes `## Checklist` items, `Landing:`/`Ledger-Waiver:` directives, checkboxes, and empty headings. Unclosed fences stop at the next heading, `Closes` keyword, or trailer line. It preserves `## Summary`, `## What Changed`, `## Blast Radius & Safety`, `## Evidence`, standalone `Closes #NN` lines, and `Co-authored-by` trailers. Trailers append automatically. The operation is idempotent: the merge path cleans twice.
 - **Squash Shape.** The PR body and squash message are separate artifacts. The body keeps full reviewer detail (Mermaid, `<details>`, evidence). The squash message is a curated overview of contract sections only, at most 5 bullets and 15 lines. Both `--check` (preview) and `--merge` (explicit message) run the cleaned shape gate.
 
@@ -109,6 +113,7 @@ The Title Shape gate matches the type case-insensitively (`FEAT:` passes) and ke
 2. **Draft** — run `--check`. Curate the scaffold leaf it writes (`.lsz/gh-router/<head-slug>.md`) and pass it back as `--body-file`. *Done when* `--check` exits `0`.
 3. **Create or reuse** — `GET pulls?head=owner:HEAD` reuses `number` and calls `PATCH title/body`. Otherwise, call `POST pulls` (always with `draft=true`). Stamp `(#NUM)` into unattributed unreleased entries, push, and flip a new PR ready via `gh pr ready`. This fires the `ready_for_review` event. Existing open PRs remain untouched. *Done when* stdout prints `PR <url>` and the ready flip exits `0`.
 4. **Watch** (`--watch`) — poll all check-runs and commit statuses: `gh pr checks --json name,bucket` → `checks_verdict`. Each poll prints one stderr line: `checks <verdict> (mergeable_state=<state>, <i>/<tries>)`. A `behind` head appends `, head behind <base>`. Resolve mergeability first. An `unknown` state retries 5×2s (~8s) and refuses through the shared report with verdict `unknown`. A `dirty` reading requires confirmation twice 3s apart before counting as conflicting. Non-dirty readings reset strikes. A `behind` head is accepted with a folded warning. Default output is slim. A `failure` verdict prints failing run IDs plus a `gh run view --run-id <id> --log-failed` pointer (or `ci.sh why`). A timeout prints only its line. Pass `--verbose` to view full tails. *Done when* stderr prints `checks success`. A `failure` verdict exits `1`. Only a `pending` verdict continues polling up to 60×10s.
-5. **Merge** (`--merge`) — require an explicit `--squash-message` (or `--squash-message-file`) and a green watch. The title gate runs before any `gh` mutation. Resolve `mergeable_state` using the same retry budgets (unknown 5×2s, dirty debounced 2×3s). A conflicting or unresolved state fails fast through the shared refusal report (`PR <url>`, verdict, touched files, pr-conflict pointer). A `behind` head refuses with `pr.py --sync` as the remedy; run it, then re-run the watch and merge. A missing explicit message refuses before any `PUT`. There is no PR-body fallback. Finally, run `PUT pulls/$NUM/merge merge_method=squash` with `commit_title=<title> (#N)` and `commit_message` set to the cleaned explicit message with rebuilt trailers. *Done when* stderr prints `merged #N (squash) to <base>`.
+5. **Collect reviews** (`--reviews`) — list unresolved review threads. Output supplies the fix brief payload (`{id, path, line, author, body}`). *Done when* `pr.py --reviews` exits `0`.
+6. **Merge** (`--merge`) — require an explicit `--squash-message` (or `--squash-message-file`), a green watch, and zero unresolved review threads. The title gate runs before any `gh` mutation. Resolve `mergeable_state` using the same retry budgets (unknown 5×2s, dirty debounced 2×3s). A conflicting or unresolved state fails fast through the shared refusal report (`PR <url>`, verdict, touched files, pr-conflict pointer). A `behind` head refuses with `pr.py --sync` as the remedy; run it, then re-run the watch and merge. A missing explicit message refuses before any `PUT`. There is no PR-body fallback. Finally, run `PUT pulls/$NUM/merge merge_method=squash` with `commit_title=<title> (#N)` and `commit_message` set to the cleaned explicit message with rebuilt trailers. *Done when* stderr prints `merged #N (squash) to <base>`.
 
 Fail-loud, no secrets in logs: PR URL on stdout, progress on stderr. Re-trigger is model-driven — the script returns failure info, the model edits, pushes, and re-runs `--watch --merge`.

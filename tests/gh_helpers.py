@@ -14,6 +14,7 @@ no main refs — different contract).
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -125,3 +126,47 @@ def write_gh_stub(bindir: Path, script: str) -> Path:
     _ = gh.write_text(script, encoding="utf-8")
     gh.chmod(0o755)
     return bindir
+
+
+def review_threads_payload(
+    nodes: list[dict[str, object]] | None = None,
+    *,
+    has_next: bool = False,
+    cursor: str | None = None,
+) -> str:
+    """One `reviewThreads` GraphQL page for `_github.fetch_review_threads` fakes."""
+    return json.dumps(
+        {
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "reviewThreads": {
+                            "pageInfo": {"hasNextPage": has_next, "endCursor": cursor},
+                            "nodes": nodes or [],
+                        }
+                    }
+                }
+            }
+        }
+    )
+
+
+def review_thread_node(
+    *,
+    thread_id: str = "T1",
+    resolved: bool = False,
+    path: str = "src/a.ts",
+    line: int | None = 12,
+    author: str = "sourcery-ai",
+    body: str = "Please fix this.",
+    outdated: bool = False,
+) -> dict[str, object]:
+    """One `reviewThreads` node for `review_threads_payload`."""
+    return {
+        "id": thread_id,
+        "isResolved": resolved,
+        "isOutdated": outdated,
+        "path": path,
+        "line": line,
+        "comments": {"nodes": [{"author": {"login": author}, "body": body}]},
+    }

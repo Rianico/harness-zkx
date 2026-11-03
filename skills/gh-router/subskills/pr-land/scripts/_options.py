@@ -24,6 +24,7 @@ class PrOptions:
     check: bool = False
     status: bool = False
     sync: bool = False
+    reviews: bool = False
     json_output: bool = False
     draft: bool = False
     no_stamp: bool = False
