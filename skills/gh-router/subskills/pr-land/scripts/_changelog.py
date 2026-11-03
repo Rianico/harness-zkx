@@ -33,7 +33,7 @@ __all__ = [
 
 
 _HIDDEN_TYPES = frozenset({"docs", "chore", "style", "test", "ci", "build"})
-_HIDDEN_TITLE_RE = re.compile(r"^(?P<type>[a-z]+)(?P<bang>!)?(\([^)]*\))?:")
+_HIDDEN_TITLE_RE = re.compile(r"^(?P<type>[a-z]+)(?:\([^)]*\))?(?P<bang>!)?:")
 
 _UNRELEASED_BULLET_RE = re.compile(r"^[*+-]\s+")
 

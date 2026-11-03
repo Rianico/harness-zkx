@@ -996,3 +996,106 @@ def test_ledger_blocks_a_feature_entry_under_a_hidden_title(tmp_path: Path) -> N
     assert "bump-alignment" in result.stderr
     assert "licenses no release" in result.stderr
     assert "add a thing" in result.stderr
+
+
+# --- the title grammar and the unparseable-title audit (#307, #309) -------------------------
+
+
+def test_ledger_accepts_a_scoped_breaking_title(tmp_path: Path) -> None:
+    r"""`feat(store)!:` is canonical: the bang sits after the optional scope (#307).
+
+    Mutation: restore `(?P<bang>!)?(\([^)]*\))?:` in HIDDEN_TITLE_RE -> the title parses
+    as None and the new title-grammar audit refuses a canonical breaking title.
+    """
+    repo = _repo(
+        tmp_path,
+        _ledger("* **store:** break a thing (#96) (BREAKING CHANGE)"),
+        ["feat(store)!: break a thing (#96)"],
+    )
+
+    result = _run(repo, "ledger", "--pr", "96", "--squash-title", "feat(store)!: break a thing")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "ledger: pass"
+
+
+def test_ledger_accepts_a_scoped_fix_bang_title(tmp_path: Path) -> None:
+    """`fix(store)!:` licenses a major, so a breaking entry under it aligns (#307)."""
+    repo = _repo(
+        tmp_path,
+        _ledger("* **store:** break a thing (#96) (BREAKING CHANGE)"),
+        ["fix(store)!: break a thing (#96)"],
+    )
+
+    result = _run(repo, "ledger", "--pr", "96", "--squash-title", "fix(store)!: break a thing")
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_ledger_accepts_a_scopeless_bang_title(tmp_path: Path) -> None:
+    """`feat!:` carries no scope; the bang still licenses a major (#307)."""
+    repo = _repo(
+        tmp_path,
+        _ledger("* **store:** break a thing (#96) (BREAKING CHANGE)"),
+        ["feat!: break a thing (#96)"],
+    )
+
+    result = _run(repo, "ledger", "--pr", "96", "--squash-title", "feat!: break a thing")
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_ledger_accepts_a_scoped_perf_title(tmp_path: Path) -> None:
+    """A scoped non-breaking title parses the same way it always did (#307)."""
+    repo = _repo(
+        tmp_path,
+        _ledger("* **store:** speed a thing (#96)", section="Performance Improvements"),
+        ["perf(store): speed a thing (#96)"],
+    )
+
+    result = _run(repo, "ledger", "--pr", "96", "--squash-title", "perf(store): speed a thing")
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_ledger_exempts_a_scoped_docs_title(tmp_path: Path) -> None:
+    """A scoped hidden-type title owes no entry, exactly like the unscoped form (#307)."""
+    repo = _repo(tmp_path, _ledger("* **thing:** a (#1)"), ["docs(store): describe (#96)"])
+
+    result = _run(repo, "ledger", "--pr", "96", "--squash-title", "docs(store): describe")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "ledger: pass"
+
+
+def test_ledger_blocks_an_unparseable_squash_title(tmp_path: Path) -> None:
+    """A title the grammar cannot read must fail loud, never opt the audit out (#309).
+
+    Mutation: return [] when `_title_bump` is None -> the unreadable title passes silently.
+    """
+    repo = _repo(
+        tmp_path,
+        _ledger("* **thing:** add a thing (#96)"),
+        ["feat(thing): add a thing (#96)"],
+    )
+
+    result = _run(repo, "ledger", "--pr", "96", "--squash-title", "Added a thing")
+
+    assert result.returncode == 2, result.stderr
+    assert "[title-grammar]" in result.stderr
+    assert "Added a thing" in result.stderr
+    assert "retitle" in result.stderr
+
+
+def test_ledger_stays_silent_without_a_squash_title(tmp_path: Path) -> None:
+    """No title means nothing to audit: the finding needs both --pr and --squash-title (#309)."""
+    repo = _repo(
+        tmp_path,
+        _ledger("* **thing:** add a thing (#96)"),
+        ["feat(thing): add a thing (#96)"],
+    )
+
+    result = _run(repo, "ledger", "--pr", "96")
+
+    assert result.returncode == 0, result.stderr
+    assert "title-grammar" not in result.stderr

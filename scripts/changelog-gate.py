@@ -69,7 +69,7 @@ ERROR_CODE_RE = re.compile(
 ENTRY_SCOPE_RE = re.compile(r"^\* \*\*(?P<scope>[^*:]+):\*\* \S")
 TITLE_SCOPE_RE = re.compile(r"^[A-Za-z]+(?:\((?P<scope>[^()]+)\))?!?:")
 HIDDEN_TYPES = frozenset({"docs", "chore", "style", "test", "ci", "build", "refactor"})
-HIDDEN_TITLE_RE = re.compile(r"^(?P<type>[a-z]+)(?P<bang>!)?(\([^)]*\))?:")
+HIDDEN_TITLE_RE = re.compile(r"^(?P<type>[a-z]+)(?:\([^)]*\))?(?P<bang>!)?:")
 
 # Release levels a squash title or a ledger section licenses (semantic-release defaults).
 BUMP_NONE = 0
@@ -321,7 +321,21 @@ def check_bump_alignment(
         return []
     licensed = _title_bump(squash_title)
     if licensed is None:
-        return []
+        # A title the grammar cannot parse licenses nothing, so the audit must not
+        # opt out silently: an unreadable title hides every bump mismatch behind it.
+        return [
+            Finding(
+                "title-grammar",
+                f"squash title {squash_title.strip()!r} is not a Conventional Commit "
+                "subject, so its release level cannot be audited against this PR's entries",
+                fixable=False,
+                hint=(
+                    "retitle the squash commit and the PR to `<type>(<scope>): <subject>` "
+                    "(`!` after the scope marks a breaking change)"
+                ),
+            )
+        ]
+
     findings: list[Finding] = []
     for section, entries in sections.items():
         for entry in entries:
