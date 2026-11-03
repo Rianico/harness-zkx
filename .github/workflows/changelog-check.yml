@@ -2,7 +2,7 @@ name: Changelog Check
 on:
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, edited]
   push:
     branches: [main]
 permissions:
@@ -67,15 +67,22 @@ jobs:
         # v9.0.0
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
         with:
+          # MARKER is the dedupe key: the posted body carries it and the probe
+          # reads it, so the two can never name different strings.
           script: |
+            const MARKER = '<!-- changelog-gate-floor -->';
             const pr = context.issue.number;
             const body = [
+              MARKER,
               '> [!warning] Changelog ledger check failed',
               '',
-              'The `## [Unreleased]` block did not pass verification: well-formedness,',
-              'section integrity, duplicate identities, placeholders, or PR attribution.',
+              'The `## [Unreleased]` block did not pass verification: '
+                + 'well-formedness,',
+              'section integrity, duplicate identities, placeholders, or '
+                + 'PR attribution.',
               '',
-              'Every new entry must name this PR (`(#' + pr + ')`). Multiple entries are allowed.',
+              'Every new entry must name this PR (`(#' + pr + ')`). '
+                + 'Multiple entries are allowed.',
               '',
               '```bash',
               'uv run scripts/changelog-gate.py ledger --pr ' + pr,
@@ -90,9 +97,7 @@ jobs:
               repo: context.repo.repo,
               issue_number: pr
             });
-            const seen = comments.some(
-              c => c.body.includes('Changelog ledger floor failed')
-            );
+            const seen = comments.some(c => c.body.includes(MARKER));
             if (seen) return;
             await github.rest.issues.createComment({
               owner: context.repo.owner,

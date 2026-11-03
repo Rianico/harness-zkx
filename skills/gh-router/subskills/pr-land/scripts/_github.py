@@ -48,6 +48,8 @@ __all__ = [
     "POLL_INTERVAL",
     "POLL_TRIES",
     "SLUG_PATTERN",
+    "SQUASH_SETTING_FIELD",
+    "SQUASH_SETTING_WANTED",
     "UNKNOWN_INTERVAL",
     "UNKNOWN_TRIES",
     "_ahead_behind",
@@ -57,6 +59,7 @@ __all__ = [
     "_remote_branch_exists",
     "check_conflicts",
     "checks_verdict",
+    "check_squash_setting",
     "conflicting_files",
     "default_branch",
     "dump_failure_logs",
@@ -76,6 +79,7 @@ __all__ = [
     "merge_state_verdict",
     "pr_conflict_verdict",
     "pr_url",
+    "read_squash_setting",
     "ready_pr",
     "repo_remote_for_ref",
     "repo_slug_from_url",
@@ -90,6 +94,14 @@ __all__ = [
     "watch_checks",
 ]
 
+
+# The squash subject must be the PR title: the ledger gate reads the PR title, so any
+# other setting makes the two disagree silently. The field is permission-gated (a token
+# with only `contents: read` sees the same reduced object an anonymous read does), so the
+# guard lives where the operator's token can read it, and an unreadable value advises
+# instead of refusing.
+SQUASH_SETTING_FIELD = "squash_merge_commit_title"
+SQUASH_SETTING_WANTED = "PR_TITLE"
 
 SLUG_PATTERN = re.compile(r"^[^/: \t\r\n]+/[^/: \t\r\n]+$")
 
@@ -421,6 +433,66 @@ def default_branch(repo: str, cwd: Path | None = None) -> str | None:
     if res.returncode == 0 and res.stdout.strip():
         return res.stdout.strip()
     return None
+
+
+def read_squash_setting(repo: str, cwd: Path | None = None) -> str | None:
+    """The repo's squash-subject setting, or None when it is not readable as one.
+
+    `squash_merge_commit_title` is permission-gated: a token without repository
+    settings read (CI's `GITHUB_TOKEN`, or a contributor's) sees the field absent —
+    the same reduced object an anonymous read gets. A failed read is None too, so the
+    caller cannot tell the two apart; both mean "not assertable here".
+    """
+    try:
+        res = run_command(
+            ["gh", "api", f"repos/{repo}", "--jq", f".{SQUASH_SETTING_FIELD}"],
+            cwd=cwd,
+        )
+    except PrError:
+        return None
+    if res.returncode != 0:
+        return None
+    actual = res.stdout.strip()
+    # `gh api --jq` prints nothing for an absent field but `null` for a JSON-null one;
+    # neither is a setting, so both read as unreadable.
+    if not actual or actual == "null":
+        return None
+    return actual
+
+
+def check_squash_setting(repo: str, cwd: Path | None = None) -> None:
+    """Refuse a readable squash setting that is not the PR title; advise when unreadable.
+
+    The ledger gate reads the PR title as the squash subject, so any other setting
+    makes the two disagree silently. The operator's token can read the field; a
+    contributor's cannot, and no contributor is blocked for that — an unreadable
+    setting prints one advisory line and the run continues.
+    """
+    actual = read_squash_setting(repo, cwd=cwd)
+    if actual is None:
+        print(
+            f"{SQUASH_SETTING_FIELD} unreadable (token lacks repository settings); "
+            "the PR title is graded as the squash subject",
+            file=sys.stderr,
+        )
+        return
+    if actual == SQUASH_SETTING_WANTED:
+        return
+    reason = (
+        f"{SQUASH_SETTING_FIELD}={actual!r}, want {SQUASH_SETTING_WANTED}: "
+        "the ledger gate reads the PR title as the squash subject, so the two disagree"
+    )
+    raise RefusalError(
+        reason,
+        refusals=[
+            make_refusal(
+                "squash_setting",
+                reason,
+                f"gh api -X PATCH repos/{repo} -f {SQUASH_SETTING_FIELD}={SQUASH_SETTING_WANTED}",
+                repo,
+            )
+        ],
+    )
 
 
 def issue_state(repo: str, num: str, cwd: Path | None = None) -> tuple[str, str] | None:

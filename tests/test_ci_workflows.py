@@ -146,3 +146,30 @@ def test_changelog_gate_copies_the_verbatim_ledger_floor_block() -> None:
     assert names.count("Ledger floor") == 1, (
         "ledger floor block must live only under changelog-gate"
     )
+
+
+# --- the title-edit retrigger and the dedupe marker (#311, #312) -----------------------------
+
+
+def test_changelog_check_reruns_on_a_title_edit() -> None:
+    """A title edit changes the squash subject, so the gate must re-read it (#312).
+
+    Mutation: drop `edited` from `pull_request.types` -> the squash-title audit never
+    sees a retitle.
+    """
+    for path in (CHANGELOG_CHECK, TWIN_CHANGELOG_CHECK):
+        assert "edited" in _pull_request_types(_doc(path)), f"{path} misses the edited trigger"
+
+
+def test_the_comment_body_and_the_dedupe_probe_share_one_marker() -> None:
+    """The probe looked for a phrase the body never carried, so it never deduped (#311).
+
+    Mutation: probe for a literal the body does not include -> every run posts a
+    duplicate comment.
+    """
+    text = _text()
+    assert "const MARKER = '<!-- changelog-gate-floor -->';" in text
+    assert "comments.some(c => c.body.includes(MARKER))" in text
+    assert "'Changelog ledger floor failed'" not in text, "the stale probe phrase survived"
+    assert text.index("MARKER,") < text.index("c.body.includes(MARKER)")
+    assert "const MARKER" in TWIN_CHANGELOG_CHECK.read_text(encoding="utf-8")

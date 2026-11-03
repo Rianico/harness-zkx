@@ -464,6 +464,11 @@ def main(argv: list[str] | None = None) -> int:
         if options.check:
             # Advisory-only: a Closes #N on an already-closed issue warns, never refuses.
             _ = warn_closed_issues(repo, body, squash_override or "")
+            # The squash subject must be the PR title: the ledger gate reads the PR
+            # title, so any other setting makes the two disagree silently. The read is
+            # permission-gated, so an unreadable setting advises and continues.
+            _github.check_squash_setting(repo)
+
             return run_draft_phase(
                 options=options,
                 repo=repo,
@@ -490,7 +495,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"PR {url}")
 
         if not options.no_stamp:
-            if created and stamp_needed(num) and not stamp_changelog(head, num):
+            if created and stamp_needed(num) and not stamp_changelog(head, num, base=base):
                 # The stamp had an entry to attribute and failed: hard-fail with
                 # the PR url and the remedy. The no-op and stranded-recovery paths
                 # below stay soft (T1): only a failed wanted stamp refuses.
@@ -511,7 +516,7 @@ def main(argv: list[str] | None = None) -> int:
                     ],
                 )
             elif not created or not stamp_needed(num):
-                _ = stamp_changelog(head, num)
+                _ = stamp_changelog(head, num, base=base)
         if created and not unreleased_attributes_pr(num):
             warn_ledger_gap(num, options.draft, options.no_stamp, final_title)
         if created and not options.draft:

@@ -69,7 +69,7 @@ ERROR_CODE_RE = re.compile(
 ENTRY_SCOPE_RE = re.compile(r"^\* \*\*(?P<scope>[^*:]+):\*\* \S")
 TITLE_SCOPE_RE = re.compile(r"^[A-Za-z]+(?:\((?P<scope>[^()]+)\))?!?:")
 HIDDEN_TYPES = frozenset({"docs", "chore", "style", "test", "ci", "build", "refactor"})
-HIDDEN_TITLE_RE = re.compile(r"^(?P<type>[a-z]+)(?P<bang>!)?(\([^)]*\))?:")
+HIDDEN_TITLE_RE = re.compile(r"^(?P<type>[a-z]+)(?:\([^)]*\))?(?P<bang>!)?:")
 
 # Release levels a squash title or a ledger section licenses (semantic-release defaults).
 BUMP_NONE = 0
@@ -102,7 +102,7 @@ TITLE_BUMP: dict[str, int] = {
     "build": BUMP_NONE,
     "ci": BUMP_NONE,
 }
-BREAKING_ENTRY_RE = re.compile(r"\(BREAKING CHANGE\)\s*$")
+BREAKING_ENTRY_RE = re.compile(r"\(BREAKING CHANGE\)(?:\s*\(#\d+\))?\s*$")
 
 KNOWN_SECTIONS = frozenset(
     {
@@ -179,9 +179,16 @@ def parse_unreleased_sections(content: str) -> dict[str, list[str]]:
 
 
 def check_sections(block: str) -> list[Finding]:
+    """Section names, orphan bullets, and prose inside a section.
+
+    A section holds bullets and the indented lines that continue them; a blank
+    line ends a continuation. Any other non-blank line is prose the renderer
+    would never emit, so it is reported instead of shipping unread.
+    """
     findings: list[Finding] = []
     current: str | None = None
     seen: set[str] = set()
+    continued = False
     for line in block.splitlines():
         heading = SECTION_HEADING_RE.match(line)
         if heading:
@@ -198,11 +205,29 @@ def check_sections(block: str) -> list[Finding]:
                     )
                 )
             current = name
+            continued = False
             continue
-        if BULLET_RE.match(line) and current is None:
+        if BULLET_RE.match(line):
+            if current is None:
+                findings.append(
+                    Finding("section-integrity", f"entry outside any section: {line.strip()!r}")
+                )
+            continued = True
+            continue
+        if not line.strip():
+            continued = False
+            continue
+        if line[:1].isspace() and continued:
+            continue  # an indented line continues the bullet above it
+        if current is not None:
             findings.append(
-                Finding("section-integrity", f"entry outside any section: {line.strip()!r}")
+                Finding(
+                    "section-integrity",
+                    f"prose inside '### {current}': {line.strip()!r} — a section holds bullets "
+                    "and their indented continuations only",
+                )
             )
+        continued = False
     return findings
 
 
@@ -321,7 +346,21 @@ def check_bump_alignment(
         return []
     licensed = _title_bump(squash_title)
     if licensed is None:
-        return []
+        # A title the grammar cannot parse licenses nothing, so the audit must not
+        # opt out silently: an unreadable title hides every bump mismatch behind it.
+        return [
+            Finding(
+                "title-grammar",
+                f"squash title {squash_title.strip()!r} is not a Conventional Commit "
+                "subject, so its release level cannot be audited against this PR's entries",
+                fixable=False,
+                hint=(
+                    "retitle the squash commit and the PR to `<type>(<scope>): <subject>` "
+                    "(`!` after the scope marks a breaking change)"
+                ),
+            )
+        ]
+
     findings: list[Finding] = []
     for section, entries in sections.items():
         for entry in entries:

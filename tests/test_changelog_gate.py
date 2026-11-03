@@ -996,3 +996,225 @@ def test_ledger_blocks_a_feature_entry_under_a_hidden_title(tmp_path: Path) -> N
     assert "bump-alignment" in result.stderr
     assert "licenses no release" in result.stderr
     assert "add a thing" in result.stderr
+
+
+# --- the title grammar and the unparseable-title audit (#307, #309) -------------------------
+
+
+def test_ledger_accepts_a_scoped_breaking_title(tmp_path: Path) -> None:
+    r"""`feat(store)!:` is canonical: the bang sits after the optional scope (#307).
+
+    Mutation: restore `(?P<bang>!)?(\([^)]*\))?:` in HIDDEN_TITLE_RE -> the title parses
+    as None and the new title-grammar audit refuses a canonical breaking title.
+    """
+    repo = _repo(
+        tmp_path,
+        _ledger("* **store:** break a thing (#96) (BREAKING CHANGE)"),
+        ["feat(store)!: break a thing (#96)"],
+    )
+
+    result = _run(repo, "ledger", "--pr", "96", "--squash-title", "feat(store)!: break a thing")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "ledger: pass"
+
+
+def test_ledger_accepts_a_scoped_fix_bang_title(tmp_path: Path) -> None:
+    """`fix(store)!:` licenses a major, so a breaking entry under it aligns (#307)."""
+    repo = _repo(
+        tmp_path,
+        _ledger("* **store:** break a thing (#96) (BREAKING CHANGE)"),
+        ["fix(store)!: break a thing (#96)"],
+    )
+
+    result = _run(repo, "ledger", "--pr", "96", "--squash-title", "fix(store)!: break a thing")
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_ledger_accepts_a_scopeless_bang_title(tmp_path: Path) -> None:
+    """`feat!:` carries no scope; the bang still licenses a major (#307)."""
+    repo = _repo(
+        tmp_path,
+        _ledger("* **store:** break a thing (#96) (BREAKING CHANGE)"),
+        ["feat!: break a thing (#96)"],
+    )
+
+    result = _run(repo, "ledger", "--pr", "96", "--squash-title", "feat!: break a thing")
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_ledger_accepts_a_scoped_perf_title(tmp_path: Path) -> None:
+    """A scoped non-breaking title parses the same way it always did (#307)."""
+    repo = _repo(
+        tmp_path,
+        _ledger("* **store:** speed a thing (#96)", section="Performance Improvements"),
+        ["perf(store): speed a thing (#96)"],
+    )
+
+    result = _run(repo, "ledger", "--pr", "96", "--squash-title", "perf(store): speed a thing")
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_ledger_exempts_a_scoped_docs_title(tmp_path: Path) -> None:
+    """A scoped hidden-type title owes no entry, exactly like the unscoped form (#307)."""
+    repo = _repo(tmp_path, _ledger("* **thing:** a (#1)"), ["docs(store): describe (#96)"])
+
+    result = _run(repo, "ledger", "--pr", "96", "--squash-title", "docs(store): describe")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "ledger: pass"
+
+
+def test_ledger_blocks_an_unparseable_squash_title(tmp_path: Path) -> None:
+    """A title the grammar cannot read must fail loud, never opt the audit out (#309).
+
+    Mutation: return [] when `_title_bump` is None -> the unreadable title passes silently.
+    """
+    repo = _repo(
+        tmp_path,
+        _ledger("* **thing:** add a thing (#96)"),
+        ["feat(thing): add a thing (#96)"],
+    )
+
+    result = _run(repo, "ledger", "--pr", "96", "--squash-title", "Added a thing")
+
+    assert result.returncode == 2, result.stderr
+    assert "[title-grammar]" in result.stderr
+    assert "Added a thing" in result.stderr
+    assert "retitle" in result.stderr
+
+
+def test_ledger_stays_silent_without_a_squash_title(tmp_path: Path) -> None:
+    """No title means nothing to audit: the finding needs both --pr and --squash-title (#309)."""
+    repo = _repo(
+        tmp_path,
+        _ledger("* **thing:** add a thing (#96)"),
+        ["feat(thing): add a thing (#96)"],
+    )
+
+    result = _run(repo, "ledger", "--pr", "96")
+
+    assert result.returncode == 0, result.stderr
+    assert "title-grammar" not in result.stderr
+
+
+# --- prose inside a section, and the breaking-marker order (#308, #310) ---------------------
+
+
+def test_ticket_blocks_prose_inside_a_section(tmp_path: Path) -> None:
+    """A non-bullet line inside a section ships unread; it is a finding, not invisible (#308).
+
+    Mutation: report only a bullet outside a section -> the prose line passes the floor.
+    """
+    text = (
+        "# Changelog\n\n## [Unreleased]\n\n### Features\n\n"
+        "* **thing:** add a thing (#1)\n"
+        "This paragraph is not an entry.\n"
+    )
+    repo = _repo(tmp_path, text, ["feat(thing): add a thing (#1)"])
+
+    result = _run(repo, "ticket")
+
+    assert result.returncode == 1, result.stderr
+    assert "[section-integrity]" in result.stderr
+    assert "This paragraph is not an entry." in result.stderr
+
+
+def test_ticket_accepts_an_indented_continuation(tmp_path: Path) -> None:
+    """An indented line after a bullet continues it; a wrapped entry stays one entry (H3).
+
+    Mutation: report every non-bullet line -> the wrapped entry is misread as prose.
+    """
+    text = (
+        "# Changelog\n\n## [Unreleased]\n\n### Features\n\n"
+        "* **thing:** add a thing (#1)\n"
+        "  and its wrapped tail\n"
+    )
+    repo = _repo(tmp_path, text, ["feat(thing): add a thing (#1)"])
+
+    result = _run(repo, "ticket")
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_ticket_blocks_an_indented_line_after_a_blank_line(tmp_path: Path) -> None:
+    """A blank line ends the continuation, so a later indented line is prose (H3)."""
+    text = (
+        "# Changelog\n\n## [Unreleased]\n\n### Features\n\n"
+        "* **thing:** add a thing (#1)\n"
+        "\n"
+        "  orphaned indented text\n"
+    )
+    repo = _repo(tmp_path, text, ["feat(thing): add a thing (#1)"])
+
+    result = _run(repo, "ticket")
+
+    assert result.returncode == 1, result.stderr
+    assert "orphaned indented text" in result.stderr
+
+
+def test_ticket_passes_this_repos_real_changelog() -> None:
+    """H3: the new prose rule must stay silent on the real ledger (zero indented lines)."""
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "ticket"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "ticket: pass"
+
+
+def test_ledger_reads_the_breaking_marker_before_the_pr_number(tmp_path: Path) -> None:
+    """`(BREAKING CHANGE) (#96)` is breaking too; only the end anchor keeps it honest (#310).
+
+    Mutation: anchor with `\\(BREAKING CHANGE\\)\\s*$` alone -> this order stops being breaking.
+    """
+    repo = _repo(
+        tmp_path,
+        _ledger("* **store:** break a thing (BREAKING CHANGE) (#96)"),
+        ["feat(store): break a thing (#96)"],
+    )
+
+    result = _run(repo, "ledger", "--pr", "96", "--squash-title", "feat(store): break a thing")
+
+    assert result.returncode == 1, result.stderr
+    assert "bump-alignment" in result.stderr
+    assert "requires a major" in result.stderr
+
+
+def test_ledger_reads_the_breaking_marker_after_the_pr_number(tmp_path: Path) -> None:
+    """`(#96) (BREAKING CHANGE)` stays breaking; both orders share one matcher (#310)."""
+    repo = _repo(
+        tmp_path,
+        _ledger("* **store:** break a thing (#96) (BREAKING CHANGE)"),
+        ["feat(store): break a thing (#96)"],
+    )
+
+    result = _run(repo, "ledger", "--pr", "96", "--squash-title", "feat(store): break a thing")
+
+    assert result.returncode == 1, result.stderr
+    assert "requires a major" in result.stderr
+
+
+def test_ledger_ignores_a_breaking_marker_mentioned_in_prose(tmp_path: Path) -> None:
+    """`CHANGELOG.md:49` mentions the marker mid-sentence; a trailing marker alone counts (#310).
+
+    Mutation: drop the end anchor from BREAKING_ENTRY_RE -> this entry reads as breaking
+    and a patch title refuses it.
+    """
+    entry = "* **gate:** refuse a non-breaking title that carries a `(BREAKING CHANGE)` entry (#96)"
+    repo = _repo(
+        tmp_path,
+        _ledger(entry, section="Bug Fixes"),
+        ["fix(gate): refuse a non-breaking title (#96)"],
+    )
+
+    result = _run(repo, "ledger", "--pr", "96", "--squash-title", "fix(gate): refuse a title")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "ledger: pass"
