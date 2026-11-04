@@ -24,7 +24,7 @@ from pathlib import Path
 import _github
 from _check import CheckReport, check_trailers_report
 from _errors import PrError, RefusalError
-from _github import _authority_resolve, resolve_base
+from _github import _authority_resolve, digest_base, resolve_base
 from _options import PrOptions as PrOptions
 from _squash import (
     CLOSES_LINE_RE,
@@ -137,7 +137,7 @@ def _draft_range(
     base: str | None, head_ref: str, cwd: Path | None = None
 ) -> RangeResolution | None:
     """Resolve the landing range through the shared authority; None when it cannot."""
-    specs = [f"{base}..{head_ref}"] if base else []
+    specs = [f"{digest_base(base, cwd=cwd)}..{head_ref}"] if base else []
     specs.append(head_ref)
     for spec in specs:
         try:

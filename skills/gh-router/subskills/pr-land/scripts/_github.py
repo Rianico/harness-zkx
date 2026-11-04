@@ -62,6 +62,7 @@ __all__ = [
     "check_squash_setting",
     "conflicting_files",
     "default_branch",
+    "digest_base",
     "dump_failure_logs",
     "ensure_branch_pushed",
     "failing_run_ids",
@@ -728,6 +729,29 @@ def _local_base_from_authority(cwd: Path | None = None) -> str:
     return base_ref
 
 
+# A base the caller named as a commit is already unambiguous: prefixing it with a
+# remote would invent a ref that cannot exist. Seven hex characters is git's own
+# shortest abbreviation, so anything shorter stays a candidate branch name.
+_SHA_BASE_RE = re.compile(r"[0-9a-fA-F]{7,40}")
+
+
+def digest_base(base: str, cwd: Path | None = None) -> str:
+    """Resolve *base* to the ref the digest range must fork from.
+
+    The caller's own naming wins: an explicit SHA or an already remote-qualified
+    ref (`origin/…`) passes through untouched. A bare branch name prefers
+    `origin/<base>` whenever that remote-tracking ref exists locally, because the
+    PR's base is what the remote holds, not whatever a stale local branch points
+    at — a local `main` behind `origin/main` would otherwise absorb another PR's
+    landed commits into this range. Reads refs already on disk; never fetches.
+    """
+    if _SHA_BASE_RE.fullmatch(base) is not None or base.startswith("origin/"):
+        return base
+    if _remote_branch_exists(base, cwd=cwd):
+        return f"origin/{base}"
+    return base
+
+
 def _digest_range_spec(base: str, head_ref: str, cwd: Path | None = None) -> str:
     """Build the `git log` range so trailer authors equal the digest's commit set.
 
@@ -735,8 +759,9 @@ def _digest_range_spec(base: str, head_ref: str, cwd: Path | None = None) -> str
     locally the digest's own single-ref derivation is used instead. Raises
     RangeRefusal when neither resolves.
     """
+    resolved_base = digest_base(base, cwd=cwd)
     try:
-        resolution = _authority_resolve(f"{base}..{head_ref}", "..", cwd)
+        resolution = _authority_resolve(f"{resolved_base}..{head_ref}", "..", cwd)
     except RangeRefusal:
         resolution = _authority_resolve(head_ref, "..", cwd)
     return f"{resolution.base_ref}..{head_ref}"
