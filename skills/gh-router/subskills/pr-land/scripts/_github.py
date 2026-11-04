@@ -825,12 +825,15 @@ def _branch_subject(ref: str, base: str | None, cwd: Path | None = None) -> str:
     """The branch's own newest non-merge commit subject, or "" when it has none.
 
     The range is `base..ref`, so commits the base already contains (the merged-in
-    trunk side) are excluded. `--first-parent` keeps the branch's own line when the
-    branch itself merged side work, and `--no-merges` skips the merge at HEAD. A
-    branch whose only commit is a merge of the base therefore yields ""; a plain
-    non-merge head still derives its own subject when the base already contains it.
+    trunk side) are excluded. The base is routed through `digest_base`, so a bare
+    local name resolves to `origin/<base>` when that ref exists — a stale local
+    `main` behind `origin/main` can no longer admit another PR's landed commit.
+    `--first-parent` keeps the branch's own line when the branch itself merged side
+    work, and `--no-merges` skips the merge at HEAD. A branch whose only commit is a
+    merge of the base therefore yields ""; a plain non-merge head still derives its
+    own subject when the base already contains it.
     """
-    spec = f"{base}..{ref}" if base else ref
+    spec = f"{digest_base(base, cwd=cwd)}..{ref}" if base else ref
     res = run_command(
         ["git", "log", "--first-parent", "--no-merges", "-1", "--pretty=%s", spec],
         cwd=cwd,
