@@ -1556,6 +1556,10 @@ def succeeded_check_names(repo: str, sha: str, cwd: Path | None = None) -> set[s
     check-run list to recover the shadowed successes. Fail-open: a non-zero
     `gh api`, a `PrError` from the seam, or an empty `sha` returns an empty set,
     so a failed read never crashes the watch (the skip then stays not green).
+
+    `--paginate` is load-bearing: the endpoint returns 30 check runs per page by
+    default, so without it a shadowed success on a later page reads as absent and
+    the skip stays not green — a valid merge blocked by a page boundary.
     """
     if not sha:
         return set()
@@ -1565,6 +1569,7 @@ def succeeded_check_names(repo: str, sha: str, cwd: Path | None = None) -> set[s
                 "gh",
                 "api",
                 f"repos/{repo}/commits/{sha}/check-runs",
+                "--paginate",
                 "--jq",
                 '.check_runs | .[] | select(.conclusion == "success") | .name',
             ],

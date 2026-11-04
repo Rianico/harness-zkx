@@ -163,6 +163,24 @@ def test_watch_reads_a_shadowed_success_green(
     assert gh.check_runs_calls(), "the head's check-run list must be read for a skip"
 
 
+def test_watch_paginates_the_check_run_read(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The check-run read must walk every page, not just the first 30.
+
+    Mutation: drop `--paginate` -> a shadowed success past the first page reads as
+    absent and the skip stays not green, so a valid merge is blocked by a page
+    boundary. The argv is the contract here; the seam returns a single page.
+    """
+    gh = FakeWatch(checks="check\tskipping\n", succeeded="check\n")
+
+    assert _watch(monkeypatch, gh) is True
+    _ = capsys.readouterr()
+    reads = gh.check_runs_calls()
+    assert reads, "the head's check-run list must be read for a skip"
+    assert all("--paginate" in call for call in reads), reads
+
+
 def test_watch_keeps_a_skip_that_shadows_a_failure_not_green(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
