@@ -495,28 +495,46 @@ def main(argv: list[str] | None = None) -> int:
         print(f"PR {url}")
 
         if not options.no_stamp:
-            if created and stamp_needed(num) and not stamp_changelog(head, num, base=base):
-                # The stamp had an entry to attribute and failed: hard-fail with
-                # the PR url and the remedy. The no-op and stranded-recovery paths
-                # below stay soft (T1): only a failed wanted stamp refuses.
-                raise RefusalError(
-                    f"changelog stamp failed for PR #{num} ({url}); "
-                    f"the stamp did not complete (see the warning above); "
-                    f"the (#{num}) entry must exist and be pushed",
-                    refusals=[
-                        make_refusal(
-                            "stamp_failed",
-                            f"changelog stamp failed for PR #{num} ({url}); "
-                            f"the stamp did not complete (see the warning above); "
-                            f"the (#{num}) entry must exist and be pushed",
-                            f"make sure an entry ending in (#{num}) exists under ## [Unreleased], "
-                            f"commit it to {head}, push, then re-run",
-                            "CHANGELOG.md",
-                        )
-                    ],
+            base_sha = _github.pr_base_sha(repo, num)
+            if base_sha is None:
+                print(
+                    "warning: cannot read the PR base; skipping the changelog auto-stamp — "
+                    "the ledger stays red until an entry is stamped",
+                    file=sys.stderr,
                 )
-            elif not created or not stamp_needed(num):
-                _ = stamp_changelog(head, num, base=base)
+            else:
+                # The PR base SHA is the only diff authority: never fall back to a
+                # local branch name, and never fetch. A failed diff read warns once
+                # and skips the stamp — the PR already exists, so a crash here is
+                # worse than a red ledger.
+                stamp_refused = False
+                try:
+                    if created and stamp_needed(num, base_ref=base_sha):
+                        stamp_refused = not stamp_changelog(head, num, base_ref=base_sha)
+                    elif not created or not stamp_needed(num, base_ref=base_sha):
+                        _ = stamp_changelog(head, num, base_ref=base_sha)
+                except PrError as e:
+                    print(f"warning: {e}", file=sys.stderr)
+                if stamp_refused:
+                    # The stamp had an entry to attribute and failed: hard-fail with
+                    # the PR url and the remedy. The no-op and stranded-recovery
+                    # paths stay soft (T1): only a failed wanted stamp refuses.
+                    raise RefusalError(
+                        f"changelog stamp failed for PR #{num} ({url}); "
+                        f"the stamp did not complete (see the warning above); "
+                        f"the (#{num}) entry must exist and be pushed",
+                        refusals=[
+                            make_refusal(
+                                "stamp_failed",
+                                f"changelog stamp failed for PR #{num} ({url}); "
+                                f"the stamp did not complete (see the warning above); "
+                                f"the (#{num}) entry must exist and be pushed",
+                                f"make sure an entry ending in (#{num}) exists under ## [Unreleased], "
+                                f"commit it to {head}, push, then re-run",
+                                "CHANGELOG.md",
+                            )
+                        ],
+                    )
         if created and not unreleased_attributes_pr(num):
             warn_ledger_gap(num, options.draft, options.no_stamp, final_title)
         if created and not options.draft:

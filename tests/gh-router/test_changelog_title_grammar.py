@@ -68,9 +68,11 @@ def test_scope_grammars_agree_on_the_corpus() -> None:
     for title in CORPUS:
         gate_match = gate.TITLE_SCOPE_RE.match(title)
         squash_match = _squash.SQUASH_TITLE_RE.match(title)
+        bang_match = gate.HIDDEN_TITLE_RE.match(title)
         assert gate_match is not None, title
         assert squash_match is not None, title
+        assert bang_match is not None, title
         assert gate_match.group("scope") == squash_match.group("scope"), title
-        assert (squash_match.group("breaking") is not None) == title.split(":", 1)[0].endswith(
-            "!"
-        ), title
+        # Cross-assert the bang: `HIDDEN_TITLE_RE` is the independent oracle, so a
+        # shared slip in `TITLE_SCOPE_RE` and `SQUASH_TITLE_RE` cannot hide here.
+        assert (squash_match.group("breaking") is not None) == bool(bang_match.group("bang")), title

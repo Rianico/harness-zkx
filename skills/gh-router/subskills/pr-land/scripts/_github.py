@@ -77,6 +77,7 @@ __all__ = [
     "ReviewThread",
     "merge_pr",
     "merge_state_verdict",
+    "pr_base_sha",
     "pr_conflict_verdict",
     "pr_url",
     "read_squash_setting",
@@ -1432,6 +1433,27 @@ def watch_checks(
         if tail_lines:
             print("\n".join(tail_lines), file=sys.stderr)
     return False
+
+
+def pr_base_sha(repo: str, num: str, cwd: Path | None = None) -> str | None:
+    """The PR's base commit SHA, or None when the read fails or is empty.
+
+    The base SHA is the changelog stamp's diff authority: a two-dot range against a
+    local branch name admits base-side and inherited changes, and a three-dot range
+    fixes only the first. Fail-open by design — a non-zero `gh api`, an empty value,
+    or a `PrError` from the seam all read as None, so a flaky read skips the stamp
+    instead of crashing after the PR exists.
+    """
+    try:
+        res = run_command(["gh", "api", f"repos/{repo}/pulls/{num}", "--jq", ".base.sha"], cwd=cwd)
+    except PrError:
+        return None
+    if res.returncode != 0:
+        return None
+    sha = res.stdout.strip()
+    if not sha or sha == "null":
+        return None
+    return sha
 
 
 def pr_url(repo: str, num: str, cwd: Path | None = None) -> str:
