@@ -37,13 +37,13 @@ class FakeWatch:
         self,
         *,
         checks: str,
-        succeeded: str = "",
+        conclusions: str = "",
         sha: str = SHA,
         check_runs_rc: int = 0,
         check_runs_raises: bool = False,
     ) -> None:
         self.checks = checks
-        self.succeeded = succeeded
+        self.conclusions = conclusions
         self.sha = sha
         self.check_runs_rc = check_runs_rc
         self.check_runs_raises = check_runs_raises
@@ -81,7 +81,7 @@ class FakeWatch:
         if "check-runs" in joined:
             if self.check_runs_raises:
                 raise CommandFailed("gh", list(cmd), self.check_runs_rc, "boom")
-            return self._result(cmd, self.succeeded, self.check_runs_rc)
+            return self._result(cmd, self.conclusions, self.check_runs_rc)
         if cmd[:3] == ["gh", "api", f"repos/test/repo/pulls/{NUM}"]:
             return self._result(cmd, f"true\tclean\t{URL}\n")
         if cmd[:3] == ["gh", "pr", "checks"]:
@@ -113,7 +113,7 @@ def test_resolve_skipped_reads_a_shadowed_success_green() -> None:
     Mutation: return `verdict` unchanged for every skip -> a shadowed success stays
     `pending`.
     """
-    assert resolve_skipped("pending", {"check"}, {"check"}) == "success"
+    assert resolve_skipped("pending", {"check"}, {"check": {"success"}}) == "success"
 
 
 def test_resolve_skipped_keeps_an_unbacked_skip_not_green() -> None:
@@ -122,10 +122,10 @@ def test_resolve_skipped_keeps_an_unbacked_skip_not_green() -> None:
     Mutation: treat any `skipping` bucket as a pass -> the mixed case returns
     `success` and a skip that shadows a failure merges red.
     """
-    assert resolve_skipped("pending", {"check"}, set()) == "pending"
-    assert resolve_skipped("pending", {"check"}, {"other"}) == "pending"
-    assert resolve_skipped("success", {"check"}, set()) == "pending"
-    assert resolve_skipped("success", {"check"}, {"check"}) == "success"
+    assert resolve_skipped("pending", {"check"}, {}) == "pending"
+    assert resolve_skipped("pending", {"check"}, {"other": {"success"}}) == "pending"
+    assert resolve_skipped("success", {"check"}, {}) == "pending"
+    assert resolve_skipped("success", {"check"}, {"check": {"success"}}) == "success"
 
 
 def test_resolve_skipped_never_downgrades_a_failure() -> None:
@@ -134,14 +134,31 @@ def test_resolve_skipped_never_downgrades_a_failure() -> None:
     Mutation: run the skip resolution before the failure short-circuit -> a
     `failure` verdict becomes `pending` and the watch waits instead of failing.
     """
-    assert resolve_skipped("failure", {"check"}, {"check"}) == "failure"
-    assert resolve_skipped("failure", {"check"}, set()) == "failure"
+    assert resolve_skipped("failure", {"check"}, {"check": {"success"}}) == "failure"
+    assert resolve_skipped("failure", {"check"}, {}) == "failure"
 
 
 def test_resolve_skipped_without_skips_is_the_verdict() -> None:
     """No skipping bucket: the poll verdict passes through untouched."""
-    assert resolve_skipped("pending", set(), set()) == "pending"
-    assert resolve_skipped("success", set(), set()) == "success"
+    assert resolve_skipped("pending", set(), {}) == "pending"
+    assert resolve_skipped("success", set(), {}) == "success"
+
+
+def test_resolve_skipped_fails_fast_on_a_shadowed_failure() -> None:
+    """A skip over a failed run is a failure, not an unresolved skip.
+
+    Reading it as `pending` polled the full 60x10s budget and reported a timeout
+    instead of naming a red head. The head's own conclusion says `failure`.
+
+    Mutation: return `pending` for an unbacked skip without consulting the
+    conclusions -> the verdict waits instead of failing.
+    """
+    assert resolve_skipped("pending", {"check"}, {"check": {"failure"}}) == "failure"
+    assert resolve_skipped("pending", {"check"}, {"check": {"cancelled"}}) == "failure"
+    assert resolve_skipped("pending", {"check"}, {"check": {"skipped"}}) == "pending"
+    assert resolve_skipped("pending", {"check"}, {"check": {"failure", "success"}}) == "success", (
+        "a head that also succeeded is a shadowed pass, not a shadowed failure"
+    )
 
 
 # --- the watch path (integration through the seam) ------------------------------------
@@ -155,7 +172,7 @@ def test_watch_reads_a_shadowed_success_green(
     Mutation: judge the head from `gh pr checks` alone -> the poll stays `pending`
     and the watch returns False instead of True.
     """
-    gh = FakeWatch(checks="check\tskipping\n", succeeded="check\n")
+    gh = FakeWatch(checks="check\tskipping\n", conclusions="success\tcheck\n")
 
     assert _watch(monkeypatch, gh) is True
     assert "checks success (mergeable_state=clean, 1/1)" in capsys.readouterr().err
@@ -172,7 +189,7 @@ def test_watch_paginates_the_check_run_read(
     absent and the skip stays not green, so a valid merge is blocked by a page
     boundary. The argv is the contract here; the seam returns a single page.
     """
-    gh = FakeWatch(checks="check\tskipping\n", succeeded="check\n")
+    gh = FakeWatch(checks="check\tskipping\n", conclusions="success\tcheck\n")
 
     assert _watch(monkeypatch, gh) is True
     _ = capsys.readouterr()
@@ -184,17 +201,19 @@ def test_watch_paginates_the_check_run_read(
 def test_watch_keeps_a_skip_that_shadows_a_failure_not_green(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """A later `skipped` run over an earlier `failure` must not read green.
+    """A later `skipped` run over an earlier `failure` must fail, not wait.
 
-    The head's list holds `check` only as a skip, so it never succeeded.
+    The head's check-run list holds `check` as a `failure`, so the verdict is
+    `failure`: the watch fails on the first poll and names the red head, instead of
+    polling the full budget and reporting a timeout.
 
-    Mutation: promote any `skipping` bucket -> the poll reports `checks success`
-    and the watch returns True.
+    Mutation: return `pending` for an unbacked skip -> the poll prints `pending` and
+    the watch waits.
     """
-    gh = FakeWatch(checks="check\tskipping\n", succeeded="")
+    gh = FakeWatch(checks="check\tskipping\n", conclusions="failure\tcheck\n")
 
     assert _watch(monkeypatch, gh, tries=1) is False
-    assert "checks pending (mergeable_state=clean, 1/1)" in capsys.readouterr().err
+    assert "checks failure (mergeable_state=clean, 1/1)" in capsys.readouterr().err
 
 
 def test_watch_keeps_a_skip_masked_beside_a_passing_check_not_green(
@@ -208,7 +227,7 @@ def test_watch_keeps_a_skip_masked_beside_a_passing_check_not_green(
     Mutation: only resolve the verdict when it is already `pending` -> the mixed
     case stays `success` and a red ledger merges.
     """
-    gh = FakeWatch(checks="tests\tpass\ncheck\tskipping\n", succeeded="tests\n")
+    gh = FakeWatch(checks="tests\tpass\ncheck\tskipping\n", conclusions="success\ttests\n")
 
     assert _watch(monkeypatch, gh, tries=1) is False
     assert "checks pending (mergeable_state=clean, 1/1)" in capsys.readouterr().err
@@ -222,7 +241,7 @@ def test_watch_keeps_a_skip_with_no_success_on_the_head_not_green(
     Mutation: treat a skip with no check-run evidence as a pass -> the watch
     returns True.
     """
-    gh = FakeWatch(checks="check\tskipping\n", succeeded="")
+    gh = FakeWatch(checks="check\tskipping\n", conclusions="")
 
     assert _watch(monkeypatch, gh, tries=1) is False
     assert "checks pending (mergeable_state=clean, 1/1)" in capsys.readouterr().err
@@ -248,10 +267,10 @@ def test_watch_stays_not_green_when_the_check_run_read_fails(
 ) -> None:
     """A failed check-run read fails closed with no traceback.
 
-    Mutation: drop the try/except (or the non-zero guard) in `succeeded_check_names` ->
+    Mutation: drop the try/except (or the non-zero guard) in `head_check_conclusions` ->
     the read raises or reads the skip as a pass, so the watch crashes or returns True.
     """
-    gh = FakeWatch(checks="check\tskipping\n", succeeded="", check_runs_rc=1)
+    gh = FakeWatch(checks="check\tskipping\n", conclusions="", check_runs_rc=1)
     assert _watch(monkeypatch, gh, tries=1) is False
     assert "checks pending (mergeable_state=clean, 1/1)" in capsys.readouterr().err
 

@@ -96,7 +96,7 @@ __all__ = [
     "resolve_title_and_body",
     "run_command",
     "warn_closed_issues",
-    "succeeded_check_names",
+    "head_check_conclusions",
     "watch_checks",
 ]
 
@@ -936,20 +936,35 @@ def _skipping_names(payload: str) -> set[str]:
     return {name for name, bucket in check_buckets(payload) if bucket == "skipping"}
 
 
-def resolve_skipped(verdict: str, skipping_names: set[str], succeeded_names: set[str]) -> str:
-    """Read a not-green verdict green when every skipped check also succeeded on the head.
+# Check-run conclusions, split the way `checks_verdict` reads its buckets: a run that
+# did not pass lands in `fail` or `cancel`, so a shadowed failure keeps the poll's own
+# vocabulary. One home for the mapping.
+FAILED_CONCLUSIONS = frozenset(
+    {"failure", "cancelled", "timed_out", "action_required", "startup_failure"}
+)
+SUCCESS_CONCLUSIONS = frozenset({"success"})
+
+
+def resolve_skipped(
+    verdict: str, skipping_names: set[str], conclusions: dict[str, set[str]]
+) -> str:
+    """Resolve a verdict the poll cannot see, from the head's check-run conclusions.
 
     `gh pr checks` reports only the latest run per check name, so a later `skipped`
-    run can shadow an earlier `success` (or `failure`). A skipping name the head's
-    full check-run list confirms `success` is a shadowed pass, so an all-shadowed
-    `pending` becomes `success`. Any skip the head never succeeded is not evidence
-    of success: the verdict stays not green (fail closed), even beside a passing
-    check. A genuine `failure` is never downgraded to `pending`.
+    run can shadow an earlier `success` (or `failure`). A skipping name the head
+    confirms `success` is a shadowed pass, so an all-shadowed `pending` becomes
+    `success`. A skipping name the head failed is a shadowed *failure*: the verdict
+    becomes `failure`, so the watch fails fast instead of polling to a timeout. Any
+    other skip is not evidence of success — the verdict stays not green (fail
+    closed), even beside a passing check. A genuine `failure` is never downgraded.
     """
     if verdict == "failure" or not skipping_names:
         return verdict
-    if skipping_names <= succeeded_names:
+    succeeded = {name for name, seen in conclusions.items() if seen & SUCCESS_CONCLUSIONS}
+    if skipping_names <= succeeded:
         return "success" if verdict == "pending" else verdict
+    if any(conclusions.get(name, set()) & FAILED_CONCLUSIONS for name in skipping_names):
+        return "failure"
     return "pending"
 
 
@@ -1481,8 +1496,8 @@ def watch_checks(
             # against the head's full check-run list; a read that fails leaves the
             # skip unresolved, which stays not green.
             sha = pr_head_sha(repo, num, cwd=cwd)
-            succeeded = succeeded_check_names(repo, sha, cwd=cwd)
-            verdict = resolve_skipped(verdict, skipping, succeeded)
+            conclusions = head_check_conclusions(repo, sha, cwd=cwd)
+            verdict = resolve_skipped(verdict, skipping, conclusions)
         behind = f", head behind {base}" if obs.verdict == "behind" else ""
         print(
             f"checks {verdict} (mergeable_state={obs.state}, {i}/{poll_tries}{behind})",
@@ -1548,21 +1563,22 @@ def pr_head_sha(repo: str, num: str, cwd: Path | None = None) -> str:
     return "" if sha in ("", "null") else sha
 
 
-def succeeded_check_names(repo: str, sha: str, cwd: Path | None = None) -> set[str]:
-    """Names of the head's check runs whose conclusion is `success`.
+def head_check_conclusions(repo: str, sha: str, cwd: Path | None = None) -> dict[str, set[str]]:
+    """Every check run on the head, keyed by check name to the conclusions it reached.
 
     `gh pr checks` reports only the latest run per name, so a later `skipped` run
     can shadow an earlier `success` (or `failure`). This reads the head's full
-    check-run list to recover the shadowed successes. Fail-open: a non-zero
-    `gh api`, a `PrError` from the seam, or an empty `sha` returns an empty set,
-    so a failed read never crashes the watch (the skip then stays not green).
+    check-run list so the watch can tell a shadowed pass from a shadowed failure.
+    Fail-open: a non-zero `gh api`, a `PrError` from the seam, or an empty `sha`
+    returns an empty mapping, so a failed read never crashes the watch (the skip
+    then stays not green).
 
     `--paginate` is load-bearing: the endpoint returns 30 check runs per page by
     default, so without it a shadowed success on a later page reads as absent and
     the skip stays not green — a valid merge blocked by a page boundary.
     """
     if not sha:
-        return set()
+        return {}
     try:
         res = run_command(
             [
@@ -1571,15 +1587,25 @@ def succeeded_check_names(repo: str, sha: str, cwd: Path | None = None) -> set[s
                 f"repos/{repo}/commits/{sha}/check-runs",
                 "--paginate",
                 "--jq",
-                '.check_runs | .[] | select(.conclusion == "success") | .name',
+                r'.check_runs | .[] | "\(.conclusion)\t\(.name)"',
             ],
             cwd=cwd,
         )
     except PrError:
-        return set()
+        return {}
     if res.returncode != 0:
-        return set()
-    return {line.strip() for line in res.stdout.splitlines() if line.strip()}
+        return {}
+    runs: dict[str, set[str]] = {}
+    for line in res.stdout.splitlines():
+        conclusion, separator, name = line.partition("\t")
+        if not separator:
+            continue
+        conclusion = conclusion.strip()
+        name = name.strip()
+        if not conclusion or not name:
+            continue
+        runs.setdefault(name, set()).add(conclusion)
+    return runs
 
 
 def pr_url(repo: str, num: str, cwd: Path | None = None) -> str:
