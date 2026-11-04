@@ -1498,6 +1498,13 @@ def watch_checks(
             sha = pr_head_sha(repo, num, cwd=cwd)
             conclusions = head_check_conclusions(repo, sha, cwd=cwd)
             verdict = resolve_skipped(verdict, skipping, conclusions)
+        if verdict == "success" and obs.state == "unstable":
+            # `unstable` is GitHub saying a status is still not passing. A green
+            # poll beside it means the row for a check had not registered yet, so
+            # the list is incomplete: keep polling rather than merge on a partial
+            # read (observed on PR #354: `checks success` with `tests` still
+            # in_progress and the suite unrun).
+            verdict = "pending"
         behind = f", head behind {base}" if obs.verdict == "behind" else ""
         print(
             f"checks {verdict} (mergeable_state={obs.state}, {i}/{poll_tries}{behind})",

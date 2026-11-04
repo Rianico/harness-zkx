@@ -40,6 +40,7 @@ class FakeWatch:
         conclusions: str = "",
         sha: str = SHA,
         check_runs_rc: int = 0,
+        merge_state: str = "clean",
         check_runs_raises: bool = False,
     ) -> None:
         self.checks = checks
@@ -47,6 +48,7 @@ class FakeWatch:
         self.sha = sha
         self.check_runs_rc = check_runs_rc
         self.check_runs_raises = check_runs_raises
+        self.merge_state = merge_state
         self.calls: list[list[str]] = []
         self.sleeps: list[float] = []
 
@@ -83,7 +85,7 @@ class FakeWatch:
                 raise CommandFailed("gh", list(cmd), self.check_runs_rc, "boom")
             return self._result(cmd, self.conclusions, self.check_runs_rc)
         if cmd[:3] == ["gh", "api", f"repos/test/repo/pulls/{NUM}"]:
-            return self._result(cmd, f"true\tclean\t{URL}\n")
+            return self._result(cmd, f"true\t{self.merge_state}\t{URL}\n")
         if cmd[:3] == ["gh", "pr", "checks"]:
             return self._result(cmd, self.checks)
         return self._result(cmd, "")
@@ -277,3 +279,31 @@ def test_watch_stays_not_green_when_the_check_run_read_fails(
     gh = FakeWatch(checks="check\tskipping\n", check_runs_raises=True)
     assert _watch(monkeypatch, gh, tries=1) is False
     assert "checks pending (mergeable_state=clean, 1/1)" in capsys.readouterr().err
+
+
+def test_watch_never_reads_green_while_github_says_unstable(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An all-pass poll beside `unstable` is a partial read, not a green head.
+
+    Observed on PR #354: the poll's rows were all pass or resolved-skip while the
+    `tests` check had not registered yet, so the verdict read `success` with the
+    suite unrun. `unstable` is GitHub saying a status is still not passing.
+
+    Mutation: drop the `obs.state == "unstable"` guard -> the watch returns True on
+    the first poll and reports `checks success`.
+    """
+    gh = FakeWatch(checks="tests\tpass\n", merge_state="unstable")
+
+    assert _watch(monkeypatch, gh, tries=1) is False
+    assert "checks pending (mergeable_state=unstable, 1/1)" in capsys.readouterr().err
+
+
+def test_watch_reads_green_when_github_says_clean(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The guard is scoped to `unstable`: a clean head still goes green at once."""
+    gh = FakeWatch(checks="tests\tpass\n", merge_state="clean")
+
+    assert _watch(monkeypatch, gh) is True
+    assert "checks success (mergeable_state=clean, 1/1)" in capsys.readouterr().err
