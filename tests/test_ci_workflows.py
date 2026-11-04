@@ -24,7 +24,14 @@ CHANGELOG_CHECK = WORKFLOWS / "changelog-check.yml"
 TESTS_YML = WORKFLOWS / "tests.yml"
 TWIN_CHANGELOG_CHECK = ROOT / "skills/scaffold/templates/git/.github/workflows/changelog-check.yml"
 
-DRAFT_GUARD = "github.event_name == 'push' || github.event.pull_request.draft == false"
+# `tests.yml` has no PR-number-scoped group and no ready-flip hazard, so its jobs keep the
+# plain guard. `changelog-check.yml` states the ready path explicitly: the stamp push fires
+# `synchronize` last, and that run reads a stale `draft: true` payload.
+TESTS_DRAFT_GUARD = "github.event_name == 'push' || github.event.pull_request.draft == false"
+CHANGELOG_CHECK_GUARD = (
+    "github.event_name == 'push' || (github.event_name == 'pull_request' "
+    "&& (github.event.action == 'ready_for_review' || github.event.pull_request.draft == false))"
+)
 
 
 def _text() -> str:
@@ -89,13 +96,40 @@ def test_every_tests_workflow_job_carries_the_draft_guard() -> None:
     jobs = _doc(TESTS_YML)["jobs"]
     assert jobs, "tests.yml declares no jobs"
     for name, job in jobs.items():
-        assert job.get("if") == DRAFT_GUARD, f"job {name} lost the draft guard"
+        assert job.get("if") == TESTS_DRAFT_GUARD, f"job {name} lost the draft guard"
 
 
-def test_changelog_check_and_twin_carry_the_draft_guard() -> None:
+def test_changelog_check_and_twin_carry_the_explicit_draft_guard() -> None:
+    """A ready flip must run even when the payload still reads `draft: true` (#349).
+
+    Mutation: drop the `ready_for_review` disjunct -> the `synchronize` run created
+    last skips itself and the floor never runs on the final head.
+    """
     for path in (CHANGELOG_CHECK, TWIN_CHANGELOG_CHECK):
         job = _doc(path)["jobs"]["check"]
-        assert job.get("if") == DRAFT_GUARD, f"{path}: check job lost the draft guard"
+        assert _normalized(job["if"]) == _normalized(CHANGELOG_CHECK_GUARD), (
+            f"{path}: check job lost the guard"
+        )
+        assert "github.event.action == 'ready_for_review'" in job["if"], path
+
+
+def _normalized(text: str) -> str:
+    """Collapse a folded scalar's whitespace; operators and order stay pinned."""
+    return " ".join(text.split())
+
+
+def test_changelog_check_never_cancels_the_run_that_gates_the_ledger() -> None:
+    """Superseding a started run is how the PR-side floor was lost (#349).
+
+    Mutation: set `cancel-in-progress: true` -> this assertion fails. The job takes
+    about seven seconds, so superseding it is never worth losing the gate.
+    """
+    for path in (CHANGELOG_CHECK, TWIN_CHANGELOG_CHECK):
+        concurrency = _doc(path)["concurrency"]
+        assert concurrency["cancel-in-progress"] is False, f"{path} would cancel the floor"
+        assert concurrency["group"] == (
+            "changelog-check-${{ github.event.pull_request.number || github.ref }}"
+        ), f"{path} changed the concurrency group"
 
 
 def test_tests_workflow_needs_chain() -> None:
