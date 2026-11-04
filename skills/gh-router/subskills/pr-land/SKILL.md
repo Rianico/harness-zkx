@@ -30,10 +30,10 @@ uv run $SKILL_DIR/scripts/pr.py --title '…' --watch --merge --body-file .lsz/g
 | --- | --- |
 | `--base` | Base branch (default `default_branch()`: push-remote slug → `origin/HEAD` → `main`). |
 | `--head` | Head branch (default `git rev-parse --abbrev-ref HEAD`). |
-| `--title` | PR title (default `git log -1 --pretty=%s <head>`, fallback cwd HEAD). Warns when range has no unique commits. |
+| `--title` | PR title (default newest non-merge commit on `<base>..<head>`, fallback HEAD commit). Warns when range has no unique commits. |
 | `--body` / `--body-file` | PR description. Required to open a PR. Takes no template default. |
 | `--squash-message` / `--squash-message-file` | Explicit squash commit message. Mutually exclusive. Required with `--merge` (no PR-body fallback). |
-| `--watch` | Poll every check on the PR (60×10s). See [Flow](#flow) for fast-fail conditions. |
+| `--watch` | Poll every check on the PR (60×10s); a skipping check resolves against the head's check-run list. See [Flow](#flow) for fast-fail conditions. |
 | `--verbose` | Dump full failure logs. Default output is slim. |
 | `--merge` | Requires explicit `--squash-message` (file) and green watch. Waits for clean mergeable state, then squashes. |
 | `--draft` | Keep new PR as draft after stamping. Skips ready flip. |
