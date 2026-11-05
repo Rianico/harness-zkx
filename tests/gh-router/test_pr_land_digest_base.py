@@ -25,7 +25,7 @@ PR_SCRIPTS = REPO_ROOT / "skills/gh-router/subskills/pr-land/scripts"
 PR_PY = PR_SCRIPTS / "pr.py"
 
 from _draft import _draft_range  # noqa: E402
-from _github import _digest_range_spec, digest_base  # noqa: E402
+from _github import _branch_subject, _digest_range_spec, digest_base  # noqa: E402
 
 from tests.gh_helpers import run_git, write_gh_stub  # noqa: E402
 
@@ -229,3 +229,137 @@ def test_digest_base_is_the_only_home_for_the_preference() -> None:
     assert "digest_base(" in sources["_draft.py"]
     assert 'f"{base}..{head_ref}"' not in sources["_draft.py"]
     assert 'f"{base}..{head_ref}"' not in sources["_github.py"]
+
+
+# --- the title range: `_branch_subject` routes its base through `digest_base` -------------
+#
+# `resolve_title_and_body` derives the PR title from `_branch_subject(ref, base)`, where
+# `base` is `resolve_base`'s bare branch name. A bare local `main` behind `origin/main`
+# could let another PR's landed commit into the walk, so the range must fork from the
+# remote-tracking ref, exactly as `_digest_range_spec` and `_draft_range` already do.
+#
+# `git log --first-parent --no-merges -1` walks one linear first-parent chain and always
+# leads with the tip, so a foreign commit can only lead the walk when it sits on that
+# chain ahead of the branch's own commits. The fixtures below put it there; a plain
+# "foreign newer than the branch commits" layout cannot, because the walk is ordered by
+# parentage, not by date.
+
+
+def _make_foreign_leads_repo(repo: Path) -> None:
+    """`origin/main` leads the branch's first-parent chain; local `main` is behind it.
+
+    Shape: base <- foreign (on `origin/main`); base <- ada <- bo (branch work).
+    `feature` starts at foreign and merges the work, so its tip merge's first parent
+    is foreign. `main..feature` then leads with foreign, while
+    `origin/main..feature` never admits it.
+    """
+    _init(repo)
+    base_sha = _commit(repo, "base.txt", "base\n", "chore: base", ("Base Bau", "base@x.io"))
+    foreign_sha = _commit(
+        repo, "foreign.txt", "foreign\n", "feat: foreign work", ("Foreign Fil", "foreign@x.io")
+    )
+    _ = run_git(repo, "update-ref", "refs/remotes/origin/main", foreign_sha)
+    _ = run_git(repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+    _ = run_git(repo, "update-ref", "refs/heads/main", base_sha)
+    _ = run_git(repo, "checkout", "-b", "work", base_sha)
+    _ = _commit(repo, "ada.txt", "ada\n", "feat: ada work", ("Ada", "ada@x.io"))
+    _ = _commit(repo, "bo.txt", "bo\n", "feat: bo work", ("Bo", "bo@x.io"))
+    _ = run_git(repo, "checkout", "-b", "feature", foreign_sha)
+    _ = run_git(repo, "merge", "--no-edit", "work")
+
+
+def test_branch_subject_forks_from_origin_main_so_the_foreign_commit_never_leads(
+    tmp_path: Path,
+) -> None:
+    """The derived title cannot name another PR's landed commit.
+
+    Mutation: drop `digest_base` from `_branch_subject` -> the bare `main..feature`
+    first-parent walk leads with the foreign commit and the subject becomes
+    `"feat: foreign work"`.
+    """
+    repo = tmp_path / "foreign-leads"
+    _make_foreign_leads_repo(repo)
+
+    assert digest_base("main", cwd=repo) == "origin/main"
+    assert _branch_subject("feature", "main", cwd=repo) != "feat: foreign work"
+    assert _branch_subject("feature", "main", cwd=repo) == _branch_subject(
+        "feature", "origin/main", cwd=repo
+    )
+
+
+def _make_local_base_hides_the_branch_repo(repo: Path) -> None:
+    """Local `main` already holds the branch's first-parent tip; `origin/main` does not.
+
+    Shape: base <- ada <- bo (branch work) and base <- side; `feature` merges side onto
+    bo, so its tip merge's first parent is bo. Local `main` points at bo, so the bare
+    `main..feature` range is empty and the fallback yields ""; `origin/main` sits at a
+    separate foreign commit, so `origin/main..feature` leads with bo.
+    """
+    _init(repo)
+    base_sha = _commit(repo, "base.txt", "base\n", "chore: base", ("Base Bau", "base@x.io"))
+    _ = run_git(repo, "checkout", "-b", "work", base_sha)
+    _ = _commit(repo, "ada.txt", "ada\n", "feat: ada work", ("Ada", "ada@x.io"))
+    bo_sha = _commit(repo, "bo.txt", "bo\n", "feat: bo work", ("Bo", "bo@x.io"))
+    _ = run_git(repo, "checkout", "-b", "side", base_sha)
+    _ = _commit(repo, "side.txt", "side\n", "feat: side work", ("Side", "side@x.io"))
+    _ = run_git(repo, "checkout", "-b", "feature", bo_sha)
+    _ = run_git(repo, "merge", "--no-edit", "side")
+    _ = run_git(repo, "checkout", "-b", "foreignbranch", base_sha)
+    foreign_sha = _commit(
+        repo, "foreign.txt", "foreign\n", "feat: foreign work", ("Foreign Fil", "foreign@x.io")
+    )
+    _ = run_git(repo, "update-ref", "refs/remotes/origin/main", foreign_sha)
+    _ = run_git(repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+    _ = run_git(repo, "update-ref", "refs/heads/main", bo_sha)
+
+
+def test_branch_subject_derives_the_branch_commit_over_a_local_base_that_hides_it(
+    tmp_path: Path,
+) -> None:
+    """The branch's own commit is the subject, not the empty fallback the bare base gives.
+
+    Mutation: drop `digest_base` from `_branch_subject` -> the bare `main..feature`
+    range is empty and the merge-tip fallback returns `""` instead of `"feat: bo work"`.
+    """
+    repo = tmp_path / "local-base-hides"
+    _make_local_base_hides_the_branch_repo(repo)
+
+    assert digest_base("main", cwd=repo) == "origin/main"
+    assert _branch_subject("feature", "main", cwd=repo) == "feat: bo work"
+
+
+def test_branch_subject_without_a_base_uses_the_head_single_ref(tmp_path: Path) -> None:
+    """No base at all keeps the single-ref walk of the head's own history.
+
+    Mutation: drop the `if base` guard so the spec becomes `None..feature` -> git
+    errors and the subject collapses to `""`.
+    """
+    repo = tmp_path / "stale-repo"
+    _make_stale_main_repo(repo)
+
+    assert _branch_subject("feature", None, cwd=repo) == "feat: bo work"
+
+
+def _make_merge_of_base_repo(repo: Path) -> None:
+    """`feature`'s only commit is a merge of the base: base <- side, and feature merges it."""
+    _init(repo)
+    base_sha = _commit(repo, "base.txt", "base\n", "chore: base", ("Base Bau", "base@x.io"))
+    _ = run_git(repo, "checkout", "-b", "side", base_sha)
+    _ = _commit(repo, "side.txt", "side\n", "feat: side work", ("Side", "side@x.io"))
+    _ = run_git(repo, "checkout", "-b", "feature", base_sha)
+    _ = run_git(repo, "merge", "--no-ff", "--no-edit", "side")
+    _ = run_git(repo, "update-ref", "refs/remotes/origin/main", base_sha)
+    _ = run_git(repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+    _ = run_git(repo, "update-ref", "refs/heads/main", base_sha)
+
+
+def test_branch_subject_merge_of_the_base_still_yields_empty(tmp_path: Path) -> None:
+    """A branch whose only commit is a merge of the base yields `""`, base or remote.
+
+    Mutation: drop `--no-merges` -> the tip merge's own subject leaks into the title.
+    """
+    repo = tmp_path / "merge-of-base"
+    _make_merge_of_base_repo(repo)
+
+    assert _branch_subject("feature", "main", cwd=repo) == ""
+    assert _branch_subject("feature", "origin/main", cwd=repo) == ""

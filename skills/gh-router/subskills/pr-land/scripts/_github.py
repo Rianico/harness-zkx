@@ -57,6 +57,7 @@ __all__ = [
     "_digest_range_spec",
     "_local_base_from_authority",
     "_remote_branch_exists",
+    "check_buckets",
     "check_conflicts",
     "checks_verdict",
     "check_squash_setting",
@@ -80,6 +81,7 @@ __all__ = [
     "merge_state_verdict",
     "pr_base_sha",
     "pr_conflict_verdict",
+    "pr_head_sha",
     "pr_url",
     "read_squash_setting",
     "ready_pr",
@@ -90,9 +92,11 @@ __all__ = [
     "resolve_head",
     "resolve_merge_state",
     "resolve_repo",
+    "resolve_skipped",
     "resolve_title_and_body",
     "run_command",
     "warn_closed_issues",
+    "head_check_conclusions",
     "watch_checks",
 ]
 
@@ -825,12 +829,15 @@ def _branch_subject(ref: str, base: str | None, cwd: Path | None = None) -> str:
     """The branch's own newest non-merge commit subject, or "" when it has none.
 
     The range is `base..ref`, so commits the base already contains (the merged-in
-    trunk side) are excluded. `--first-parent` keeps the branch's own line when the
-    branch itself merged side work, and `--no-merges` skips the merge at HEAD. A
-    branch whose only commit is a merge of the base therefore yields ""; a plain
-    non-merge head still derives its own subject when the base already contains it.
+    trunk side) are excluded. The base is routed through `digest_base`, so a bare
+    local name resolves to `origin/<base>` when that ref exists — a stale local
+    `main` behind `origin/main` can no longer admit another PR's landed commit.
+    `--first-parent` keeps the branch's own line when the branch itself merged side
+    work, and `--no-merges` skips the merge at HEAD. A branch whose only commit is a
+    merge of the base therefore yields ""; a plain non-merge head still derives its
+    own subject when the base already contains it.
     """
-    spec = f"{base}..{ref}" if base else ref
+    spec = f"{digest_base(base, cwd=cwd)}..{ref}" if base else ref
     res = run_command(
         ["git", "log", "--first-parent", "--no-merges", "-1", "--pretty=%s", spec],
         cwd=cwd,
@@ -871,6 +878,31 @@ def resolve_title_and_body(
     return title, body, title_supplied, body_supplied
 
 
+def check_buckets(payload: str) -> list[tuple[str, str]]:
+    """Parse `name<TAB>bucket` lines into ordered `(name, bucket)` pairs.
+
+    The single home for the checks-TSV split: `checks_verdict` counts these
+    buckets, `parse_checks` maps the verdict onto its predicate vocabulary, and
+    the watch's skip resolution reads the names. A line without a tab falls back
+    to the first token as the name and the last token as the bucket.
+    """
+    buckets: list[tuple[str, str]] = []
+    for line in payload.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        parts = stripped.split("\t")
+        if len(parts) >= 2:
+            buckets.append((parts[0].strip(), parts[1].strip()))
+            continue
+        tokens = stripped.split()
+        if len(tokens) >= 2:
+            buckets.append((tokens[0], tokens[-1]))
+        else:
+            buckets.append((stripped, stripped))
+    return buckets
+
+
 def checks_verdict(payload: str) -> str:
     """Evaluate checks payload (name<TAB>bucket lines) returning 'success', 'failure', or 'pending'."""
     total = 0
@@ -878,16 +910,7 @@ def checks_verdict(payload: str) -> str:
     pending = 0
     passed = 0
     skipping = 0
-    for line in payload.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        parts = line.split("\t")
-        if len(parts) >= 2:
-            bucket = parts[1].strip()
-        else:
-            tokens = line.split()
-            bucket = tokens[-1] if len(tokens) >= 2 else line
+    for _name, bucket in check_buckets(payload):
         total += 1
         if bucket in ("fail", "cancel"):
             failed += 1
@@ -908,6 +931,43 @@ def checks_verdict(payload: str) -> str:
     return "success"
 
 
+def _skipping_names(payload: str) -> set[str]:
+    """The check names `gh pr checks` currently reports with the `skipping` bucket."""
+    return {name for name, bucket in check_buckets(payload) if bucket == "skipping"}
+
+
+# Check-run conclusions, split the way `checks_verdict` reads its buckets: a run that
+# did not pass lands in `fail` or `cancel`, so a shadowed failure keeps the poll's own
+# vocabulary. One home for the mapping.
+FAILED_CONCLUSIONS = frozenset(
+    {"failure", "cancelled", "timed_out", "action_required", "startup_failure"}
+)
+SUCCESS_CONCLUSIONS = frozenset({"success"})
+
+
+def resolve_skipped(
+    verdict: str, skipping_names: set[str], conclusions: dict[str, set[str]]
+) -> str:
+    """Resolve a verdict the poll cannot see, from the head's check-run conclusions.
+
+    `gh pr checks` reports only the latest run per check name, so a later `skipped`
+    run can shadow an earlier `success` (or `failure`). A skipping name the head
+    confirms `success` is a shadowed pass, so an all-shadowed `pending` becomes
+    `success`. A skipping name the head failed is a shadowed *failure*: the verdict
+    becomes `failure`, so the watch fails fast instead of polling to a timeout. Any
+    other skip is not evidence of success — the verdict stays not green (fail
+    closed), even beside a passing check. A genuine `failure` is never downgraded.
+    """
+    if verdict == "failure" or not skipping_names:
+        return verdict
+    succeeded = {name for name, seen in conclusions.items() if seen & SUCCESS_CONCLUSIONS}
+    if skipping_names <= succeeded:
+        return "success" if verdict == "pending" else verdict
+    if any(conclusions.get(name, set()) & FAILED_CONCLUSIONS for name in skipping_names):
+        return "failure"
+    return "pending"
+
+
 def parse_checks(payload: str) -> tuple[str, int, int]:
     """Parse `gh pr checks` TSV into `(predicate-state, ok, total)` in one pass.
 
@@ -918,12 +978,8 @@ def parse_checks(payload: str) -> tuple[str, int, int]:
     verdict = checks_verdict(payload)
     state = {"success": "green", "failure": "red", "pending": "pending"}.get(verdict, "pending")
     ok = total = 0
-    for line in payload.splitlines():
-        if not line.strip():
-            continue
+    for _name, bucket in check_buckets(payload):
         total += 1
-        parts = line.split("\t")
-        bucket = parts[1].strip() if len(parts) >= 2 else line.split()[-1]
         if bucket == "pass":
             ok += 1
     if total == 0:
@@ -1433,6 +1489,22 @@ def watch_checks(
         )
         payload = checks_res.stdout if checks_res.returncode == 0 else ""
         verdict = checks_verdict(payload)
+        skipping = _skipping_names(payload)
+        if skipping:
+            # Only the latest run per name rides the poll, so a later `skipped` run
+            # can shadow an earlier `success` (or `failure`). Resolve the skips
+            # against the head's full check-run list; a read that fails leaves the
+            # skip unresolved, which stays not green.
+            sha = pr_head_sha(repo, num, cwd=cwd)
+            conclusions = head_check_conclusions(repo, sha, cwd=cwd)
+            verdict = resolve_skipped(verdict, skipping, conclusions)
+        if verdict == "success" and obs.state == "unstable":
+            # `unstable` is GitHub saying a status is still not passing. A green
+            # poll beside it means the row for a check had not registered yet, so
+            # the list is incomplete: keep polling rather than merge on a partial
+            # read (observed on PR #354: `checks success` with `tests` still
+            # in_progress and the suite unrun).
+            verdict = "pending"
         behind = f", head behind {base}" if obs.verdict == "behind" else ""
         print(
             f"checks {verdict} (mergeable_state={obs.state}, {i}/{poll_tries}{behind})",
@@ -1479,6 +1551,68 @@ def pr_base_sha(repo: str, num: str, cwd: Path | None = None) -> str | None:
     if not sha or sha == "null":
         return None
     return sha
+
+
+def pr_head_sha(repo: str, num: str, cwd: Path | None = None) -> str:
+    """The PR head commit SHA, or "" when the read fails or is empty.
+
+    Fail-open like `pr_base_sha`: a non-zero `gh api`, an empty value, or a
+    `PrError` from the seam all read as "", so a flaky read leaves the watch's
+    skip resolution without evidence (which stays not green) instead of crashing.
+    """
+    try:
+        res = run_command(["gh", "api", f"repos/{repo}/pulls/{num}", "--jq", ".head.sha"], cwd=cwd)
+    except PrError:
+        return ""
+    if res.returncode != 0:
+        return ""
+    sha = res.stdout.strip()
+    return "" if sha in ("", "null") else sha
+
+
+def head_check_conclusions(repo: str, sha: str, cwd: Path | None = None) -> dict[str, set[str]]:
+    """Every check run on the head, keyed by check name to the conclusions it reached.
+
+    `gh pr checks` reports only the latest run per name, so a later `skipped` run
+    can shadow an earlier `success` (or `failure`). This reads the head's full
+    check-run list so the watch can tell a shadowed pass from a shadowed failure.
+    Fail-open: a non-zero `gh api`, a `PrError` from the seam, or an empty `sha`
+    returns an empty mapping, so a failed read never crashes the watch (the skip
+    then stays not green).
+
+    `--paginate` is load-bearing: the endpoint returns 30 check runs per page by
+    default, so without it a shadowed success on a later page reads as absent and
+    the skip stays not green — a valid merge blocked by a page boundary.
+    """
+    if not sha:
+        return {}
+    try:
+        res = run_command(
+            [
+                "gh",
+                "api",
+                f"repos/{repo}/commits/{sha}/check-runs",
+                "--paginate",
+                "--jq",
+                r'.check_runs | .[] | "\(.conclusion)\t\(.name)"',
+            ],
+            cwd=cwd,
+        )
+    except PrError:
+        return {}
+    if res.returncode != 0:
+        return {}
+    runs: dict[str, set[str]] = {}
+    for line in res.stdout.splitlines():
+        conclusion, separator, name = line.partition("\t")
+        if not separator:
+            continue
+        conclusion = conclusion.strip()
+        name = name.strip()
+        if not conclusion or not name:
+            continue
+        runs.setdefault(name, set()).add(conclusion)
+    return runs
 
 
 def pr_url(repo: str, num: str, cwd: Path | None = None) -> str:
