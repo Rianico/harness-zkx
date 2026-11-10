@@ -144,19 +144,22 @@ If target resolution fails or matches an idle shell pane:
 
 ### Dispatch & Yield (Event-Driven workflow)
 
-Multi-agent coordination is event-driven via completion callbacks:
+Multi-agent coordination is event-driven via completion callbacks. Lane coordination enforces a 3-tier hierarchy:
+`Orchestrator → Task Manager (TM) → Implementer → TM → Orchestrator`
 
 1. **Caller self-names:**
    ```bash
-   uv run "$SKILL_DIR/scripts/herdr_label.py" orchestrator
+   uv run "$SKILL_DIR/scripts/herdr_label.py" tm
    ```
    This gives the caller an addressable agent name for replies.
 
 2. **Dispatch with Synthesized IDD/GDD Tickets & Task Leases:**
+   - **Orchestrator to TM**: Root orchestrators dispatch high-level problem briefs to the TM. Direct dispatch to implementers is refused without `--force`.
+   - **TM to Implementer**: TM decomposes briefs into atomic tickets and dispatches them to implementers.
    ```bash
-   uv run "$SKILL_DIR/scripts/herdr_dispatch.py" callee --file task.md --no-wait
-   uv run "$SKILL_DIR/scripts/herdr_dispatch.py" callee --file task.md --force --no-wait
-   uv run "$SKILL_DIR/scripts/herdr_prompt.py" callee --file task.md --wait --timeout 15000
+   uv run "$SKILL_DIR/scripts/herdr_dispatch.py" impl-1 --file ticket.md --no-wait
+   uv run "$SKILL_DIR/scripts/herdr_dispatch.py" impl-1 --file ticket.md --force --no-wait
+   uv run "$SKILL_DIR/scripts/herdr_prompt.py" impl-1 --file ticket.md --wait --timeout 15000
    ```
    Tickets pair purpose (**IDD**) with verifiable milestones (**GDD/EDD**). `herdr_dispatch.py` checks active ticket leases in `.lane/tasks.yaml` before dispatching. Leases are acquired atomically and retained on prompt acceptance (`EXIT_OK` or `WaitTimeout`). Leases with dead pane IDs release automatically. `--force` overrides a live lease. The store base resolves from `HERDR_LANE_DIR`, else the repo root, else `~/.herdr/lane`.
 
@@ -171,13 +174,15 @@ Multi-agent coordination is event-driven via completion callbacks:
    When `herdr-prompt` exits 4 (timeout), the prompt was delivered and the callee works asynchronously. The same holds for a `--no-wait` dispatch. Yield turn: stop calling tools and enter idle.
 
 4. **Callee executes completion callback (and soft-releases its lease):**
-   Upon completion or blocking, the callee executes the contract callback via `herdr_reply.py`. The reply adheres to the settled **Final Reply Template** (`skills/ai-engineering-expert/subskills/subagent-engineering/references/inter-agent-message-contract.md`):
+   Upon completion or blocking, the callee executes the contract callback via `herdr_reply.py`. The reply adheres to the settled **Final Reply Template** (`skills/ai-engineering-expert/subskills/subagent-engineering/references/inter-agent-message-contract.md`). Implementers reply strictly to TM:
    ```bash
-   uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator --file reply.md --ticket '<ticket-id>'
-   printf 'COMPLETED <commit-sha>\n\n## Evidence\n- <check_name>: PASS (`<command>`)\n' | uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator --file - --ticket '<ticket-id>'
-   uv run "$SKILL_DIR/scripts/herdr_reply.py" orchestrator --file reply.md --ticket '<ticket-id>' --auto-start pi
+   uv run "$SKILL_DIR/scripts/herdr_reply.py" tm --file reply.md --ticket '<ticket-id>'
+   printf 'COMPLETED <commit-sha>\n\n## Evidence\n- <check_name>: PASS (`<command>`)\n' | uv run "$SKILL_DIR/scripts/herdr_reply.py" tm --file - --ticket '<ticket-id>'
+   uv run "$SKILL_DIR/scripts/herdr_reply.py" tm --file reply.md --ticket '<ticket-id>' --auto-start pi
    ```
    Payload sections: Status Triad (`COMPLETED <commit-sha>` | `BLOCKED <reason>` | `REJECTED <reason>`), `## Summary` (≤100 words), `## Artifacts`, `## Evidence` (PASS/FAIL), `## Route`, `## Issues` (P1/P2/P3), `## Suggestions`. Delivering this reply prompts the caller pane directly, waking its turn. `herdr_reply.py` maps status tokens, records events, and soft-releases only the sender lease. For an exited target or a bare shell, it prints the recovery hook (see [Target resolution failures](#target-resolution-failures--bare-shell-prevention)).
+
+   **TM Review Loop**: After receiving an implementer completion reply, TM runs verification gates and initiates code review (`impl -> code review -> impl`). TM dispatches rework tickets if review fails. Only when all lane work is verified does TM reply to the root orchestrator.
 
 5. **Subagent Observability & `herdr-wait`:**
    **Subagent-First Execution**: In lane coordination, agents MUST use subagents for heavy tasks. An agent with running subagents may still report `idle` (False-Idle Phenomenon). Herdr exposes subagent status via Session Navigator tokens, displayed as `delegating` in `herdr-overview`. `herdr-wait` is subagent-aware and treats active tokens as UNSETTLED.

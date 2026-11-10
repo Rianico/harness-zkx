@@ -124,15 +124,18 @@ BARE_SCRIPT_NAME_PATTERN = r"[A-Za-z0-9._-]+"
 NON_NAME_SEGMENTS = (".", "..")
 # Roles the docs spell `impl-<n>`; only they carry the implementer cooperation contract.
 IMPLEMENTER_PREFIX = "impl"
-# Roles spelling a coordination authority — bare or scoped (`tm`, `msg-tm`, `lane-orch`,
+# Roles spelling an orchestrator authority — bare or scoped (`orch`, `lane-orch`, `orchestrator`).
+ORCH_ROLE_TERMS: tuple[str, ...] = (
+    "orch",
+    "orchestrator",
+)
+# Roles spelling a Task Manager coordination authority — bare or scoped (`tm`, `msg-tm`,
 # `task-manager`). A term is itself split on the role separators, so `task-manager` matches as
 # one consecutive segment run and `orchid` never matches `orch`.
-TM_ROLE_TERMS = (
+TM_ROLE_TERMS: tuple[str, ...] = (
     "tm",
     "task-manager",
     "task_manager",
-    "orch",
-    "orchestrator",
     "coord",
     "coordinator",
 )
@@ -330,8 +333,7 @@ INVARIANT_HEADER = (
     "Follow the lane coordination pattern."
 )
 INVARIANT_RULES = (
-    "Subagent-First: MUST delegate exploration, drafting, research, and triage to subagents as "
-    "drafts; main session synthesizes, verifies, and evaluates.\n"
+    "Subagent-First: MUST delegate heavy tasks (search, edits, triage, review) to subagents.\n"
     "Reply Contract: MUST reply via `uv run {helper} <caller> --file <reply.md>` on completion "
     "or blocker; never exit silently."
 )
@@ -339,6 +341,7 @@ INVARIANT_RULES = (
 # Reply Contract above already owes the reply, so this block adds only what is implementer-only.
 IMPLEMENTER_CONTRACT = (
     "Implementer: single writer for your task; never edit outside your worktree.\n"
+    "Coordination: reply to TM via `herdr-reply`; await TM review before completion.\n"
     "Evidence: red-then-green test results, artifacts reported by path.\n"
     "Blockers: report immediately, never idle."
 )
@@ -349,10 +352,20 @@ TM_CONTRACT = (
     "code directly.\n"
     "Dispatch: explore problem space; decompose briefs into atomic tickets; dispatch via "
     "`herdr-dispatch`.\n"
-    "Eval & Review: run verification gates in pane; audit callee diffs with review subagents "
-    "before accepting.\n"
+    "Review Loop: run verification gates in pane; audit callee diffs with review subagents "
+    "before accepting (`impl -> code review -> impl`).\n"
     "Synthesize: track lane progress; synthesize results and report completion to caller via "
     "`herdr-reply`."
+)
+# Role-conditional: Root Orchestrator owns problem definition, topology, and brief authoring.
+# It delegates in-lane decomposition, dispatch, gating, and code review to the Task Manager.
+ORCH_CONTRACT = (
+    "Orchestrator: topology, problem definition, and brief authoring only; NEVER edit source or "
+    "test code directly.\n"
+    "Topology: Orch → TM → Impl. NEVER bypass the Task Manager to dispatch tickets directly to "
+    "Implementers.\n"
+    "Brief: issue brief to TM specifying intent, constraints, and verification contract; await TM "
+    "completion reply via `herdr-reply`."
 )
 
 
@@ -375,38 +388,53 @@ def is_implementer_role(role: str) -> bool:
     )
 
 
-def is_tm_role(role: str) -> bool:
-    """True for a coordination-authority vocabulary term occupying whole role segments.
-
-    Segment-aware like `is_implementer_role`, but a term must match as a consecutive run of
-    segments rather than a prefix: `msg-tm` and `lane-orch` qualify, `tmux` and `orchid` do
-    not, and `task-manager`/`task_manager` match despite carrying a separator in the term.
-    """
-    tokens = IMPLEMENTER_SEGMENT_SPLIT.split(role.lower())
-    for term in TM_ROLE_TERMS:
+def _matches_role_terms(role: str, terms: tuple[str, ...]) -> bool:
+    """True when `role` ends with one of the `terms` runs (ignoring trailing digits)."""
+    tokens = [t for t in IMPLEMENTER_SEGMENT_SPLIT.split(role.lower()) if t]
+    if not tokens:
+        return False
+    if len(tokens) > 1 and tokens[-1].isdigit():
+        tokens = tokens[:-1]
+    for term in terms:
         run = term.replace("_", "-").split("-")
-        for start in range(len(tokens) - len(run) + 1):
-            if tokens[start : start + len(run)] == run:
-                return True
+        if len(tokens) >= len(run) and tokens[-len(run) :] == run:
+            return True
     return False
+
+
+def is_orch_role(role: str) -> bool:
+    """True for an orchestrator vocabulary term occupying trailing role segments."""
+    return _matches_role_terms(role, ORCH_ROLE_TERMS)
+
+
+def is_tm_role(role: str) -> bool:
+    """True for a Task Manager vocabulary term occupying trailing role segments.
+
+    Segment-aware like `is_implementer_role`, matching terms as a trailing run of segments:
+    `msg-tm` and `sr-coord` qualify, `tmux` and `orchid` do not, and `task-manager`/`task_manager`
+    match despite carrying a separator in the term.
+    """
+    return _matches_role_terms(role, TM_ROLE_TERMS)
 
 
 def render_invariant(role: str) -> str:
     """Render the role invariant snippet for one role.
 
     Every role carries the coordination pattern and the two standing rules; `impl`-named
-    roles additionally carry the cooperation contract that role needs after compaction, and
-    coordination-authority roles (`tm`, `orch`, `coordinator`, scoped forms) carry the Task
-    Manager contract instead.
+    roles additionally carry the cooperation contract that role needs after compaction,
+    Task Manager roles carry the Task Manager contract, and Orchestrator roles carry the
+    Orchestrator contract.
     """
     lines = [
         INVARIANT_HEADER.format(article=role_article(role), role=role),
         INVARIANT_RULES.format(helper=REPLY_HELPER),
     ]
-    if is_implementer_role(role):
-        lines.append(IMPLEMENTER_CONTRACT)
     if is_tm_role(role):
         lines.append(TM_CONTRACT)
+    elif is_orch_role(role):
+        lines.append(ORCH_CONTRACT)
+    elif is_implementer_role(role):
+        lines.append(IMPLEMENTER_CONTRACT)
     return "\n".join(lines)
 
 

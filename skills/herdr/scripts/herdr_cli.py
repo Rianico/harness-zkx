@@ -471,7 +471,10 @@ def read_store_facts(env: Mapping[str, str]) -> Mapping[str, Any]:
         return {}
     if not raw.strip():
         return {}
-    yaml = yaml_module()
+    try:
+        yaml = yaml_module()
+    except HerdrError:
+        return {}
     try:
         data = yaml.safe_load(raw)
     except yaml.YAMLError:
