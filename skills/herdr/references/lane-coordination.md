@@ -234,6 +234,8 @@ The Implementer owns execution, mutation, and concrete evidence production. It t
 - **Explicit Forbid List**:
   - Expanding scope beyond ticket boundaries.
   - Attempting lane-level orchestration (dispatching to other Herdr panes or agents).
+  - Replying directly to Orchestrator (Implementers report exclusively to their caller TM).
+  - Accepting direct dispatch from Orchestrator without TM mediation.
   - Modifying architectural boundaries or public seams unasked.
   - Producing assertions of quality without concrete replayable evidence.
   - Allowing internal subagents to invoke Herdr CLI or `herdr_reply.py`.
@@ -563,7 +565,7 @@ All coding agents delegate heavy, noisy tasks to platform-native subagents:
 
 | Agent Kind | Engine / Platform | Native Subagent Mechanism | Invocation / Dispatch Pattern | Context Isolation Boundary |
 |---|---|---|---|---|
-| `pi` | Pi Agent | `Agent` tool / extension subagent | `Agent(prompt=..., subagent_type=...)` | Ephemeral subagent session with isolated context |
+| `pi` | Pi Agent | `subagent` tool | `subagent({ agent, task })` or parallel tasks | Ephemeral subagent session with isolated context |
 | `claude` | Claude Code | `Agent` / Task runner tool | `Agent(prompt=..., subagent_type=...)` | Ephemeral task context; returns structured summary |
 | `agy` | Antigravity / Gemini CLI | Subagent harness / scratch agent | Process-level subagent dispatch via `send_message` | Isolated subagent process & scratch workspace |
 | `cursor` | Cursor Agent | Background subagent / Composer | `@agent` invocation or background composer callee | Isolated callee thread; merges diff |

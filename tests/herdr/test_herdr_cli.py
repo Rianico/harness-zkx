@@ -465,3 +465,18 @@ def test_merged_inventory_keeps_every_daemon_field_and_annotates_additively(
     assert inventory.agents[0] == {**agent, "liveness": "live"}
     assert inventory.raw_panes == json.dumps({"result": {"panes": [pane]}})
     assert inventory.raw_agents == json.dumps({"result": {"agents": [agent]}})
+
+
+def test_read_store_facts_degrades_to_empty_dict_on_missing_pyyaml(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lane_dir = tmp_path / ".lane"
+    lane_dir.mkdir()
+    _ = (lane_dir / "tasks.yaml").write_text("tasks: []\n", encoding="utf-8")
+
+    def raise_herdr_error() -> None:
+        raise herdr_cli.HerdrError("store access needs pyyaml; run this script with `uv run`")
+
+    monkeypatch.setattr(herdr_cli, "yaml_module", raise_herdr_error)
+    facts = herdr_cli.read_store_facts({"HERDR_LANE_DIR": str(tmp_path)})
+    assert facts == {}

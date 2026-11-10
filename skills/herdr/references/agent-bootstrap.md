@@ -122,7 +122,7 @@ uv run "$SKILL_DIR/scripts/herdr_bootstrap.py" msg-tm --kind claude --pane w1:p2
 
 ```text
 ROLE INVARIANT: You are {a|an} {role} in a Herdr lane. Follow the lane coordination pattern.
-Subagent-First: MUST delegate deep search, multi-file edits, and test triage to subagents.
+Subagent-First: MUST delegate heavy tasks (search, edits, triage, review) to subagents.
 Reply Contract: MUST reply via `uv run $SKILL_DIR/scripts/herdr_reply.py <caller> --file <reply.md>` on completion or blocker; never exit silently.
 ```
 
@@ -130,22 +130,32 @@ Implementer roles — the docs' `impl-<n>` vocabulary, scoped or bare (`impl-1`,
 
 ```text
 Implementer: single writer for your task; never edit outside your worktree.
+Coordination: reply to TM via `herdr-reply`; await TM review before completion.
 Evidence: red-then-green test results, artifacts reported by path.
 Blockers: report immediately, never idle.
 ```
 
-Task Manager roles — the coordination-authority vocabulary (`tm`, `task-manager`, `orch`,
-`orchestrator`, `coord`, `coordinator`), scoped or bare (`msg-tm`, `lane-orch`), matched on whole
-role segments — append the Task Manager contract:
+Task Manager roles — the tactical coordination vocabulary (`tm`, `task-manager`, `coord`,
+`coordinator`), scoped or bare (`msg-tm`, `lane-tm`), matched on whole role segments — append
+the Task Manager contract:
 
 ```text
 Task Manager: coordination, design, and review authority only; NEVER edit source or test code directly.
 Dispatch: explore problem space; decompose briefs into atomic tickets; dispatch via `herdr-dispatch`.
-Eval & Review: run verification gates in pane; audit callee diffs with review subagents before accepting.
+Review Loop: run verification gates in pane; audit callee diffs with review subagents before accepting (`impl -> code review -> impl`).
 Synthesize: track lane progress; synthesize results and report completion to caller via `herdr-reply`.
 ```
 
-That block is role-conditional: it rides only for an implementer role, so a coordination-only role does not pay for it and stays inside the original 45-word budget, while the implementer variant is capped at 80. The discriminator is segment-aware because the lane convention is `<task-group-slug>-<role>[-<subrole|index>]`: `herdr228-impl-1` and `msg-impl-1` carry the block, `herdr228-task-manager` and `msg-tm` stay coordination-only. Accepted over-match: a lane *slug* segment that itself begins with `impl` (an `impl-hardening` lane) drags its coordination roles into the block too. The shared Reply Contract already owes the reply, so the block adds only implementer-only content and stays at 69 words. The article follows the role's first letter (`a tm`, `an impl-1`). The reply command is **absolute** on purpose: the rendered text embeds the lane's own helper, resolved from the running `herdr_bootstrap.py`'s own directory, and `uv run` stays in front, so an agent whose shell sits anywhere — `/tmp`, `$HOME` — still spawns it. The `~/.agents/skills/herdr` symlink is deliberately not used: it resolves into another worktree whose `herdr_*` code may be older.
+Orchestrator roles — the root coordination vocabulary (`orch`, `orchestrator`), scoped or bare
+(`rfc-orch`, `lane-orch`), matched on whole role segments — append the Orchestrator contract:
+
+```text
+Orchestrator: topology, problem definition, and brief authoring only; NEVER edit source or test code directly.
+Topology: Orch → TM → Impl. NEVER bypass the Task Manager to dispatch tickets directly to Implementers.
+Brief: issue brief to TM specifying intent, constraints, and verification contract; await TM completion reply via `herdr-reply`.
+```
+
+That block is role-conditional: it rides only for implementer, Task Manager, or Orchestrator roles, so a coordination-only generic role does not pay for a role contract and stays at 44 words (inside the 45-word budget). The implementer block adds 35 words (79 words total, capped at 80 words). The orchestrator block adds 49 words (93 words total, capped at 100 words). The Task Manager block adds 61 words (105 words total, capped at 110 words). The discriminator is segment-aware because the lane convention is `<task-group-slug>-<role>[-<subrole|index>]`: `herdr228-impl-1` and `msg-impl-1` carry the implementer block, `herdr228-task-manager` and `msg-tm` carry the TM block, and `lane-orch` carries the orchestrator block. Role recognition matches trailing segments (ignoring numeric indices): a lane slug containing `orch` does not prevent a `tm` role (`orch-fix-tm`) from being a Task Manager, and a lane slug containing `tm` does not prevent an `orch` role (`tm-hardening-orch`) from being an Orchestrator. Accepted over-match: a lane *slug* segment that itself begins with `impl` (an `impl-hardening` lane) drags its coordination roles into the implementer block. The article follows the role's first letter (`a tm`, `an impl-1`). The reply command is **absolute** on purpose: the rendered text embeds the lane's own helper, resolved from the running `herdr_bootstrap.py`'s own directory, and `uv run` stays in front, so an agent whose shell sits anywhere — `/tmp`, `$HOME` — still spawns it. The `~/.agents/skills/herdr` symlink is deliberately not used: it resolves into another worktree whose `herdr_*` code may be older.
 
 ### The per-agent invariant file
 

@@ -65,34 +65,85 @@ def test_coordination_snippet_stays_within_the_55_word_budget() -> None:
 
 
 def test_tm_named_roles_carry_the_task_manager_contract() -> None:
-    """#260: bare and scoped TM vocabulary appends the Task Manager contract."""
+    """Bare and scoped TM vocabulary appends the Task Manager contract."""
     for role in (
         "tm",
         "msg-tm",
-        "lane-orch",
         "task-manager",
         "task_manager",
         "herdr228-task-manager",
-        "orchestrator",
         "sr-coord",
         "coordinator",
-        "gaps-orch-2",
     ):
         assert herdr_bootstrap.is_tm_role(role) is True, role
+        assert herdr_bootstrap.is_orch_role(role) is False, role
         text = herdr_bootstrap.render_invariant(role)
         assert "NEVER edit source or test code directly" in text, role
+        assert "single writer for your task" not in text, role
+        assert "audit callee diffs" in text, role
+
+
+def test_orch_named_roles_carry_the_orchestrator_contract() -> None:
+    """Bare and scoped Orchestrator vocabulary appends the Orchestrator contract."""
+    for role in (
+        "orch",
+        "orchestrator",
+        "lane-orch",
+        "gaps-orch-2",
+    ):
+        assert herdr_bootstrap.is_orch_role(role) is True, role
+        assert herdr_bootstrap.is_tm_role(role) is False, role
+        text = herdr_bootstrap.render_invariant(role)
+        assert "NEVER edit source or test code directly" in text, role
+        assert "NEVER bypass the Task Manager" in text, role
         assert "single writer for your task" not in text, role
 
 
 def test_tm_contract_is_appended_verbatim_and_within_its_budget() -> None:
     text = herdr_bootstrap.render_invariant("tm")
     assert text.endswith(herdr_bootstrap.TM_CONTRACT)
-    assert len(text.split()) == 51 + len(herdr_bootstrap.TM_CONTRACT.split())
+    base = (
+        herdr_bootstrap.INVARIANT_HEADER.format(article="a", role="tm")
+        + "\n"
+        + herdr_bootstrap.INVARIANT_RULES.format(helper=herdr_bootstrap.REPLY_HELPER)
+    )
+    assert len(text.split()) == len(base.split()) + len(herdr_bootstrap.TM_CONTRACT.split())
+    assert len(text.split()) <= 110
+
+
+def test_orch_contract_is_appended_verbatim_and_within_its_budget() -> None:
+    text = herdr_bootstrap.render_invariant("orch")
+    assert text.endswith(herdr_bootstrap.ORCH_CONTRACT)
+    base = (
+        herdr_bootstrap.INVARIANT_HEADER.format(article="an", role="orch")
+        + "\n"
+        + herdr_bootstrap.INVARIANT_RULES.format(helper=herdr_bootstrap.REPLY_HELPER)
+    )
+    assert len(text.split()) == len(base.split()) + len(herdr_bootstrap.ORCH_CONTRACT.split())
+    assert len(text.split()) <= 100
+
+
+def test_lane_slug_containing_orch_does_not_override_tm_role() -> None:
+    """A lane slug like 'orch-fix-tm' is a Task Manager, not an Orchestrator."""
+    assert herdr_bootstrap.is_tm_role("orch-fix-tm") is True
+    assert herdr_bootstrap.is_orch_role("orch-fix-tm") is False
+    text = herdr_bootstrap.render_invariant("orch-fix-tm")
+    assert "Task Manager: coordination" in text
+    assert "Orchestrator: topology" not in text
+
+
+def test_lane_slug_containing_tm_does_not_override_orch_role() -> None:
+    """A lane slug like 'tm-hardening-orch' is an Orchestrator, not a Task Manager."""
+    assert herdr_bootstrap.is_orch_role("tm-hardening-orch") is True
+    assert herdr_bootstrap.is_tm_role("tm-hardening-orch") is False
+    text = herdr_bootstrap.render_invariant("tm-hardening-orch")
+    assert "Orchestrator: topology" in text
+    assert "Task Manager: coordination" not in text
 
 
 def test_tm_match_is_segment_exact_not_prefix() -> None:
     """`tmux`/`orchid`/`coordination` hold a TM term only as a prefix — no contract for them."""
-    for role in ("tmux", "orchid", "coordination", "impl-1", "reviewer"):
+    for role in ("tmux", "orchid", "coordination", "impl-1", "reviewer", "orch", "orchestrator"):
         assert herdr_bootstrap.is_tm_role(role) is False, role
 
 

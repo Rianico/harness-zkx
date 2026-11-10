@@ -2339,3 +2339,339 @@ def test_dispatch_group_roster_is_scoped_to_the_lane(stub: StubHarness, tmp_path
     envelope, _body = herdr_prompt.split_envelope_and_body(call[4])
     assert envelope is not None
     assert envelope.group == ("harness-tm@w9:p1", "harness-impl@w9:p2")
+
+
+def test_dispatch_refuses_orchestrator_to_implementer_without_force(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    state = {
+        **DEFAULT_STATE,
+        "agents": [
+            {"pane_id": "w9:p1", "name": "lane-orch", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p2", "name": "lane-impl-1", "agent": "pi", "agent_status": "working"},
+        ],
+        "panes": [
+            {
+                "pane_id": "w9:p1",
+                "tab_id": "w9:t1",
+                "workspace_id": "w9",
+                "agent": "pi",
+                "agent_status": "idle",
+                "cwd": "/tmp/orch",
+                "label": "orch",
+            },
+            {
+                "pane_id": "w9:p2",
+                "tab_id": "w9:t1",
+                "workspace_id": "w9",
+                "agent": "pi",
+                "agent_status": "idle",
+                "cwd": "/tmp/impl",
+                "label": "impl-1",
+            },
+        ],
+    }
+    done = stub.run(
+        "lane-impl-1",
+        "--file",
+        str(payload_file(tmp_path, "do this")),
+        "--no-wait",
+        "--task-group",
+        "lane",
+        state=state,
+    )
+    assert done.returncode == herdr_cli.EXIT_USAGE, done.stderr
+    assert (
+        "orchestrator 'lane-orch' cannot dispatch tickets directly to implementer 'lane-impl-1'"
+        in done.stderr
+    )
+    assert "lane coordination requires Orch → TM → Impl" in done.stderr
+    assert stub.prompts() == []
+
+
+def test_dispatch_allows_orchestrator_to_implementer_with_force(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    state = {
+        **DEFAULT_STATE,
+        "agents": [
+            {"pane_id": "w9:p1", "name": "lane-orch", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p2", "name": "lane-impl-1", "agent": "pi", "agent_status": "working"},
+        ],
+        "panes": [
+            {
+                "pane_id": "w9:p1",
+                "tab_id": "w9:t1",
+                "workspace_id": "w9",
+                "agent": "pi",
+                "agent_status": "idle",
+                "cwd": "/tmp/orch",
+                "label": "orch",
+            },
+            {
+                "pane_id": "w9:p2",
+                "tab_id": "w9:t1",
+                "workspace_id": "w9",
+                "agent": "pi",
+                "agent_status": "idle",
+                "cwd": "/tmp/impl",
+                "label": "impl-1",
+            },
+        ],
+    }
+    done = stub.run(
+        "lane-impl-1",
+        "--file",
+        str(payload_file(tmp_path, "do this")),
+        "--no-wait",
+        "--force",
+        "--task-group",
+        "lane",
+        state=state,
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert len(stub.prompts()) == 1
+
+
+def test_dispatch_allows_orchestrator_to_tm(stub: StubHarness, tmp_path: Path) -> None:
+    state = {
+        **DEFAULT_STATE,
+        "agents": [
+            {"pane_id": "w9:p1", "name": "lane-orch", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p2", "name": "lane-tm", "agent": "pi", "agent_status": "working"},
+        ],
+        "panes": [
+            {
+                "pane_id": "w9:p1",
+                "tab_id": "w9:t1",
+                "workspace_id": "w9",
+                "agent": "pi",
+                "agent_status": "idle",
+                "cwd": "/tmp/orch",
+                "label": "orch",
+            },
+            {
+                "pane_id": "w9:p2",
+                "tab_id": "w9:t1",
+                "workspace_id": "w9",
+                "agent": "pi",
+                "agent_status": "idle",
+                "cwd": "/tmp/tm",
+                "label": "tm",
+            },
+        ],
+    }
+    done = stub.run(
+        "lane-tm",
+        "--file",
+        str(payload_file(tmp_path, "do this")),
+        "--no-wait",
+        "--task-group",
+        "lane",
+        state=state,
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert len(stub.prompts()) == 1
+
+
+def test_dispatch_allows_orchestrator_to_tm_with_impl_slug(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """An orchestrator dispatching to a TM in an impl-* lane (e.g. impl-hardening-tm) is allowed."""
+    state = {
+        **DEFAULT_STATE,
+        "agents": [
+            {"pane_id": "w9:p1", "name": "lane-orch", "agent": "pi", "agent_status": "working"},
+            {
+                "pane_id": "w9:p2",
+                "name": "impl-hardening-tm",
+                "agent": "pi",
+                "agent_status": "working",
+            },
+        ],
+        "panes": [
+            {
+                "pane_id": "w9:p1",
+                "tab_id": "w9:t1",
+                "workspace_id": "w9",
+                "agent": "pi",
+                "agent_status": "idle",
+                "cwd": "/tmp/orch",
+                "label": "orch",
+            },
+            {
+                "pane_id": "w9:p2",
+                "tab_id": "w9:t1",
+                "workspace_id": "w9",
+                "agent": "pi",
+                "agent_status": "idle",
+                "cwd": "/tmp/tm",
+                "label": "impl-hardening-tm",
+            },
+        ],
+    }
+    done = stub.run(
+        "impl-hardening-tm",
+        "--file",
+        str(payload_file(tmp_path, "do this")),
+        "--no-wait",
+        "--task-group",
+        "lane",
+        state=state,
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert len(stub.prompts()) == 1
+
+
+def test_dispatch_refuses_orch_to_impl_before_autostart_bootstraps_pane(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """An orchestrator dispatching to an implementer with --auto-start refuses BEFORE starting an agent."""
+    state = {
+        **DEFAULT_STATE,
+        "agents": [
+            {"pane_id": "w9:p1", "name": "lane-orch", "agent": "pi", "agent_status": "working"},
+        ],
+        "panes": [
+            {
+                "pane_id": "w9:p1",
+                "tab_id": "w9:t1",
+                "workspace_id": "w9",
+                "agent": "pi",
+                "agent_status": "idle",
+                "cwd": "/tmp/orch",
+                "label": "orch",
+            },
+            {
+                "pane_id": "w9:p2",
+                "tab_id": "w9:t1",
+                "workspace_id": "w9",
+                "agent": None,
+                "agent_status": "unknown",
+                "cwd": "/tmp/impl",
+                "label": "lane-impl-1",
+            },
+        ],
+        "process_info": {
+            "w9:p2": {
+                "shell_pid": 1234,
+                "foreground_processes": [{"name": "zsh", "pid": 1234}],
+            }
+        },
+    }
+    done = stub.run(
+        "lane-impl-1",
+        "--file",
+        str(payload_file(tmp_path, "do this")),
+        "--no-wait",
+        "--auto-start",
+        "pi",
+        "--task-group",
+        "lane",
+        state=state,
+    )
+    assert done.returncode == herdr_cli.EXIT_USAGE, done.stderr
+    assert (
+        "orchestrator 'lane-orch' cannot dispatch tickets directly to implementer 'lane-impl-1'"
+        in done.stderr
+    )
+    assert stub.starts() == []
+
+
+def test_dispatch_allows_tm_with_orch_slug_to_implementer(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """A TM with 'orch' in its task group slug (e.g. orch-fix-tm) is allowed to dispatch to implementers."""
+    state = {
+        **DEFAULT_STATE,
+        "agents": [
+            {"pane_id": "w9:p1", "name": "orch-fix-tm", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p2", "name": "lane-impl-1", "agent": "pi", "agent_status": "working"},
+        ],
+        "panes": [
+            {
+                "pane_id": "w9:p1",
+                "tab_id": "w9:t1",
+                "workspace_id": "w9",
+                "agent": "pi",
+                "agent_status": "idle",
+                "cwd": "/tmp/tm",
+                "label": "orch-fix-tm",
+            },
+            {
+                "pane_id": "w9:p2",
+                "tab_id": "w9:t1",
+                "workspace_id": "w9",
+                "agent": "pi",
+                "agent_status": "idle",
+                "cwd": "/tmp/impl",
+                "label": "impl-1",
+            },
+        ],
+    }
+    done = stub.run(
+        "lane-impl-1",
+        "--file",
+        str(payload_file(tmp_path, "do this")),
+        "--no-wait",
+        "--task-group",
+        "lane",
+        state=state,
+    )
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert len(stub.prompts()) == 1
+
+
+def test_dispatch_refuses_orch_to_pane_id_impl_before_autostart_bootstraps_pane(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """An orchestrator targeting a raw pane id labeled as implementer with --auto-start refuses without starting."""
+    state = {
+        **DEFAULT_STATE,
+        "agents": [
+            {"pane_id": "w9:p1", "name": "lane-orch", "agent": "pi", "agent_status": "working"},
+        ],
+        "panes": [
+            {
+                "pane_id": "w9:p1",
+                "tab_id": "w9:t1",
+                "workspace_id": "w9",
+                "agent": "pi",
+                "agent_status": "idle",
+                "cwd": "/tmp/orch",
+                "label": "orch",
+            },
+            {
+                "pane_id": "w9:p2",
+                "tab_id": "w9:t1",
+                "workspace_id": "w9",
+                "agent": None,
+                "agent_status": "unknown",
+                "cwd": "/tmp/impl",
+                "label": "lane-impl-1",
+            },
+        ],
+        "process_info": {
+            "w9:p2": {
+                "shell_pid": 1234,
+                "foreground_processes": [{"name": "zsh", "pid": 1234}],
+            }
+        },
+    }
+    done = stub.run(
+        "w9:p2",
+        "--file",
+        str(payload_file(tmp_path, "do this")),
+        "--no-wait",
+        "--auto-start",
+        "pi",
+        "--task-group",
+        "lane",
+        state=state,
+    )
+    assert done.returncode == herdr_cli.EXIT_USAGE, done.stderr
+    assert (
+        "orchestrator 'lane-orch' cannot dispatch tickets directly to implementer 'lane-impl-1'"
+        in done.stderr
+    )
+    assert stub.starts() == []

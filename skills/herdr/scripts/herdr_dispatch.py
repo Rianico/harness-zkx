@@ -404,8 +404,6 @@ def validate_ticket(ticket: str) -> None:
 
 def render_draft_skeleton(herdr: str, targets: Sequence[str], env: Mapping[str, str]) -> str:
     """Render a ticket skeleton; routing comes from live state, sections stay empty for the model."""
-    from herdr_prompt import resolve_caller
-
     sender = resolve_caller(herdr, env)
     lines = [
         "# Ticket draft",
@@ -433,6 +431,11 @@ def render_draft_skeleton(herdr: str, targets: Sequence[str], env: Mapping[str, 
             "## Context",
             "",
             "## Acceptance criteria",
+            "",
+            "## Execution Strategy (Subagent-First Mandate)",
+            "- Delegate heavy codebase exploration (Scout), multi-file code editing / refactoring (Editor), and test failure log triage (Test Runner) to ephemeral platform subagents.",
+            "- Keep the callee host pane context lean: ingest only summaries, diffs, and artifact paths from subagents.",
+            "- The Iron Curtain: Never let subagents call Herdr CLI commands or scripts (`herdr_reply.py`, `herdr_dispatch.py`). Aggregate all results in this host pane.",
         ]
     )
     return "\n".join(lines)
@@ -658,6 +661,43 @@ def dry_run_bootstrap_plans(
     return plans
 
 
+def check_orchestrator_dispatch(
+    herdr: str,
+    caller_role: str,
+    targets: Sequence[str],
+    env: Mapping[str, str],
+) -> None:
+    """Refuse direct orchestrator-to-implementer dispatches without TM mediation.
+
+    Skipped under --force (operator override) and --dry-run (preview mode).
+    Target roles matching Task Manager vocabulary (e.g. `impl-hardening-tm`) are allowed.
+    """
+    from herdr_bootstrap import is_implementer_role, is_orch_role, is_tm_role
+
+    if not caller_role or not is_orch_role(caller_role) or is_tm_role(caller_role):
+        return
+
+    for target in targets:
+        canonical, _ = resolve_target_identity(herdr, target, env)
+        role_to_check = canonical
+        if not is_implementer_role(role_to_check):
+            # Check shell pane info (e.g. if target is a pane id like w9:p2)
+            shell_info = inspect_target_shell_pane(herdr, target, env)
+            if shell_info is not None:
+                if shell_info.suggested_name and is_implementer_role(shell_info.suggested_name):
+                    role_to_check = shell_info.suggested_name
+                elif shell_info.label and is_implementer_role(shell_info.label):
+                    role_to_check = shell_info.label
+        if is_implementer_role(role_to_check) or is_implementer_role(target):
+            matched = role_to_check if is_implementer_role(role_to_check) else target
+            if not is_tm_role(matched):
+                raise UsageError(
+                    f"orchestrator '{caller_role}' cannot dispatch tickets directly to implementer '{matched}'; "
+                    "lane coordination requires Orch → TM → Impl. Dispatch the brief to the Task Manager "
+                    "instead, or pass --force to override"
+                )
+
+
 def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
     require_herdr_env(env)
     herdr = find_herdr(env)
@@ -676,7 +716,13 @@ def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
         marker="herdr-dispatch",
         dry_run=options.dry_run,
     )
+    sender = resolve_caller(herdr, env)
+    caller_role = sender.agent or sender.label or ""
+    if not options.force and not options.dry_run:
+        check_orchestrator_dispatch(herdr, caller_role, candidate_targets(options), env)
+
     kind = normalize_auto_start_kind(options.auto_start)
+    started_names: list[str] = []
     try:
         targets = resolve_targets(options, herdr, env)
     except UsageError as exc:
@@ -686,8 +732,18 @@ def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
         if bootstrapped is None:
             raise
         targets, bootstrap_plans = bootstrapped
+        if not options.dry_run:
+            started_names = list(targets)
     else:
         bootstrap_plans = dry_run_bootstrap_plans(options, herdr, targets, kind, env)
+
+    if not options.force and not options.dry_run:
+        try:
+            check_orchestrator_dispatch(herdr, caller_role, targets, env)
+        except UsageError as exc:
+            if started_names and not isinstance(exc, _NamedOrphansError):
+                raise _NamedOrphansError(started_names, exc) from exc
+            raise
 
     if options.dry_run and bootstrap_plans:
         for plan in bootstrap_plans:
@@ -701,6 +757,7 @@ def dispatch_agents(options: Options, env: Mapping[str, str]) -> int:
         else:
             print(skeleton)
         return EXIT_OK
+
     ticket_path = options.file
     if ticket_path is None:
         raise UsageError("pass --file PATH to dispatch a ticket")
