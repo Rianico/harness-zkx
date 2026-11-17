@@ -263,7 +263,7 @@ def test_skip_tests_banner_reports_skipped_gate() -> None:
     result = _skip_tests_run()
     assert result.returncode == 0, result.stderr[-2000:]
     assert "SKIPPED" in result.stdout
-    assert "8/9 gates passed (pytest skipped: --skip-tests)" in result.stdout
+    assert "9/10 gates passed (pytest skipped: --skip-tests)" in result.stdout
     # Pinning the absence: the unconditional "All gates passed." must not lie
     # when the pytest gate never ran.
     assert "All gates passed." not in result.stdout
@@ -284,7 +284,7 @@ def test_stubbed_gate3_failure_stops_before_gate4(tmp_path: Path) -> None:
     result = _run("bash", str(CHECK_SCRIPT), env=env, timeout=STUB_TIMEOUT)
     combined = result.stdout + result.stderr
     assert result.returncode != 0, combined
-    assert "FAILED: gate 3/9" in combined
+    assert "FAILED: gate 3/10" in combined
     invoked = calls.read_text()
     assert "run ruff check ." in invoked
     assert "basedpyright" not in invoked, "early stop broken: gate 4 ran after gate 3 failed"
@@ -305,7 +305,7 @@ def test_check_script_deep_relative_invocation_grades_harness(tmp_path: Path) ->
     assert result.returncode == 0, result.stdout + result.stderr
     assert calls.read_text().splitlines() == STUB_GATE_LOG[:-1]
     assert f"==> checking {HARNESS_ROOT}" in result.stdout
-    assert "8/9 gates passed (pytest skipped: --skip-tests)" in result.stdout
+    assert "9/10 gates passed (pytest skipped: --skip-tests)" in result.stdout
 
 
 def test_check_script_gates_run_in_harness_root_from_foreign_cwd(tmp_path: Path) -> None:
@@ -345,7 +345,7 @@ def test_pre_commit_hook_skip_tests_env_escape(tmp_path: Path) -> None:
     env["HARNESS_CHECK_SKIP_TESTS"] = "1"
     result = _run("bash", str(HOOK), env=env, timeout=STUB_TIMEOUT)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "8/9 gates passed (pytest skipped: --skip-tests)" in result.stdout
+    assert "9/10 gates passed (pytest skipped: --skip-tests)" in result.stdout
     assert "All gates passed." not in result.stdout
     assert "--group dev pytest" not in calls.read_text()
 

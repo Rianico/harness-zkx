@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+# scripts/check.sh — local verification for {{ project_name }} ({{ variant }}):
+# Gate 0 staged secret scan, then the verify gates in CI order.
+# CI (.github/workflows/ci.yml) calls this same script, so a local pass predicts CI.
+set -euo pipefail
+
+unset CDPATH
+unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
+unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_AUTHOR_DATE GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL GIT_COMMITTER_DATE
+SCRIPT_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+REPO_ROOT="$(cd -P "$SCRIPT_DIR/.." && pwd -P)"
+{% if variant == "python" %}
+MANIFEST="pyproject.toml"
+{% elif variant == "rust" %}
+MANIFEST="Cargo.toml"
+{% else %}
+MANIFEST="package.json"
+{% endif %}
+if [ ! -f "$REPO_ROOT/$MANIFEST" ]; then
+  echo "refusing: $REPO_ROOT has no $MANIFEST" >&2
+  exit 3
+fi
+cd "$REPO_ROOT"
+
+echo "==> checking $REPO_ROOT ({{ variant }})"
+
+usage() {
+  echo "usage: scripts/check.sh [--skip-tests]" >&2
+}
+
+SKIP_TESTS=0
+case "$#" in
+  0) ;;
+  1)
+    if [ "${1}" = "--skip-tests" ]; then
+      SKIP_TESTS=1
+    else
+      usage
+      exit 2
+    fi
+    ;;
+  *)
+    usage
+    exit 2
+    ;;
+esac
+
+{% if variant == "node" %}
+TOTAL=7
+{% elif variant == "python" %}
+TOTAL=5
+{% else %}
+TOTAL=4
+{% endif %}
+
+run_gate() {
+  local number="$1"
+  shift
+  echo "==> [gate ${number}/${TOTAL}] $*"
+  if ! "$@"; then
+    echo "FAILED: gate ${number}/${TOTAL} -> $*" >&2
+    exit 1
+  fi
+}
+
+gate0_staged_secrets() {
+  # Gate 0: staged secret scan. Additions only (`git diff --cached -U0`), so
+  # history never re-fails; high-entropy patterns only, so prose never trips.
+  # Lines carrying `# SAFETY:` or `// SAFETY:`, and files listed in
+  # `.secrets.allowlist`, are out of scope. Prints file + snippet, exits 1.
+  local pattern='ghp_[0-9A-Za-z]{36}|github_pat_[0-9A-Za-z_]{82}|AKIA[0-9A-Z]{16}|BEGIN [A-Z0-9 ]*PRIVATE KEY'
+  local staged
+  staged=$(git diff --cached -U0 --no-color --no-ext-diff 2>/dev/null || true)
+  [ -z "$staged" ] && return 0
+  printf '%s\n' "$staged" | awk -v pattern="$pattern" -v root="$REPO_ROOT" '
+    BEGIN {
+      allowfile = root "/.secrets.allowlist"
+      while ((getline line < allowfile) > 0) {
+        sub(/\r$/, "", line)
+        if (line != "" && line !~ /^#/) allow[line] = 1
+      }
+    }
+    /^\+\+\+ b\// { file = substr($0, 7); next }
+    /^\+\+\+ \/dev\/null/ { file = ""; next }
+    /^-/ { next }
+    /^\+/ {
+      if (file == "" || (file in allow)) next
+      line = substr($0, 2)
+      if (line ~ /# SAFETY:/ || line ~ /\/\/ SAFETY:/) next
+      if (match(line, pattern)) { printf "%s: %s\n", file, line; bad = 1 }
+    }
+    END { exit (bad ? 1 : 0) }
+  '
+}
+
+run_gate 0 gate0_staged_secrets
+{% if variant == "node" %}
+run_gate 1 pnpm install
+run_gate 2 pnpm run audit
+run_gate 3 pnpm run lint
+run_gate 4 pnpm run format
+run_gate 5 pnpm run typecheck
+{% elif variant == "python" %}
+run_gate 1 uv run ruff check .
+run_gate 2 uv run ruff format --check .
+run_gate 3 uv run basedpyright --warnings
+{% else %}
+run_gate 1 cargo fmt --check
+run_gate 2 cargo clippy -- -D warnings
+{% endif %}
+
+if [ "$SKIP_TESTS" -eq 1 ]; then
+{% if variant == "node" %}
+  echo "==> [gate $((TOTAL - 1))/${TOTAL}] SKIPPED: pnpm test was skipped (--skip-tests)"
+{% elif variant == "python" %}
+  echo "==> [gate $((TOTAL - 1))/${TOTAL}] SKIPPED: pytest was skipped (--skip-tests)"
+{% else %}
+  echo "==> [gate $((TOTAL - 1))/${TOTAL}] SKIPPED: cargo test was skipped (--skip-tests)"
+{% endif %}
+else
+{% if variant == "node" %}
+  run_gate "$((TOTAL - 1))" pnpm test
+{% elif variant == "python" %}
+{% if with_coverage %}
+  run_gate "$((TOTAL - 1))" uv run pytest --cov --cov-report=term-missing --cov-report=lcov --cov-fail-under={{ threshold }}
+{% else %}
+  run_gate "$((TOTAL - 1))" uv run pytest
+{% endif %}
+{% else %}
+{% if with_coverage %}
+  run_gate "$((TOTAL - 1))" cargo llvm-cov --workspace --fail-under-lines {{ threshold }}
+{% else %}
+  run_gate "$((TOTAL - 1))" cargo test
+{% endif %}
+{% endif %}
+fi
+
+if [ "$SKIP_TESTS" -eq 1 ]; then
+  echo "$((TOTAL - 1))/${TOTAL} gates passed (tests skipped: --skip-tests)"
+else
+  echo "All gates passed."
+fi

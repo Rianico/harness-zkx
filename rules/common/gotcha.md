@@ -6,12 +6,13 @@ Blocking signals are hard gates. Never bypass verification. Fix failures at the 
 
 ## 0) Never skip gates or verification
 
-- **Trigger:** Any gate blocks (`pi-lens`, `wt` pre-merge, CI tests, typecheck, lint).
+- **Trigger:** Any gate blocks (Gate 0 staged secret scan, `pi-lens`, `wt` pre-merge, CI tests, typecheck, lint).
 - **Prohibited:** Never use `--no-verify`, `--no-gpg-sign`, `--force`, or raw `git worktree add` and `git merge`.
 - **Prohibited:** Never disable gates or alter tooling configs (`.config/wt.toml`, `.githooks/`, linter configs, CI workflows) to silence errors.
 - **Action:** Fix code, config, or tests at source until all gates pass green.
 - **False positives:** Suppress only at the narrowest possible line or scope with invariant and owner (`// SAFETY:`, `// ast-grep-ignore:`).
-
+- **Trigger:** Gate 0 staged secret scan flags a staged addition (`ghp_`, `github_pat_`, `AKIA`, private key header).
+- **Prohibited:** Never commit with `--no-verify` to skip the scan. Remove the secret, mark the line `# SAFETY:` or `// SAFETY:`, or list the file in `.secrets.allowlist`.
 ---
 
 ## 1) Shell trampoline bypass

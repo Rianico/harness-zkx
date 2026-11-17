@@ -190,6 +190,11 @@ SQUASH_SECTIONS: dict[str, tuple[str, ...]] = {
     "blast_radius": ("blast radius & safety", "blast radius and safety", "blast radius"),
     "evidence": ("evidence", "proof"),
     "links": ("links", "related issues"),
+    "untouched": (
+        "things intentionally not touched",
+        "intentionally untouched",
+        "things not touched",
+    ),
 }
 BEFORE_AFTER_ARROW = ("\u2192", "->")
 BEFORE_MARKERS = ("before", "was", "old", "prior")
@@ -1061,7 +1066,7 @@ def check_explicit_squash_message(msg: str) -> None:
             _refuse_explicit(
                 f'the explicit squash message carries a non-contract heading: "{heading}"',
                 "use only the contract section names (Summary, What Changed, Root Cause, "
-                "Blast Radius & Safety, Evidence, Links), then re-run",
+                "Blast Radius & Safety, Evidence, Links, Things Intentionally Not Touched), then re-run",
             )
     while lines and not lines[-1].strip():
         _ = lines.pop()
