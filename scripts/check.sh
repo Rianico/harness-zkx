@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/check.sh — the nine authoritative quality gates, in CI order.
+# scripts/check.sh — the ten authoritative quality gates, in CI order.
 # Stops at the first failure and names the failed gate.
 set -euo pipefail
 
@@ -62,8 +62,8 @@ case "${#}" in
 esac
 
 # The gate count lives here once: the banners below print it, so adding a gate
-# cannot leave a stale `/8` behind.
-TOTAL=9
+# cannot leave a stale `/9` behind.
+TOTAL=10
 
 run_gate() {
   local number="$1"
@@ -75,6 +75,37 @@ run_gate() {
   fi
 }
 
+gate0_staged_secrets() {
+  # Gate 0: staged secret scan. Additions only (`git diff --cached -U0`), so
+  # history never re-fails; high-entropy patterns only, so prose never trips.
+  # Lines carrying `# SAFETY:` or `// SAFETY:`, and files listed in
+  # `.secrets.allowlist`, are out of scope. Prints file + snippet, exits 1.
+  local pattern='ghp_[0-9A-Za-z]{36}|github_pat_[0-9A-Za-z_]{82}|AKIA[0-9A-Z]{16}|BEGIN [A-Z0-9 ]*PRIVATE KEY'
+  local staged
+  staged=$(git diff --cached -U0 --no-color --no-ext-diff 2>/dev/null || true)
+  [ -z "$staged" ] && return 0
+  printf '%s\n' "$staged" | awk -v pattern="$pattern" -v root="$REPO_ROOT" '
+    BEGIN {
+      allowfile = root "/.secrets.allowlist"
+      while ((getline line < allowfile) > 0) {
+        sub(/\r$/, "", line)
+        if (line != "" && line !~ /^#/) allow[line] = 1
+      }
+    }
+    /^\+\+\+ b\// { file = substr($0, 7); next }
+    /^\+\+\+ \/dev\/null/ { file = ""; next }
+    /^-/ { next }
+    /^\+/ {
+      if (file == "" || (file in allow)) next
+      line = substr($0, 2)
+      if (line ~ /# SAFETY:/ || line ~ /\/\/ SAFETY:/) next
+      if (match(line, pattern)) { printf "%s: %s\n", file, line; bad = 1 }
+    }
+    END { exit (bad ? 1 : 0) }
+  '
+}
+
+run_gate 0 gate0_staged_secrets
 run_gate 1 uv run scripts/changelog-gate.py ticket
 run_gate 2 uv run ruff check .
 run_gate 3 uv run ruff format --check .
@@ -87,7 +118,7 @@ run_gate 8 uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts
 if [ "$SKIP_TESTS" -eq 1 ]; then
   echo "==> [gate ${TOTAL}/${TOTAL}] SKIPPED: uv run --group dev pytest was skipped (--skip-tests)"
 else
-  run_gate "${TOTAL}" uv run --group dev pytest
+  run_gate 9 uv run --group dev pytest
 fi
 
 if [ "$SKIP_TESTS" -eq 1 ]; then

@@ -143,7 +143,9 @@ _ENV = Environment(
 # delimiters are the default `{{ }}`, so the literal must never enter the parser.
 GH_ACTIONS_TOKEN = "${{ secrets.GITHUB_TOKEN }}"
 GH_PR_REF = "${{ github.event.pull_request.number || github.ref }}"
-
+GH_REF = "${{ github.ref }}"
+GH_TARGET_REF = "${{ inputs.target_ref }}"
+GH_RUN_ID = "${{ github.run_id }}"
 # pnpm's audit endpoint is served by the public registry: a configured mirror without it answers
 # `ERR_PNPM_AUDIT_ENDPOINT_NOT_EXISTS`, so the generated script pins the registry (#288).
 NPM_AUDIT_REGISTRY = "https://registry.npmjs.org/"
@@ -196,7 +198,7 @@ ISSUE_FEATURE_REQUEST_YML = load_template("git/.github/ISSUE_TEMPLATE/02-feature
 ISSUE_CONFIG_YML = load_template("git/.github/ISSUE_TEMPLATE/config.yml")
 
 CHANGELOG_MD = load_template("git/CHANGELOG.md")
-
+GITMESSAGE = load_template("git/.gitmessage")
 # Other flavors' static artifacts — same contract, one byte source per flavor.
 RUST_TOOLCHAIN_TOML = load_template("rust/rust-toolchain.toml")
 RUST_LIB_RS = load_template("rust/src/lib.rs")
@@ -242,10 +244,14 @@ GIT_COMPONENTS: set[str] = {
     "contributing",  # CONTRIBUTING.md
     "agents",  # AGENTS.md patch
     "gitignore",  # .gitignore append
+    "gitmessage",  # .gitmessage (commit template)
 }
 
 CI_COMPONENTS: set[str] = {
     "release-yml",  # .github/workflows/release.yml (ci variant)
+    "check-sh",  # scripts/check.sh (local verification; CI calls it)
+    "ci-yml",  # .github/workflows/ci.yml (PR+push, draft-aware)
+    "rollback-yml",  # .github/workflows/rollback.yml (dispatch rollback)
 }
 
 # --update ownership contract. Generated infrastructure is refreshed byte-identically;
@@ -1195,6 +1201,35 @@ def build_ts_ci_workflow() -> str:
     )
 
 
+def build_check_sh(project_name: str, variant: str, with_coverage: bool, threshold: int) -> str:
+    """Render scripts/check.sh — Gate 0 secret scan plus the variant verify gates."""
+    return render_template(
+        "shared/scripts/check.sh.j2",
+        project_name=project_name,
+        variant=variant,
+        with_coverage=with_coverage,
+        threshold=threshold,
+    )
+
+
+def build_ci_workflow(variant: str) -> str:
+    """Render .github/workflows/ci.yml — the universal PR/push gate that calls check.sh."""
+    return render_template(
+        "ci/ci.yml.j2",
+        variant=variant,
+        shas=SHA_TABLE,
+        node_version=NODE_VERSION_NUM,
+        gh_ref=GH_REF,
+    )
+
+
+def build_rollback_workflow() -> str:
+    """Render .github/workflows/rollback.yml — the dispatch rollback to a target ref."""
+    return render_template(
+        "ci/rollback.yml.j2", shas=SHA_TABLE, target_ref=GH_TARGET_REF, run_id=GH_RUN_ID
+    )
+
+
 def do_git(
     cwd: pathlib.Path,
     project_name: str,
@@ -1233,6 +1268,8 @@ def do_git(
         _ = write_file(cwd / "scripts" / "release-changelog.mjs", RELEASE_CHANGELOG_MJS, dry_run)
     if "commitlint" in sel:
         _ = write_file(cwd / "commitlint.config.js", COMMITLINT_JS, dry_run)
+    if "gitmessage" in sel:
+        _ = write_file(cwd / ".gitmessage", GITMESSAGE, dry_run)
     if "changelog-md" in sel:
         note = write_generated(cwd / "CHANGELOG.md", CHANGELOG_MD, dry_run, update=update)
         if note:
@@ -1408,6 +1445,7 @@ def do_typescript(
     coverage_script: str = "coverage",
     update: bool = False,
     merge_mixed: bool = False,
+    write_ci_yml: bool = True,
 ) -> list[str]:
     """Ship the Node/pnpm toolchain projection: configs, entry skeleton, CONTRIBUTING."""
     notes: list[str] = []
@@ -1471,11 +1509,14 @@ def do_typescript(
         REPORT.note(
             f"NOTE: TypeScript coverage wired — run `pnpm run {coverage_script}` (fail_under lines/functions {threshold}%)"
         )
-    note = write_source(
-        cwd, ".github/workflows/ci.yml", build_ts_ci_workflow(), dry_run, update=update
-    )
-    if note:
-        notes.append(note)
+    # The ci flavor owns the universal workflow when it runs alongside (flavor `all`);
+    # the TypeScript projection then defers, so one path never has two byte sources.
+    if write_ci_yml:
+        note = write_source(
+            cwd, ".github/workflows/ci.yml", build_ts_ci_workflow(), dry_run, update=update
+        )
+        if note:
+            notes.append(note)
     patch_releaserc_lockfile(cwd, dry_run)
     append_gitignore(cwd / ".gitignore", GITIGNORE_GIT + GITIGNORE_TS_EXTRA, dry_run)
     patch_agents(
@@ -1510,23 +1551,45 @@ def do_ci(
     selected: set[str] | None = None,
     coverage_script: str = "coverage",
     update: bool = False,
+    project_name: str | None = None,
 ) -> list[str]:
     sel = selected if selected is not None else CI_COMPONENTS
-    if "release-yml" not in sel:
-        return []
-    rel = cwd / ".github" / "workflows" / "release.yml"
-    if update and rel.exists():
-        return [preserve(rel, FLAVOR_FOREIGN["release-yml"])]
-    content = render_ci_release(
-        variant, with_coverage=with_coverage, threshold=threshold, coverage_script=coverage_script
-    )
-    if variant == "node" and with_coverage:
-        print(
-            f"NOTE: Node/TS coverage runs `pnpm run {coverage_script}` in verify — thresholds owned by vitest.config.ts (run typescript flavor with --with-coverage to generate it)",
-            file=sys.stderr,
+    notes: list[str] = []
+    if "release-yml" in sel:
+        rel = cwd / ".github" / "workflows" / "release.yml"
+        if update and rel.exists():
+            notes.append(preserve(rel, FLAVOR_FOREIGN["release-yml"]))
+        else:
+            content = render_ci_release(
+                variant,
+                with_coverage=with_coverage,
+                threshold=threshold,
+                coverage_script=coverage_script,
+            )
+            if variant == "node" and with_coverage:
+                print(
+                    f"NOTE: Node/TS coverage runs `pnpm run {coverage_script}` in verify — thresholds owned by vitest.config.ts (run typescript flavor with --with-coverage to generate it)",
+                    file=sys.stderr,
+                )
+            _ = write_file(cwd / ".github" / "workflows" / "release.yml", content, dry_run)
+    if "check-sh" in sel:
+        name = project_name or infer_project_name(cwd)
+        check = cwd / "scripts" / "check.sh"
+        _ = write_file(check, build_check_sh(name, variant, with_coverage, threshold), dry_run)
+        if not dry_run:
+            try:
+                check.chmod(0o755)
+            except OSError:
+                pass
+    if "ci-yml" in sel:
+        _ = write_file(
+            cwd / ".github" / "workflows" / "ci.yml", build_ci_workflow(variant), dry_run
         )
-    _ = write_file(cwd / ".github" / "workflows" / "release.yml", content, dry_run)
-    return []
+    if "rollback-yml" in sel:
+        _ = write_file(
+            cwd / ".github" / "workflows" / "rollback.yml", build_rollback_workflow(), dry_run
+        )
+    return notes
 
 
 # `# Changelog` is the file's first line — the shape the shipped template states and
@@ -3206,6 +3269,8 @@ def main() -> int:
                 coverage_script,
                 update=update,
                 merge_mixed=args.merge_mixed,
+                # The ci flavor owns the universal workflow when it runs alongside.
+                write_ci_yml=(flavor != "all"),
             )
         if flavor in ("ci", "all"):
             notes += do_ci(
@@ -3217,6 +3282,7 @@ def main() -> int:
                 selected=ci_selected,
                 coverage_script=coverage_script,
                 update=update,
+                project_name=project_name,
             )
 
         if update:

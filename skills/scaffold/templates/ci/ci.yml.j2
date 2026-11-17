@@ -1,0 +1,34 @@
+name: CI
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: ci-{{ gh_ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    # Draft PRs spend no runner minutes; the `ready_for_review` type reruns the job.
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@{{ shas.checkout }} # v7.0.1
+        with: { fetch-depth: 0 }
+{% if variant == "node" %}
+      - uses: pnpm/action-setup@{{ shas['pnpm-setup'] }} # v6.1.0
+        with: { run_install: false }
+      - uses: actions/setup-node@{{ shas['setup-node'] }} # v7.0.0
+        with: { node-version: {{ node_version }}, cache: pnpm }
+{% elif variant == "python" %}
+      - uses: astral-sh/setup-uv@{{ shas['setup-uv'] }} # v10.1.0
+        with: { python-version: '3.14', enable-cache: true }
+{% else %}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@{{ shas['rust-cache'] }} # v2
+{% endif %}
+      - run: bash scripts/check.sh
