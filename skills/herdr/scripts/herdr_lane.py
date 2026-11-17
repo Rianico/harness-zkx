@@ -30,6 +30,7 @@ from herdr_cli import (
     HerdrError,
     UsageError,
     add_shared_argument,
+    current_workspace_id,
     entrypoint,
     find_herdr,
     payload_field,
@@ -53,6 +54,7 @@ class Options:
     verb: str = "up"
     prefix: str = ""
     revision: int = 1
+    workspace: str | None = None
     orch_kind: str = "agy"
     tm_kind: str = "pi"
     impl_kind: str = "pi"
@@ -86,6 +88,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=1,
         metavar="N",
         help="crew tab revision suffix (default 1)",
+    )
+    _ = up.add_argument(
+        "--workspace",
+        default=None,
+        metavar="ID",
+        help="Herdr workspace for the lane tabs (default: the calling workspace)",
     )
     _ = up.add_argument(
         "--orch-kind", default="agy", metavar="KIND", help="agent kind for the orchestrator"
@@ -140,6 +148,13 @@ def crew_label(prefix: str, revision: int) -> str:
     return f"{prefix}-r{revision}"
 
 
+def resolve_workspace(requested: str | None, herdr: str, env: Mapping[str, str]) -> str:
+    """The workspace id for the lane's tabs: explicit flag first, then the caller's workspace."""
+    if requested and requested.strip():
+        return requested.strip()
+    return current_workspace_id(herdr, env)
+
+
 def plan(options: Options, env: Mapping[str, str]) -> list[tuple[str, list[str]]]:
     """The six commands, in order, with placeholders where an id is only known at run time.
 
@@ -152,6 +167,7 @@ def plan(options: Options, env: Mapping[str, str]) -> list[tuple[str, list[str]]
     tm_cwd = resolve_cwd(options.cwd_tm, env)
     impl_cwd = resolve_cwd(options.cwd_impl, env)
     herdr = find_herdr(env)
+    workspace = resolve_workspace(options.workspace, herdr, env)
     anchor = lane_anchor_env_args(env, ())
     split = build_split_argv(
         herdr,
@@ -164,7 +180,21 @@ def plan(options: Options, env: Mapping[str, str]) -> list[tuple[str, list[str]]
     )
     bootstrap = [sys.executable, str(BOOTSTRAP_SCRIPT)]
     return [
-        ("orch-tab", [herdr, "tab", "create", "--label", prefix, "--cwd", orch_cwd, "--no-focus"]),
+        (
+            "orch-tab",
+            [
+                herdr,
+                "tab",
+                "create",
+                "--workspace",
+                workspace,
+                "--label",
+                prefix,
+                "--cwd",
+                orch_cwd,
+                "--no-focus",
+            ],
+        ),
         (
             "orch-agent",
             [
@@ -187,6 +217,8 @@ def plan(options: Options, env: Mapping[str, str]) -> list[tuple[str, list[str]]
                 herdr,
                 "tab",
                 "create",
+                "--workspace",
+                workspace,
                 "--label",
                 crew_label(prefix, revision),
                 "--cwd",
@@ -280,9 +312,21 @@ def run_sibling(argv: Sequence[str], env: Mapping[str, str]) -> None:
         raise HerdrError(f"{Path(argv[1]).name} exited {result.returncode}: {tail}")
 
 
-def _tab(lane: Lane, label: str, cwd: str) -> tuple[str, str]:
+def _tab(lane: Lane, label: str, cwd: str, workspace: str) -> tuple[str, str]:
     raw = run_herdr_checked(
-        [lane.herdr, "tab", "create", "--label", label, "--cwd", cwd, "--no-focus"], lane.env
+        [
+            lane.herdr,
+            "tab",
+            "create",
+            "--workspace",
+            workspace,
+            "--label",
+            label,
+            "--cwd",
+            cwd,
+            "--no-focus",
+        ],
+        lane.env,
     )
     tab_id = _created_tab_id(lane, raw, label)
     pane_id = _first_pane(lane, tab_id)
@@ -327,21 +371,22 @@ def _agent(lane: Lane, pane_id: str, kind: str, role: str, cwd: str) -> None:
 
 
 def _up(options: Options, env: Mapping[str, str]) -> int:
+    require_herdr_env(env)
     steps = plan(options, env)
     if options.dry_run:
         for _, argv in steps:
             print(shlex.join(argv))
         return EXIT_OK
 
-    require_herdr_env(env)
     lane = Lane(options=options, env=env, herdr=find_herdr(env))
     orch_cwd = resolve_cwd(options.cwd_orch, env)
     tm_cwd = resolve_cwd(options.cwd_tm, env)
     impl_cwd = resolve_cwd(options.cwd_impl, env)
+    workspace = resolve_workspace(options.workspace, lane.herdr, env)
     try:
-        _, orch_pane = _tab(lane, options.prefix, orch_cwd)
+        _, orch_pane = _tab(lane, options.prefix, orch_cwd, workspace)
         _agent(lane, orch_pane, options.orch_kind, "orch", orch_cwd)
-        _, tm_pane = _tab(lane, crew_label(options.prefix, options.revision), tm_cwd)
+        _, tm_pane = _tab(lane, crew_label(options.prefix, options.revision), tm_cwd, workspace)
         impl_pane = _split(lane, tm_pane, impl_cwd)
         _agent(lane, tm_pane, options.tm_kind, "tm", tm_cwd)
         _agent(lane, impl_pane, options.impl_kind, "impl", impl_cwd)

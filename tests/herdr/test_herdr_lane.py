@@ -22,6 +22,7 @@ def lane_env(tmp_path: Path) -> dict[str, str]:
         "HERDR_ENV": "1",
         "HERDR_BIN_PATH": "/fake/herdr",
         "HERDR_LANE_DIR": str(tmp_path / "store"),
+        "HERDR_WORKSPACE_ID": "w9",
         "PWD": str(tmp_path / "orch"),
     }
 
@@ -71,8 +72,8 @@ def test_up_dry_run_prints_the_plan_and_executes_nothing(
 
     assert code == EXIT_OK
     assert len(lines) == herdr_lane.PLANNED_STEPS
-    assert "tab create --label demo " in lines[0]
-    assert "tab create --label demo-r1 " in lines[2]
+    assert "tab create --workspace w9 --label demo " in lines[0]
+    assert "tab create --workspace w9 --label demo-r1 " in lines[2]
     assert "--direction right" in lines[3]
     assert f"--env HERDR_LANE_DIR={tmp_path / 'store'}" in lines[3]
     assert "--role orch" in lines[1] and "--role tm" in lines[4] and "--role impl" in lines[5]
@@ -114,6 +115,8 @@ def test_up_creates_two_tabs_one_split_and_three_agents(
     assert code == EXIT_OK
     labels = [argv[argv.index("--label") + 1] for argv in daemon if argv[1] == "tab"]
     assert labels == ["demo", "demo-r2"]
+    workspaces = [argv[argv.index("--workspace") + 1] for argv in daemon if argv[1] == "tab"]
+    assert workspaces == ["w9", "w9"]
     assert [argv[argv.index("--role") + 1] for argv in siblings] == ["orch", "tm", "impl"]
     assert [argv[argv.index("--pane") + 1] for argv in siblings] == ["w9:p1", "w9:p2", "w9:p3"]
     assert all(argv[argv.index("--task-group") + 1] == "demo" for argv in siblings)
@@ -225,3 +228,20 @@ def test_up_refuses_outside_a_herdr_pane(
 
     assert code == EXIT_USAGE
     assert "not inside a Herdr-managed pane" in err
+
+
+def test_up_honors_explicit_workspace_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def explode(_argv: Sequence[str], _env: Mapping[str, str]) -> str:
+        raise AssertionError("dry run must not execute anything")
+
+    monkeypatch.setattr(herdr_lane, "run_herdr_checked", explode)
+    monkeypatch.setattr(herdr_lane, "run_sibling", noop_sibling)
+
+    code = herdr_lane.main(up_args(tmp_path, "--dry-run", "--workspace", "w42"), lane_env(tmp_path))
+    lines = capsys.readouterr().out.strip().splitlines()
+
+    assert code == EXIT_OK
+    assert "tab create --workspace w42 --label demo " in lines[0]
+    assert "tab create --workspace w42 --label demo-r1 " in lines[2]

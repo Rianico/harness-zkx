@@ -480,3 +480,33 @@ def test_read_store_facts_degrades_to_empty_dict_on_missing_pyyaml(
     monkeypatch.setattr(herdr_cli, "yaml_module", raise_herdr_error)
     facts = herdr_cli.read_store_facts({"HERDR_LANE_DIR": str(tmp_path)})
     assert facts == {}
+
+
+def test_current_workspace_id_reads_env_first(monkeypatch: pytest.MonkeyPatch) -> None:
+    def explode(_argv: Sequence[str], _env: Mapping[str, str]) -> str:
+        raise AssertionError("env should avoid subprocess call")
+
+    monkeypatch.setattr(herdr_cli, "run_herdr_checked", explode)
+    assert herdr_cli.current_workspace_id("/bin/herdr", {"HERDR_WORKSPACE_ID": "w12"}) == "w12"
+
+
+def test_current_workspace_id_falls_back_to_pane_current(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_run(argv: Sequence[str], _env: Mapping[str, str]) -> str:
+        assert list(argv) == ["/bin/herdr", "pane", "current", "--current"]
+        return json.dumps({"result": {"pane": {"workspace_id": "w15", "pane_id": "w15:p3"}}})
+
+    monkeypatch.setattr(herdr_cli, "run_herdr_checked", fake_run)
+    assert herdr_cli.current_workspace_id("/bin/herdr", {}) == "w15"
+
+
+def test_current_workspace_id_derives_from_pane_id_split(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_run(argv: Sequence[str], _env: Mapping[str, str]) -> str:
+        assert list(argv) == ["/bin/herdr", "pane", "current", "--current"]
+        return json.dumps({"result": {"pane": {"pane_id": "w99:p1"}}})
+
+    monkeypatch.setattr(herdr_cli, "run_herdr_checked", fake_run)
+    assert herdr_cli.current_workspace_id("/bin/herdr", {}) == "w99"
