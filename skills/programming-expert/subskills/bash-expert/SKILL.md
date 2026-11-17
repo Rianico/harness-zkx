@@ -6,17 +6,6 @@ argument-hint: |-
   [strict|quoting|file-ops|args|portability|safety|testing|tooling|all]
 metadata:
   managed-by: programming-expert
-meta:
-  sources:
-    - https://www.skills.sh/pproenca/dot-skills/shell
-    - https://www.skills.sh/wshobson/agents/bash-defensive-patterns
-    - https://www.skills.sh/sickn33/agentic-awesome-skills/bash-scripting
-    - https://www.skills.sh/rmyndharis/antigravity-skills/bash-pro
-    - https://www.skills.sh/vudovn/ag-kit/bash-linux
-    - https://www.skills.sh/sickn33/agentic-awesome-skills/linux-shell-scripting
-    - https://www.skills.sh/wshobson/agents/error-handling-patterns
-    - https://www.skills.sh/wshobson/agents/bats-testing-patterns
-    - https://github.com/sickn33/agentic-awesome-skills/blob/main/skills/os-scripting/SKILL.md
 ---
 
 # Bash Expert Skill
@@ -45,7 +34,7 @@ Domain knowledge for production Bash — safe, portable, testable, and observabl
 
 If task matches two rows, read both sections plus `references/` for overlapping pattern.
 
-## 1. Strict Mode & Error Handling — Most Important
+## 1. Strict Mode & Error Handling — Most Important[^bash-defensive][^error-handling]
 
 > Read this section on every invocation. Other sections degrade without it.
 
@@ -110,7 +99,7 @@ timeout 30s curl --fail --max-time 10 "$url" || { printf 'curl failed\n' >&2; ex
 
 See `$SKILL_DIR/references/defensive-patterns.md` for trap composition, retry with jitter, and idempotency.
 
-## 2. Quoting & Expansion
+## 2. Quoting & Expansion[^dot-skills-shell]
 
 **Rule: always quote variable expansions.** Unquoted `$var` triggers word splitting + globbing — the #1 Bash bug class.
 
@@ -172,7 +161,7 @@ find . -type f -name '*.txt' -print0 | while IFS= read -r -d '' file; do
 done
 ```
 
-## 3. Variables, Arrays & Parameter Expansion
+## 3. Variables, Arrays & Parameter Expansion[^bash-scripting]
 
 ```bash
 # Constants — readonly, UPPER_CASE
@@ -246,7 +235,7 @@ next_month=$(( 10#$month + 1 ))
 - Validate numeric input: `[[ $num =~ ^[0-9]+$ ]] || { printf 'not numeric\n' >&2; exit 1; }`
 - Sanitize before use in commands; never `eval "$user_input"` — use arrays for dynamic commands.
 
-## 4. File & Temp Safety
+## 4. File & Temp Safety[^bash-linux][^linux-shell-scripting]
 
 ```bash
 # Script dir — robust, handles symlinks
@@ -280,7 +269,7 @@ command -v rsync &>/dev/null || { printf 'rsync not found\n' >&2; exit 1; }
 - Prefer process substitution `<(command)` over temp files when possible.
 - Use `xargs -0` with NUL boundaries for safe orchestration.
 
-## 5. Argument Parsing & Input Validation
+## 5. Argument Parsing & Input Validation[^bash-pro]
 
 ```bash
 VERBOSE=false; DRY_RUN=false; OUTPUT=""; JOBS=4
@@ -414,7 +403,7 @@ Suppress at the smallest scope, with a reason:
 
 Install steps, `.shellcheckrc`, Makefile targets, pre-commit hooks, and the GitHub Actions matrix live in [tooling.md](references/tooling.md).
 
-### Bats Testing (bats-core)
+### Bats Testing (bats-core)[^bats-testing]
 
 ```bash
 #!/usr/bin/env bats
@@ -454,7 +443,7 @@ teardown() { rm -rf -- "$TMPDIR"; }
 
 Run: `bats tests/` or `bats --tap tests/ | tee results.tap`
 
-## 10. Production Script Template
+## 10. Production Script Template[^os-scripting][^linux-shell-scripting]
 
 Start from the base template in [templates.md](references/templates.md): strict mode, logging, traps, usage, argument parsing, validation, and `main`. It covers 80% of production needs. Backup, monitoring, log-analysis, and network variants live in the same file.
 
@@ -497,3 +486,25 @@ Deep content behind pointers (one level from SKILL.md):
 - [Templates Library](references/templates.md) — backup, monitoring, user-mgmt, log-analysis, network scripts from linux-shell-scripting + os-scripting
 - [Tooling & CI](references/tooling.md) — ShellCheck/shfmt/bats/checkbashisms config, pre-commit, GitHub Actions matrix, semgrep/gitleaks
 - Sources: [sources.md](references/sources.md) — 9 upstream skills via `docs-scraper`, scrape commands, audit trail.
+
+---
+
+## Footnote References
+
+[^dot-skills-shell]: https://www.skills.sh/pproenca/dot-skills/shell
+
+[^bash-defensive]: https://www.skills.sh/wshobson/agents/bash-defensive-patterns
+
+[^bash-scripting]: https://www.skills.sh/sickn33/agentic-awesome-skills/bash-scripting
+
+[^bash-pro]: https://www.skills.sh/rmyndharis/antigravity-skills/bash-pro
+
+[^bash-linux]: https://www.skills.sh/vudovn/ag-kit/bash-linux
+
+[^linux-shell-scripting]: https://www.skills.sh/sickn33/agentic-awesome-skills/linux-shell-scripting
+
+[^error-handling]: https://www.skills.sh/wshobson/agents/error-handling-patterns
+
+[^bats-testing]: https://www.skills.sh/wshobson/agents/bats-testing-patterns
+
+[^os-scripting]: https://github.com/sickn33/agentic-awesome-skills/blob/main/skills/os-scripting/SKILL.md
