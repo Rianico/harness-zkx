@@ -348,6 +348,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Code Refactoring
 
+* **ai-engineering:** standardize skill provenance on Obsidian footnotes — reserve YAML `metadata` strictly for operational orchestration flags (`manage`, `managed-by`, `depends-on`), document body footnotes `[^id]: <url>` in `skill-authoring.md` §2.6, update `validate-deps.py` to emit deprecation warnings on `metadata.credits` and `meta.sources`, and migrate `setup-lsz-skills`, `bash-expert`, and `typescript-expert` to point-of-use footnotes (#362)
 * **scaffold:** retire the `adr-scaffolding` subskill — ADR path lifecycle (`adr init`, template sync, fail-loudly guard) belongs to the `adr` skill, so the Dispatch table loses the `adr` flavor row and the subskill directory is deleted; no code or template changes (#339)
 
 * **protocol:** extract subagent response format to common rule and ai-engineering spine (#153)

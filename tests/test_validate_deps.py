@@ -568,86 +568,96 @@ def test_callers_reports_no_dependents(tmp_path: Path) -> None:
     assert "(None)" in result.stdout
 
 
-def _credited_frontmatter(credits_body: str) -> str:
-    return (
-        "name: credited\ndescription: >-\n  A credited skill.\n"
-        f"metadata:\n  credits:\n{credits_body}"
-    )
+def _provenance_frontmatter(block: str) -> str:
+    return "name: credited\ndescription: >-\n  A credited skill.\n" + block
 
 
-def test_lint_passes_single_mapping_credits(tmp_path: Path) -> None:
-    """metadata.credits as one mapping with source+author passes lint."""
+def test_lint_warns_on_deprecated_metadata_credits(tmp_path: Path) -> None:
+    """metadata.credits is deprecated: lint warns and points at body footnotes."""
     write_raw_skill(
         tmp_path,
         "credited",
-        _credited_frontmatter(
-            "    source: https://github.com/example/upstream\n"
-            "    author: example\n"
-            "    version: main\n"
-            "    note: Adapted from upstream-setup\n"
+        _provenance_frontmatter(
+            "metadata:\n  credits:\n    source: https://github.com/example/upstream\n"
         ),
     )
 
     result = run_validate_deps("--project-root", str(tmp_path), "lint")
 
     assert result.returncode == 0, result.stdout
-    assert "Lint passed" in result.stdout
+    assert "LINT WARN:" in result.stdout
+    assert "metadata.credits is deprecated" in result.stdout
+    assert "[^id]: <url>" in result.stdout
 
 
-def test_lint_passes_credits_list(tmp_path: Path) -> None:
-    """metadata.credits as a list of mappings, each with source or author, passes lint."""
+def test_lint_warns_on_deprecated_meta_sources(tmp_path: Path) -> None:
+    """meta.sources is deprecated: lint warns and points at body footnotes."""
     write_raw_skill(
         tmp_path,
         "credited",
-        _credited_frontmatter(
-            "    - source: https://github.com/example/one\n"
-            "      author: one\n"
-            "    - author: two\n"
-            "      note: blog post\n"
-        ),
+        _provenance_frontmatter("meta:\n  sources:\n    - https://github.com/example/one\n"),
+    )
+
+    result = run_validate_deps("--project-root", str(tmp_path), "lint")
+
+    assert result.returncode == 0, result.stdout
+    assert "LINT WARN:" in result.stdout
+    assert "meta.sources is deprecated" in result.stdout
+
+
+def test_lint_flags_missing_body_footnote(tmp_path: Path) -> None:
+    """A deprecated provenance key with no body footnote is called out."""
+    write_raw_skill(
+        tmp_path,
+        "credited",
+        _provenance_frontmatter("metadata:\n  credits:\n    author: example\n"),
+    )
+
+    result = run_validate_deps("--project-root", str(tmp_path), "lint")
+
+    assert result.returncode == 0, result.stdout
+    assert "metadata.credits is deprecated (no body footnote found)" in result.stdout
+
+
+def test_lint_accepts_obsidian_provenance_footnotes(tmp_path: Path) -> None:
+    """Provenance as an Obsidian footnote in the body is the supported form."""
+    skill_dir = tmp_path / "skills" / "credited"
+    skill_dir.mkdir(parents=True)
+    _ = (skill_dir / "SKILL.md").write_text(
+        "---\n"
+        "name: credited\n"
+        "description: >-\n"
+        "  A credited skill.\n"
+        "---\n"
+        "\n"
+        "# credited\n"
+        "\n"
+        "Adapted from upstream.[^upstream]\n"
+        "\n"
+        "[^upstream]: https://github.com/example/upstream\n",
+        encoding="utf-8",
     )
 
     result = run_validate_deps("--project-root", str(tmp_path), "lint")
 
     assert result.returncode == 0, result.stdout
     assert "Lint passed" in result.stdout
+    assert "LINT WARN" not in result.stdout
 
 
-def test_lint_fails_credits_as_string(tmp_path: Path) -> None:
-    """metadata.credits must be a mapping or list of mappings, not a bare string."""
-    write_raw_skill(tmp_path, "credited", _credited_frontmatter("    just-a-string\n"))
-
-    result = run_validate_deps("--project-root", str(tmp_path), "lint")
-
-    assert result.returncode == 1
-    assert "LINT FAIL:" in result.stdout
-    assert "must be a mapping or a list of mappings" in result.stdout
-
-
-def test_lint_fails_credit_missing_source_and_author(tmp_path: Path) -> None:
-    """A credit entry without source and without author fails lint."""
-    write_raw_skill(tmp_path, "credited", _credited_frontmatter("    version: '1.0'\n"))
-
-    result = run_validate_deps("--project-root", str(tmp_path), "lint")
-
-    assert result.returncode == 1
-    assert "LINT FAIL:" in result.stdout
-    assert "needs a non-empty 'source' or 'author'" in result.stdout
-
-
-def test_lint_fails_credit_unknown_key(tmp_path: Path) -> None:
-    """A credit entry with an unrecognized key fails lint."""
+def test_lint_stops_validating_credit_shape(tmp_path: Path) -> None:
+    """Deprecated credit shapes are not validated; only the warning fires."""
     write_raw_skill(
         tmp_path,
         "credited",
-        _credited_frontmatter("    source: https://example.com\n    repo: bad\n"),
+        _provenance_frontmatter("metadata:\n  credits: just-a-string\n"),
     )
 
     result = run_validate_deps("--project-root", str(tmp_path), "lint")
 
-    assert result.returncode == 1
-    assert "LINT FAIL:" in result.stdout
-    assert "unrecognized keys: repo" in result.stdout
+    assert result.returncode == 0, result.stdout
+    assert "must be a mapping or a list of mappings" not in result.stdout
+    assert "metadata.credits is deprecated" in result.stdout
 
 
 def write_package_file(root: Path, relative: str, body: str) -> None:

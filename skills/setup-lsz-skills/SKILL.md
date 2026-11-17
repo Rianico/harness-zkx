@@ -3,17 +3,11 @@ name: setup-lsz-skills
 description: >-
   Repo config scaffolder for engineering skills: issue tracker, triage labels, GLOSSARY.md, CLI tools, .lsz runtime. Use when initializing a repo or migrating CONTEXT.md.
 disable-model-invocation: true
-metadata:
-  credits:
-    source: https://github.com/mattpocock/skills/blob/main/skills/engineering/setup-matt-pocock-skills/SKILL.md
-    author: mattpocock
-    version: main
-    note: Adapted from setup-matt-pocock-skills
 ---
 
 # Setup LSZ Skills
 
-Scaffold a repo for the engineering skills. One deterministic script drives every
+Scaffold a repo for the engineering skills[^setup-matt-pocock]. One deterministic script drives every
 step. `CONTEXT.md` is deprecated; `GLOSSARY.md` is canonical.
 
 Run from this harness repo root (its uv env carries the script's deps) and point
@@ -125,3 +119,9 @@ Rendering writes `domain.md`, `toolchain.md`, `issue-tracker.md`, and
 Templates live in `skills/setup-lsz-skills/templates/` and render with the Jinja
 3.1 environment `trim_blocks=True, lstrip_blocks=True, keep_trailing_newline=True,
 undefined=StrictUndefined`. Edit a template, not the rendered output.
+
+---
+
+## Footnote References
+
+[^setup-matt-pocock]: https://github.com/mattpocock/skills/blob/main/skills/engineering/setup-matt-pocock-skills/SKILL.md

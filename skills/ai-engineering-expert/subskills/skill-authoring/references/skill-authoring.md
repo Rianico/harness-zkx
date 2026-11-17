@@ -257,21 +257,39 @@ description: >-
 | `description` | Required | string | Tripartite routing text. ≤300 chars. Use `>-`. |
 | `compatibility` | Optional | string | Environment requirements. Max 500 chars. |
 | `allowed-tools` | Optional | string or list | Pre-approved tools, such as `Bash(git:*) Read Write`. |
-| `metadata` | Optional | mapping | Structural declarations. See below. |
+| `metadata` | Optional | mapping | Operational orchestration flags only. See §2.6. |
 
 #### 2.6 Metadata Conventions
+
+YAML `metadata` is strictly an operational orchestration block. It carries execution flags only.
 
 ```yaml
 metadata:
   manage: [git, python, rust]           # Parent skill: managed subskill names
   managed-by: scaffold                  # Subskill: parent skill name
   depends-on: [eval-gate, code-review]  # Hard dependencies required for execution
-  credits:                              # Upstream provenance for ported skills
-    source: https://github.com/org/repo/blob/main/skills/upstream/SKILL.md
-    author: upstream-author
-    version: main
-    note: Adapted for LSZ harness
 ```
+
+Allowed keys are `manage`, `managed-by`, and `depends-on`. Nothing else belongs here.
+
+Provenance never lives in `metadata`. Attribution, upstream repositories, authors, and versions go in the markdown body as Obsidian footnotes:
+
+```markdown
+# Upstream Setup
+
+Adapted from the upstream setup skill.[^upstream]
+
+[^upstream]: https://github.com/org/repo/blob/main/skills/upstream/SKILL.md — upstream-author, `main`.
+```
+
+Provenance rules:
+
+- Mark the adapted passage inline with the footnote reference, such as `[^upstream]`.
+- Define each footnote once at the end of the body: `[^id]: <url>`.
+- Use a lowercase footnote id and match the inline marker exactly.
+- Record author and upstream version in the footnote text, never in frontmatter.
+
+`metadata.credits` and `meta.sources` are deprecated. `lint` prints `LINT WARN` for either key and names the replacement. Body footnotes are the sole supported provenance source.
 
 `depends-on` rules:
 
