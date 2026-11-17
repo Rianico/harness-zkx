@@ -157,7 +157,7 @@ def wt_binary(env: Mapping[str, str]) -> str | None:
 
 def wt_env(env: Mapping[str, str]) -> dict[str, str]:
     """Environment for `wt`: CI=1 suppresses the interactive pager."""
-    return {**env, "CI": "1"}
+    return {**env, "CI": "1", "PAGER": "cat"}
 
 
 def require_branch(branch: str) -> str:
@@ -310,7 +310,7 @@ def fallback_path(branch: str, env: Mapping[str, str]) -> Path:
 
 def allocate_with_wt(wt: str, branch: str, base: str | None, env: Mapping[str, str]) -> Allocation:
     """Create the branch and worktree through `wt switch --create`, then read its path back."""
-    argv = [wt, "switch", "--create", branch]
+    argv = [wt, "switch", "--create", "--yes", branch]
     if base:
         argv += ["--base", base]
     done = run(argv, wt_env(env))

@@ -167,6 +167,7 @@ def test_allocate_with_wt_reads_path_back(
     assert switch_call[0][1:] == [
         "switch",
         "--create",
+        "--yes",
         "feat/184",
         "--base",
         "1111111111111111111111111111111111111111",
@@ -199,7 +200,7 @@ def test_allocate_with_wt_passes_base_and_emits_json(
         "status": "allocated",
     }
     (switch_call,) = [call for call in calls if call[0][1] == "switch"]
-    assert switch_call[0][1:] == ["switch", "--create", "feat/184", "--base", "main"]
+    assert switch_call[0][1:] == ["switch", "--create", "--yes", "feat/184", "--base", "main"]
 
 
 def test_allocate_with_wt_recovers_existing_branch(
@@ -501,7 +502,14 @@ def test_allocate_without_base_targets_caller_head(
     assert captured.out.strip() == "/wt-feat-228"
     assert CALLER_HEAD_SHA in captured.err
     (switch_call,) = [call for call in calls if call[0][1] == "switch"]
-    assert switch_call[0][1:] == ["switch", "--create", "feat/228", "--base", CALLER_HEAD_SHA]
+    assert switch_call[0][1:] == [
+        "switch",
+        "--create",
+        "--yes",
+        "feat/228",
+        "--base",
+        CALLER_HEAD_SHA,
+    ]
 
 
 def test_allocate_reports_resolved_base_sha(
@@ -526,7 +534,7 @@ def test_allocate_reports_resolved_base_sha(
     calls = patch_runner(monkeypatch, handler)
     assert hw.main(["allocate", "feat/228", "--base", "main"], env) == herdr_cli.EXIT_OK
     (switch_call,) = [call for call in calls if call[0][1] == "switch"]
-    assert switch_call[0][1:] == ["switch", "--create", "feat/228", "--base", "main"]
+    assert switch_call[0][1:] == ["switch", "--create", "--yes", "feat/228", "--base", "main"]
     assert EXPLICIT_BASE_SHA in capsys.readouterr().err
 
 

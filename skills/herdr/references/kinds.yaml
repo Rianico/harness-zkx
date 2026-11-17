@@ -34,8 +34,10 @@
 #   Set: agy (herdr-agy-bridge).
 # Kinds absent here fall back to `file`, no trust flags, and
 # revision_moves true (forward-compatible, never blocked).
+# `--exclude-tools=subagents_enable` keeps pi's `subagent` tool eager from the first turn
+# (pi-subagents toolActivation). One token: kinds.yaml trust flags must start with '-'.
 pi:
-  trust_flags: ["--approve"]
+  trust_flags: ["--approve", "--exclude-tools=subagents_enable"]
   invariant: inline
   invariant_flag: --append-system-prompt
 claude:

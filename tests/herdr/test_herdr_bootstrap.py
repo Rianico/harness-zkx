@@ -54,8 +54,8 @@ def invariant_file(tmp_path: Path, agent: str) -> Path:
 
 
 def test_snippet_stays_within_the_word_budget() -> None:
-    """The implementer ceiling is deliberate: the cooperation contract raised it from 45."""
-    assert len(herdr_bootstrap.render_invariant("Implementer").split()) <= 80
+    """The implementer ceiling is deliberate: the subagent mandate raised it from 80 to 90."""
+    assert len(herdr_bootstrap.render_invariant("Implementer").split()) <= 90
 
 
 def test_coordination_snippet_stays_within_the_55_word_budget() -> None:
@@ -83,6 +83,14 @@ def test_tm_named_roles_carry_the_task_manager_contract() -> None:
         assert "audit callee diffs" in text, role
 
 
+def test_tm_contract_rejects_replies_without_subagent_evidence() -> None:
+    """The TM holds the callee to its delegation duty: a bare self-report is not evidence."""
+    assert (
+        "reject implementer replies that lack evidence of subagent delegation"
+        in herdr_bootstrap.render_invariant("tm")
+    )
+
+
 def test_orch_named_roles_carry_the_orchestrator_contract() -> None:
     """Bare and scoped Orchestrator vocabulary appends the Orchestrator contract."""
     for role in (
@@ -108,7 +116,7 @@ def test_tm_contract_is_appended_verbatim_and_within_its_budget() -> None:
         + herdr_bootstrap.INVARIANT_RULES.format(helper=herdr_bootstrap.REPLY_HELPER)
     )
     assert len(text.split()) == len(base.split()) + len(herdr_bootstrap.TM_CONTRACT.split())
-    assert len(text.split()) <= 110
+    assert len(text.split()) <= 120
 
 
 def test_orch_contract_is_appended_verbatim_and_within_its_budget() -> None:
@@ -164,19 +172,19 @@ def test_coordination_names_omit_the_implementer_block() -> None:
     assert herdr_bootstrap.is_implementer_role("impl-hardening-tm") is True
 
 
-def test_a_scoped_implementer_reviewer_still_fits_the_80_word_cap() -> None:
+def test_a_scoped_implementer_reviewer_still_fits_the_90_word_cap() -> None:
     """The widest newly matching role must stay inside the implementer ceiling."""
     text = herdr_bootstrap.render_invariant("msg-impl-reviewer")
     assert "single writer for your task" in text
-    assert len(text.split()) <= 80
+    assert len(text.split()) <= 90
 
 
 def test_implementer_contract_does_not_restate_the_reply_contract() -> None:
     """The shared Reply Contract already owes the reply; the block must not repeat it."""
     text = herdr_bootstrap.render_invariant("impl-1")
-    assert "Blockers: report immediately, never idle." in text
+    assert "blockers: report immediately, never idle." in text
     assert "reply via the reply contract" not in text
-    assert len(text.split()) <= 80
+    assert len(text.split()) <= 90
 
 
 def test_snippet_names_the_role() -> None:
@@ -253,6 +261,9 @@ def test_implementer_injected_text_carries_the_cooperation_contract(
         "red-then-green test results",
         "artifacts reported by path",
         "report immediately, never idle",
+        "MUST delegate exploration (Scout)",
+        "NEVER message the Orchestrator",
+        "host pane verifies gates, commits",
     ):
         assert clause in text
     assert "reply via the reply contract" not in text
@@ -333,7 +344,12 @@ def test_cli_kind_delivers_the_snippet_through_a_lane_file(
     start = starts(stub)[0]
     after = start[start.index("--") + 1 :]
     path = flag_value(after, "--append-system-prompt")
-    assert after == ["--append-system-prompt", path, "--approve"]
+    assert after == [
+        "--append-system-prompt",
+        path,
+        "--approve",
+        "--exclude-tools=subagents_enable",
+    ]
     assert not (tmp_path / "AGENTS.md").exists()
     assert f"role-invariant={path}" in done.stdout
     assert pane_runs(stub) == []
@@ -510,7 +526,12 @@ def test_dry_run_cli_kind_prints_the_invariant_file_path(stub: StubHarness, tmp_
     assert plan["role_invariant"] == str(invariant_file(tmp_path, "tm"))
     start = plan["agent_start"]
     after = start[start.index("--") + 1 :]
-    assert after == ["--append-system-prompt", plan["role_invariant"], "--approve"]
+    assert after == [
+        "--append-system-prompt",
+        plan["role_invariant"],
+        "--approve",
+        "--exclude-tools=subagents_enable",
+    ]
     assert plan["cwd_ensure"] == str(tmp_path)
     assert stub.calls() == []
     assert not invariant_file(tmp_path, "tm").exists()
@@ -724,6 +745,7 @@ def test_inline_kind_puts_the_invariant_path_and_model_after_the_separator(
         "--model",
         model,
         "--approve",
+        "--exclude-tools=subagents_enable",
     ]
     assert stub.calls() == []
 
@@ -890,7 +912,9 @@ def test_kinds_config_loads_the_verified_kinds() -> None:
     config = SCRIPTS_DIR.parent / "references" / "kinds.yaml"
     table = herdr_bootstrap.parse_kinds_config(config.read_text())
 
-    assert table["pi"] == herdr_bootstrap.KindEntry(("--approve",), True, "--append-system-prompt")
+    assert table["pi"] == herdr_bootstrap.KindEntry(
+        ("--approve", "--exclude-tools=subagents_enable"), True, "--append-system-prompt"
+    )
     assert table["claude"] == herdr_bootstrap.KindEntry(
         ("--dangerously-skip-permissions",), True, "--append-system-prompt-file"
     )

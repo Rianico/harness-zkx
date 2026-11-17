@@ -1525,7 +1525,7 @@ def test_dispatch_auto_start_bootstraps_missing_agent_with_trust_flags(
     assert "--append-system-prompt" not in start[:split]
     assert "--model" not in start[:split]
     assert "--append-system-prompt" in start[split + 1 :]
-    assert start[-1] == "--approve"
+    assert start[-1] == "--exclude-tools=subagents_enable"
     (prompt,) = stub.prompts()
     assert prompt[3] == "callee"
 

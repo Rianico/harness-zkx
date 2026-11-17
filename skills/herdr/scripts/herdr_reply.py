@@ -99,6 +99,9 @@ import herdr_lease
 from herdr_bootstrap import (
     DEFAULT_SETTLE_SECONDS,
     append_invariant,
+    is_implementer_role,
+    is_orch_role,
+    is_tm_role,
     lane_invariant_path,
     load_kind_entry,
     pane_cwd,
@@ -240,6 +243,7 @@ class Options:
     ticket: str | None = None
     in_reply_to_record: str | None = None
     allow_unresolvable_sha: list[str] | None = None
+    force: bool = False
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -332,6 +336,14 @@ def build_parser() -> argparse.ArgumentParser:
             "waive the outbound-SHA guard for one backticked 7-40 hex token that deliberately "
             "names no commit in this lane (repeatable); every waiver is reported on stderr, so "
             "it is never a silent bypass"
+        ),
+    )
+    _ = parser.add_argument(
+        "--force",
+        action="store_true",
+        help=(
+            "bypass the implementer-to-orchestrator reply guard; the override is deliberate, "
+            "because lane coordination requires Impl → TM → Orch"
         ),
     )
     return parser
@@ -608,6 +620,30 @@ def validate_target_not_kind(target: str, herdr: str, env: Mapping[str, str]) ->
         raise UsageError(
             f"target {target!r} is an agent kind, not an addressable agent name{hint}. "
             + "Pass the agent name (or pane id) instead"
+        )
+
+
+def check_implementer_reply(caller_role: str, target_role: str) -> None:
+    """Refuse a direct implementer-to-orchestrator reply without TM mediation (#360).
+
+    The symmetric guard to `herdr_dispatch.check_orchestrator_dispatch`: lane coordination is
+    Orch → TM → Impl on the way down and Impl → TM → Orch on the way up, so an implementer that
+    answers the orchestrator directly leaks a lane. The caller can waive it with `--force`.
+
+    `--dry-run` previews of an Impl→Orch reply are also refused; pass `--force` to preview (the
+    deliberate asymmetry with the dispatch mirror, which skips its guard under `--dry-run`).
+    """
+    if not caller_role or not target_role:
+        return
+    # A TM in an `impl`-prefixed lane (`impl-hardening-tm` → `impl-hardening-orch`) is a lawful
+    # TM→Orch upward reply; `is_implementer_role` over-matches the lane slug.
+    if is_tm_role(caller_role):
+        return
+    if is_implementer_role(caller_role) and is_orch_role(target_role):
+        raise UsageError(
+            f"implementer '{caller_role}' cannot reply directly to orchestrator '{target_role}'; "
+            "lane coordination requires Impl → TM → Orch. Reply to your Task Manager instead, "
+            "or pass --force to override"
         )
 
 
@@ -1280,6 +1316,15 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
     panes, agents = fetch_inventory(herdr, env)
     caller_ctx = resolve_caller(herdr, env, inventory=(panes, agents))
     receiver = resolve_receiver(panes, agents, target)
+    # Lane isolation (#360), checked before any record is written or prompt is sent: an
+    # implementer answers its Task Manager, never the orchestrator. `--force` is the operator's
+    # deliberate override, mirroring `herdr_dispatch.check_orchestrator_dispatch`.
+    if not options.force:
+        caller_role = caller_ctx.agent or caller_ctx.label or ""
+        target_role = (
+            (receiver.agent or receiver.label or target) if receiver is not None else target
+        )
+        check_implementer_reply(caller_role, target_role)
     # ADR-0020 active reconciliation (#182 t2), anchored on the physical ids this snapshot
     # already resolved: `caller_ctx.pane_id` names the orchestrator pane, `caller_ctx.tab_id`
     # names the lane's tab, and each worker is keyed by its own `pane_id`. Task-group source:

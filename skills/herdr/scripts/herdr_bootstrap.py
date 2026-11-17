@@ -339,11 +339,15 @@ INVARIANT_RULES = (
 )
 # Role-conditional: a coordination-only role does not pay for the implementer block. The shared
 # Reply Contract above already owes the reply, so this block adds only what is implementer-only.
+# The subagent mandate replaced the old `await TM review` line, so the render stays inside 90
+# tokens: the header and the two standing rules already take 44 of them.
 IMPLEMENTER_CONTRACT = (
     "Implementer: single writer for your task; never edit outside your worktree.\n"
-    "Coordination: reply to TM via `herdr-reply`; await TM review before completion.\n"
-    "Evidence: red-then-green test results, artifacts reported by path.\n"
-    "Blockers: report immediately, never idle."
+    "Subagents: MUST delegate exploration (Scout), edits (Editor); host pane verifies gates, "
+    "commits.\n"
+    "Reply strictly to TM via `herdr-reply`; NEVER message the Orchestrator.\n"
+    "Evidence: red-then-green test results, artifacts reported by path; blockers: report "
+    "immediately, never idle."
 )
 # Role-conditional mirror of the implementer block: a TM that drifted into editing source or
 # test code after compaction gets its authority boundary restated in its own invariant.
@@ -355,7 +359,8 @@ TM_CONTRACT = (
     "Review Loop: run verification gates in pane; audit callee diffs with review subagents "
     "before accepting (`impl -> code review -> impl`).\n"
     "Synthesize: track lane progress; synthesize results and report completion to caller via "
-    "`herdr-reply`."
+    "`herdr-reply`.\n"
+    "Verify Callee: reject implementer replies that lack evidence of subagent delegation."
 )
 # Role-conditional: Root Orchestrator owns problem definition, topology, and brief authoring.
 # It delegates in-lane decomposition, dispatch, gating, and code review to the Task Manager.
