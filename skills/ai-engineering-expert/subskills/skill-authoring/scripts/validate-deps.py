@@ -487,41 +487,30 @@ def _detect_scalar(fm_text: str, field: str) -> str:
     return m.group(1) if m else "inline"
 
 
-CREDIT_KEYS = frozenset({"source", "author", "version", "note"})
-"""Allowed keys per `metadata.credits` entry."""
+PROVENANCE_FOOTNOTE_RE = re.compile(r"^\[\^[^\]]+\]:\s*\S", re.MULTILINE)
+"""Obsidian footnote definition that carries provenance in the markdown body."""
+
+DEPRECATED_PROVENANCE_FIELDS: tuple[tuple[str, str], ...] = (
+    ("metadata", "credits"),
+    ("meta", "sources"),
+)
+"""Frontmatter provenance keys replaced by body footnotes (Obsidian `[^id]: <url>`)."""
 
 
-def _lint_credit_entry(entry: object, where: str) -> list[str]:
-    if not isinstance(entry, dict):
-        return [f"{where} must be a mapping, got {type(entry).__name__}"]
-
-    problems: list[str] = []
-    unknown = sorted(str(k) for k in entry if k not in CREDIT_KEYS)
-    if unknown:
-        problems.append(f"{where} has unrecognized keys: {', '.join(unknown)}")
-    if not any(str(entry.get(k) or "").strip() for k in ("source", "author")):
-        problems.append(f"{where} needs a non-empty 'source' or 'author'")
-    for key, value in entry.items():
-        if key in CREDIT_KEYS and not isinstance(value, str):
-            problems.append(f"{where} key '{key}' must be a string")
-    return problems
-
-
-def _check_metadata_credits(fm: dict[str, object]) -> list[str]:
-    """Validate `metadata.credits` when present: a mapping or list of mappings."""
-    metadata = fm.get("metadata")
-    if not isinstance(metadata, dict) or "credits" not in metadata:
-        return []
-
-    credits = metadata["credits"]
-    if isinstance(credits, dict):
-        return _lint_credit_entry(credits, "metadata.credits")
-    if isinstance(credits, list):
-        problems: list[str] = []
-        for idx, entry in enumerate(credits):
-            problems.extend(_lint_credit_entry(entry, f"metadata.credits[{idx}]"))
-        return problems
-    return ["metadata.credits must be a mapping or a list of mappings"]
+def _check_deprecated_provenance(fm: dict[str, object], content: str) -> list[str]:
+    """Warn on frontmatter provenance keys; provenance belongs in body footnotes."""
+    has_footnote = PROVENANCE_FOOTNOTE_RE.search(content) is not None
+    hint = "" if has_footnote else " (no body footnote found)"
+    warnings: list[str] = []
+    for parent, key in DEPRECATED_PROVENANCE_FIELDS:
+        block = fm.get(parent)
+        if not isinstance(block, dict) or key not in block:
+            continue
+        warnings.append(
+            f"{parent}.{key} is deprecated{hint} — move provenance to an Obsidian"
+            " footnote in the body: `[^id]: <url>`"
+        )
+    return warnings
 
 
 def _check_duplicate_skill_names(root_dir: Path) -> bool:
@@ -612,10 +601,9 @@ def lint_skills(root_dir: Path, skill_map: dict[str, Path]) -> bool:
                     )
                     found_issues = True
 
-            # Structural check: metadata.credits when present
-            for problem in _check_metadata_credits(fm):
-                print(f"LINT FAIL: {location.relative_to(root_dir)} - {problem}")
-                found_issues = True
+            # Deprecation check: provenance belongs in body footnotes, not frontmatter
+            for warning in _check_deprecated_provenance(fm, content):
+                print(f"LINT WARN: {location.relative_to(root_dir)} - {warning}")
 
             # Check per-field block scalar rules
             match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
