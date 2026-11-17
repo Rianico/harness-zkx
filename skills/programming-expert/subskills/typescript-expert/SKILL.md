@@ -2,12 +2,6 @@
 name: typescript-expert
 description: >-
   TypeScript guide for advanced types, testing, and monorepo tooling. Use when writing complex types, decoding compiler errors, or tightening type safety.
-meta:
-  sources:
-    - https://www.skills.sh/github/awesome-copilot/javascript-typescript-jest
-    - https://www.skills.sh/wshobson/agents/typescript-advanced-types
-    - https://www.skills.sh/lobehub/lobehub/typescript
-    - https://www.skills.sh/sickn33/agentic-awesome-skills/typescript-expert
 metadata:
   managed-by: programming-expert
 ---
@@ -41,7 +35,7 @@ Four domains in one workflow: advanced type system, Jest testing, style conventi
 
 2. **Classify the task** — type design, Jest testing, style fix, tooling/migration, or diagnostics — then apply the matching guidance below. Keep SKILL.md **tight** (20% solves 80%). Load deep detail behind pointers only when the branch needs it.
 
-## Type system mastery
+## Type system mastery[^typescript-advanced-types][^agentic-typescript-expert]
 
 Load advanced types only when implementing complex type logic.
 
@@ -63,7 +57,7 @@ Load advanced types only when implementing complex type logic.
 > [!note] Writing rule
 > Use `unknown` over `any`. Prefer `interface` for object shapes and `type` for unions. Leverage inference, create helper types, and document complex types with JSDoc. See [cheatsheet — Best Practices](references/cheatsheet.md) and [style-guide — Types and Type Safety](references/style-guide.md).
 
-## Jest testing
+## Jest testing[^awesome-copilot-jest]
 
 Use when writing or fixing JavaScript/TypeScript tests.
 
@@ -73,7 +67,7 @@ Use when writing or fixing JavaScript/TypeScript tests.
 - **Snapshots & React:** small focused snapshots. Use React Testing Library + `userEvent` over `fireEvent`. Query by role/label — see [jest-testing — Snapshot Testing and React](references/jest-testing.md)
 - **Matchers:** `toBe`/`toEqual`, `toBeTruthy`, `toMatch`, `toHaveLength`, `toHaveProperty`, `toThrow`, `toHaveBeenCalledWith` — see [jest-testing — Common Jest Matchers](references/jest-testing.md)
 
-## Style and safety (LobeHub conventions)
+## Style and safety (LobeHub conventions)[^lobehub-typescript]
 
 Enforce when editing `*.ts`/`*.tsx`/`*.mts`.
 
@@ -83,7 +77,7 @@ Enforce when editing `*.ts`/`*.tsx`/`*.mts`.
 - **Structure:** destructuring, named exports over `default` (except framework-required), reuse `packages/utils` helpers (`isRecord`, `isPlainRecord`, etc.) — see [style-guide — Code Structure](references/style-guide.md)
 - **Logging:** never log secrets. Use `console.error` in catch. Never silence with `.catch(() => fallback)` — see [style-guide — Logging](references/style-guide.md)
 
-## Tooling, monorepo, and performance
+## Tooling, monorepo, and performance[^agentic-typescript-expert]
 
 - **Strict tsconfig** — enable `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `exactOptionalPropertyTypes`. Copy [tsconfig-strict.json](references/tsconfig-strict.json). Rationale: [cheatsheet — TSConfig Essentials](references/cheatsheet.md)
 - **Module** — `ESNext`, `bundler` resolution, `esModuleInterop`, `target ES2022` — see [cheatsheet — TSConfig Essentials](references/cheatsheet.md)
@@ -138,3 +132,15 @@ Deep content behind pointers (one level from SKILL.md):
 - [Style Guide](references/style-guide.md) — LobeHub type safety, async-first, imports, structure, logging
 - [Tooling & Monorepo](references/tooling.md) — Biome/ESLint, Turborepo/Nx, migration, ESM, debugging, performance
 - Diagnostic script: `uv run $SKILL_DIR/scripts/ts_diagnostic.py`
+
+---
+
+## Footnote References
+
+[^awesome-copilot-jest]: https://www.skills.sh/github/awesome-copilot/javascript-typescript-jest
+
+[^typescript-advanced-types]: https://www.skills.sh/wshobson/agents/typescript-advanced-types
+
+[^lobehub-typescript]: https://www.skills.sh/lobehub/lobehub/typescript
+
+[^agentic-typescript-expert]: https://www.skills.sh/sickn33/agentic-awesome-skills/typescript-expert
