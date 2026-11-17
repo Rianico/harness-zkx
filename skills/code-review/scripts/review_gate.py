@@ -11,38 +11,86 @@ import argparse
 import json
 import re
 import sys
-from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from pydantic import BaseModel, Field
 
-@dataclass
-class Finding:
-    severity: str  # BLOCKING | HIGH | MEDIUM | LOW
-    invariant: str  # VDD-Refutability | EDD-Intent | Clean-Architecture
+
+class Finding(BaseModel):
+    severity: str  # BLOCKING | HIGH | MEDIUM | LOW | INFO
+    invariant: (
+        str  # Spec-Intent | VDD-Refutability | Clean-Architecture | Security-Hardening | EDD-Intent
+    )
     location: str  # file:line
     defect: str
     remediation: str
 
 
-@dataclass
-class ReviewVerdict:
+class ReviewVerdict(BaseModel):
     score: int  # 1-10
     route: str  # continue | remediate | blocked
     status: str  # PASS | FAIL
-    findings: list[Finding]
-    sot_in_sync: bool
+    findings: list[Finding] = Field(default_factory=list)
+    sot_in_sync: bool = True
     sot_details: str = ""
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "score": self.score,
-            "route": self.route,
-            "status": self.status,
-            "sot_in_sync": self.sot_in_sync,
-            "sot_details": self.sot_details,
-            "findings": [asdict(f) for f in self.findings],
-        }
+        return self.model_dump()
+
+
+INVARIANT_PRECEDENCE: dict[str, int] = {
+    "spec-intent": 1,
+    "intent": 1,
+    "edd-intent": 1,
+    "security-hardening": 2,
+    "security": 2,
+    "clean-architecture": 3,
+    "structural-seams": 3,
+    "structural": 3,
+    "vdd-refutability": 4,
+    "code-quality": 4,
+    "quality": 4,
+    "standards": 4,
+}
+
+SEVERITY_PRECEDENCE: dict[str, int] = {
+    "BLOCKING": 1,
+    "HIGH": 2,
+    "MEDIUM": 3,
+    "LOW": 4,
+    "INFO": 5,
+}
+
+
+def _invariant_rank(invariant: str) -> int:
+    return INVARIANT_PRECEDENCE.get(invariant.lower().strip(), 99)
+
+
+def _severity_rank(severity: str) -> int:
+    return SEVERITY_PRECEDENCE.get(severity.upper().strip(), 99)
+
+
+def deduplicate_findings(findings: list[Finding]) -> list[Finding]:
+    """Deduplicate findings on (location, invariant) keeping higher severity.
+
+    Tie-break precedence: Intent > Security > Structural > Standards.
+    Returns findings sorted by severity (highest first), then invariant precedence.
+    """
+    seen: dict[tuple[str, str], Finding] = {}
+    for f in findings:
+        key = (f.location.strip(), f.invariant.strip())
+        if key not in seen:
+            seen[key] = f
+        else:
+            existing = seen[key]
+            if _severity_rank(f.severity) < _severity_rank(existing.severity):
+                seen[key] = f
+
+    return sorted(
+        seen.values(),
+        key=lambda x: (_severity_rank(x.severity), _invariant_rank(x.invariant), x.location),
+    )
 
 
 def compute_route(
@@ -602,8 +650,7 @@ def scan_diff_for_red_flags(diff_text: str) -> list[Finding]:
     return findings
 
 
-@dataclass
-class GoalGateResult:
+class GoalGateResult(BaseModel):
     goal_attained: bool
     route: str  # continue | remediate | blocked
     floor_status: str  # pass | fail
@@ -611,10 +658,10 @@ class GoalGateResult:
     blocking_count: int
     high_count: int
     sot_in_sync: bool
-    remediation_issues: list[str]
+    remediation_issues: list[str] = Field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        return self.model_dump()
 
 
 def evaluate_goal_gate(
@@ -705,9 +752,11 @@ def main() -> int:
     )
     _ = scan_parser.add_argument("--json", action="store_true", help="Output findings in JSON")
 
-    # check-verdict command
+    # validate-verdict (and check-verdict) command
     verdict_parser = subparsers.add_parser(
-        "check-verdict", help="Compute route from score and issues"
+        "validate-verdict",
+        aliases=["check-verdict"],
+        help="Compute route from score and issues",
     )
     _ = verdict_parser.add_argument("--score", type=int, required=True, help="Review score (1-10)")
     _ = verdict_parser.add_argument("--findings-json", type=str, help="Path to findings JSON file")
@@ -741,7 +790,7 @@ def main() -> int:
 
         findings = scan_diff_for_red_flags(diff_text)
         if args.json:
-            print(json.dumps([asdict(f) for f in findings], indent=2))
+            print(json.dumps([f.model_dump() for f in findings], indent=2))
         else:
             if not findings:
                 print("PASS: No deterministic red flags detected.")
@@ -752,7 +801,7 @@ def main() -> int:
 
         return 0
 
-    if args.command == "check-verdict":
+    if args.command in ("validate-verdict", "check-verdict"):
         findings = []
         if args.findings_json:
             raw = json.loads(Path(args.findings_json).read_text(encoding="utf-8"))
