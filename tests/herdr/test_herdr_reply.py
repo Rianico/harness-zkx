@@ -1363,6 +1363,107 @@ def test_refuses_qoderclicn_target_that_is_an_agent_kind(stub: StubHarness) -> N
     assert stub.prompts() == []
 
 
+def _implementer_and_orchestrator_state() -> dict[str, Any]:
+    """A lane where the current pane is the implementer and the target is its orchestrator."""
+    return {
+        **DEFAULT_STATE,
+        "current": "w9:p1",
+        "agents": [
+            {"pane_id": "w9:p1", "name": "lane-impl-1", "agent": "pi", "agent_status": "working"},
+            {"pane_id": "w9:p2", "name": "lane-orch", "agent": "pi", "agent_status": "working"},
+        ],
+        "panes": [
+            {
+                "pane_id": "w9:p1",
+                "tab_id": "w9:t1",
+                "workspace_id": "w9",
+                "agent": "pi",
+                "agent_status": "working",
+                "cwd": "/tmp/impl",
+                "label": "impl-1",
+            },
+            {
+                "pane_id": "w9:p2",
+                "tab_id": "w9:t1",
+                "workspace_id": "w9",
+                "agent": "pi",
+                "agent_status": "working",
+                "cwd": "/tmp/orch",
+                "label": "orch",
+            },
+        ],
+    }
+
+
+def test_check_implementer_reply_refuses_impl_to_orch() -> None:
+    with pytest.raises(herdr_cli.UsageError) as excinfo:
+        herdr_reply.check_implementer_reply("lane-impl-1", "lane-orch")
+
+    message = str(excinfo.value)
+    assert "implementer 'lane-impl-1' cannot reply directly to orchestrator 'lane-orch'" in message
+    assert "lane coordination requires Impl → TM → Orch" in message
+
+
+@pytest.mark.parametrize(
+    ("caller", "target"),
+    [
+        ("lane-impl-1", "lane-tm"),
+        ("lane-tm", "lane-orch"),
+        ("lane-tm", "lane-impl-1"),
+        ("impl-hardening-tm", "impl-hardening-orch"),  # documented impl-prefixed lane TM→Orch
+        ("impl-hardening-tm", "impl-hardening-impl"),
+    ],
+)
+def test_check_implementer_reply_allows_every_lane_path(caller: str, target: str) -> None:
+    herdr_reply.check_implementer_reply(caller, target)
+
+
+def test_check_implementer_reply_allows_a_tm_in_an_impl_prefixed_lane() -> None:
+    assert herdr_reply.check_implementer_reply("impl-hardening-tm", "impl-hardening-orch") is None
+
+
+def test_reply_refuses_implementer_to_orchestrator(stub: StubHarness) -> None:
+    done = stub.run(
+        "lane-orch", "COMPLETED artifacts=[] issues=[]", state=_implementer_and_orchestrator_state()
+    )
+
+    assert done.returncode == herdr_cli.EXIT_USAGE, done.stderr
+    assert (
+        "implementer 'lane-impl-1' cannot reply directly to orchestrator 'lane-orch'" in done.stderr
+    )
+    assert "Reply to your Task Manager instead" in done.stderr
+    assert stub.prompts() == []
+
+
+def test_reply_allows_implementer_to_orchestrator_with_force(stub: StubHarness) -> None:
+    done = stub.run(
+        "lane-orch",
+        "COMPLETED artifacts=[] issues=[]",
+        "--force",
+        state=_implementer_and_orchestrator_state(),
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert len(stub.prompts()) == 1
+
+
+def test_reply_allows_implementer_to_task_manager(stub: StubHarness) -> None:
+    state = _implementer_and_orchestrator_state()
+    state["agents"] = [
+        {"pane_id": "w9:p1", "name": "lane-impl-1", "agent": "pi", "agent_status": "working"},
+        {"pane_id": "w9:p2", "name": "lane-tm", "agent": "pi", "agent_status": "working"},
+    ]
+    state["panes"] = [
+        state["panes"][0],
+        {**state["panes"][1], "label": "tm", "cwd": "/tmp/tm"},
+    ]
+
+    done = stub.run("lane-tm", "COMPLETED artifacts=[] issues=[]", state=state)
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert len(stub.prompts()) == 1
+
+
 def test_delivery_reports_revision_increment(stub: StubHarness) -> None:
     state = {
         **DEFAULT_STATE,
@@ -1505,6 +1606,7 @@ def test_auto_start_starts_agent_on_shell_pane_and_delivers_reply(stub: StubHarn
             "--append-system-prompt",
             str(invariant),
             "--approve",
+            "--exclude-tools=subagents_enable",
         ]
     ]
     assert invariant.read_text() == herdr_bootstrap.render_invariant("lens-orchestrator")
@@ -1648,7 +1750,12 @@ def test_auto_start_revive_injects_the_invariant_file_for_an_inline_kind(
     (start,) = stub.starts()
     after = start[start.index("--") + 1 :]
     path = after[after.index("--append-system-prompt") + 1]
-    assert after == ["--append-system-prompt", path, "--approve"]
+    assert after == [
+        "--append-system-prompt",
+        path,
+        "--approve",
+        "--exclude-tools=subagents_enable",
+    ]
     invariant = Path(path)
     assert invariant == (lane / ".lane" / "invariants" / "lens-orchestrator.md").resolve()
     assert invariant.read_text() == herdr_bootstrap.render_invariant("lens-orchestrator")
@@ -2143,6 +2250,7 @@ def test_reply_auto_start_revives_and_delivers_with_recovery(
             "--append-system-prompt",
             str(invariant),
             "--approve",
+            "--exclude-tools=subagents_enable",
         ]
     ]
     assert invariant.read_text() == herdr_bootstrap.render_invariant("lens-orchestrator")

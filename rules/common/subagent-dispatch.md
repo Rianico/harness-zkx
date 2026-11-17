@@ -12,7 +12,7 @@ Evaluate every task against these gates before execution. Keep implementation wo
 
 ## Keep In-Band When
 
-- **Trivial work:** The task touches under 100 lines or runs single commands.
+- **Trivial work:** Standalone single-agent sessions may keep work touching under 100 lines, or single commands, in-band. In a multi-agent Herdr lane this exception does not apply: the Implementer host pane is strictly a synthesis and verification coordinator and MUST delegate drafting and file editing to subagents.
 - **User alignment:** Probing intent stays with you. Subagents never interrogate the user.
 - **Shared mutable state:** Concurrent edits without clean seams break invariants.
 - **Depth limit:** You are already inside a subagent. Depth stays at 1.
