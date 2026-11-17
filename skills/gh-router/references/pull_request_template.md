@@ -15,6 +15,9 @@
 <!-- The squash gate strips Mermaid from the derived squash message but keeps fenced
      pseudocode, call trees, and shaped diffs, so one compact visual beats a wall of prose. -->
 
+### Things Intentionally Not Touched
+
+<!-- Name the adjacent areas this PR deliberately leaves alone, so reviewers stop asking. -->
 ## Root Cause
 
 <!-- FIX-ONLY: one line naming why the bug happened, not what changed. Delete this whole

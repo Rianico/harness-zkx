@@ -1,0 +1,7 @@
+# Authority: ADR-0016 / git-convention
+# Scope: everything-claude-code
+# Owner: Mr Bean
+# Review Trigger: semantic-release upgrade
+
+path: commitlint.config.js
+reason: PR bodies become squash-merge commit bodies; body-max-line-length is disabled to keep tables/links readable.

@@ -120,6 +120,45 @@ def _render_cases() -> dict[str, str]:
             "python/tests/test_smoke.py.j2", module="demo"
         ),
         "typescript/.github/workflows/ci.yml": scaffold.build_ts_ci_workflow(),
+        "shared/scripts/check.sh (project_name=demo, variant=node)": scaffold.render_template(
+            "shared/scripts/check.sh.j2",
+            project_name="demo",
+            variant="node",
+            with_coverage=False,
+            threshold=80,
+        ),
+        "shared/scripts/check.sh (project_name=demo, variant=python)": scaffold.render_template(
+            "shared/scripts/check.sh.j2",
+            project_name="demo",
+            variant="python",
+            with_coverage=False,
+            threshold=80,
+        ),
+        "shared/scripts/check.sh (project_name=demo, variant=python+coverage)": scaffold.render_template(
+            "shared/scripts/check.sh.j2",
+            project_name="demo",
+            variant="python",
+            with_coverage=True,
+            threshold=80,
+        ),
+        "shared/scripts/check.sh (project_name=demo, variant=rust)": scaffold.render_template(
+            "shared/scripts/check.sh.j2",
+            project_name="demo",
+            variant="rust",
+            with_coverage=False,
+            threshold=80,
+        ),
+        "shared/scripts/check.sh (project_name=demo, variant=rust+coverage)": scaffold.render_template(
+            "shared/scripts/check.sh.j2",
+            project_name="demo",
+            variant="rust",
+            with_coverage=True,
+            threshold=80,
+        ),
+        "ci/ci.yml (variant=node)": scaffold.build_ci_workflow("node"),
+        "ci/ci.yml (variant=python)": scaffold.build_ci_workflow("python"),
+        "ci/ci.yml (variant=rust)": scaffold.build_ci_workflow("rust"),
+        "ci/rollback.yml": scaffold.build_rollback_workflow(),
     }
     for variant in scaffold.CI_RUNTIMES:
         for coverage in (False, True):
@@ -136,6 +175,7 @@ RAW_SHA256: dict[str, str] = {
     "git/.github/ISSUE_TEMPLATE/02-feature_request.yml": "087a54cf8324469c1a1e06f7776419c5dad072781bb76245e42037fc0440c3ac",
     "git/.github/ISSUE_TEMPLATE/config.yml": "27539305684d7673d88e80ec149c4ec9714da05a054b09fee67d56b8a7e5a820",
     "git/.github/workflows/changelog-check.yml": "363363f0d98f39bcce74fe0dd14bff6ba206b2d2a341a1a4aaeb739a791bb441",
+    "git/.gitmessage": "45781b29c415a4bae1e49436410f5bb49d1f7562caea5dce1897a2da9579d262",
     "git/.releaserc.json": "d0f2d1efed519451867179ca8af3d8bae1001955b1601936108d20b9696dfa54",
     "git/CHANGELOG.md": "4f54bff5b026e07b59863211308e82335c0691389775863eb9611c5a884840f4",
     "git/commitlint.config.js": "9c46dd6e2258b8783f57255cbcdd09fd13c0283069b281568806ba147df85340",
@@ -166,6 +206,15 @@ RENDERED_SHA256: dict[str, str] = {
     "typescript/src/index.ts (project_name=demo)": "dd66d9df929a39c2e17a8b6609c030e03b6d247d7dee0b22649654633708410f",
     "typescript/vitest.config.ts (threshold=75)": "a175e6b0d7402032010f980086249c89968a5b393575f084126fd1645911b586",
     "typescript/.github/workflows/ci.yml": "498264f544e58d6c82870588a644930e553267c85851d1fdbe8aeeac076a1d58",
+    "shared/scripts/check.sh (project_name=demo, variant=node)": "9b7f78f1a0ca0d56b9912960c5424afad172cf222bc6de22c4865b0aa415631a",
+    "shared/scripts/check.sh (project_name=demo, variant=python)": "181760a6616d84afeea34d4410ceaeba0a3d2eeaf86657c05839de620491426e",
+    "shared/scripts/check.sh (project_name=demo, variant=python+coverage)": "5aab9564b203da998b200cbf54d2b7134093ad0339482c1d75c44c7562236f60",
+    "shared/scripts/check.sh (project_name=demo, variant=rust)": "8564a8c76f3006ce0352d308201ec028b499aec67e17dac3231d3b84fb685683",
+    "shared/scripts/check.sh (project_name=demo, variant=rust+coverage)": "c6915316944941c34cd7af3e7f181ad5fd540b0634d6a7b2a6022e15d2ed107f",
+    "ci/ci.yml (variant=node)": "a8b82908a544ac6248911f60d1ccfb4d38706c2dec610857a2b81a43ae44e1d8",
+    "ci/ci.yml (variant=python)": "d642800d1b0502cdf05b2de18f27f7685c841ca2eb00a796f715d19faa9e9404",
+    "ci/ci.yml (variant=rust)": "b933d9a93ed667ff5adc647671cab986dc741091d315cf9d0166ce0eba17c41c",
+    "ci/rollback.yml": "7faa73357545019e46ef1a77a49da1461af2884a6470f2d6c16cbe3d309aeb2b",
 }
 
 
@@ -270,7 +319,8 @@ def test_rendered_output_has_no_template_leftovers():
     for label, out in _render_cases().items():
         assert "{%" not in out, f"{label} shipped a Jinja tag"
         # the legitimate `{{` bytes are the Actions expressions the context supplies
-        stripped = out.replace(scaffold.GH_ACTIONS_TOKEN, "").replace(scaffold.GH_PR_REF, "")
+        # (`${{ ... }}`); strip every one, so a new expression needs no test edit.
+        stripped = re.sub(r"\$\{\{.*?\}\}", "", out)
         assert "{{" not in stripped and "}}" not in stripped, (
             f"{label} shipped an unrendered variable"
         )
