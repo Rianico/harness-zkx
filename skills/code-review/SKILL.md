@@ -1,135 +1,183 @@
 ---
 name: code-review
 description: >-
-  Adversarial code review gate for semantic soundness, invariants, and architecture boundaries. Judges test refutability, not just passing tests. Use when reviewing diffs or PRs; not for style, lint, or test runs.
+  Multi-agent adversarial code review gate. Evaluates intent alignment, code quality, structural boundaries, and security hardening via parallel subagents. Use when reviewing diffs, commits, or PRs before merge. Do not use for styling or linting.
 arguments: target
 argument-hint: |-
   [target] [--diff-file <path>] [--spec <path>] [--eval-report <path>]
 ---
 
-# Code Review (Crux & Intent Gate)
+# Code Review Gate
 
-Code Review is an atomic **Semantic & Structural Verification Gate**. It verifies that a code change is **sound in state, resilient in failure, faithful to intent, and compliant with Clean Architecture**, evaluating semantic soundness beyond green test suites.
+Code Review is an atomic semantic and structural verification gate.
+It evaluates pull requests, commits, and diffs beyond test passes.
+The gate verifies state soundness, failure resiliency, intent alignment, and clean architectural boundaries.
 
-Operates under **Keel** (load-bearing judgment and boundary seams) and **Coding-Protocol** (read-only evidence state, zero mutation, risk-scaled).
+The gate operates under `keel`[^keel] Judgment mode and `coding-protocol`[^coding-protocol] Evidence state.
 
 ---
 
-## The 3 First-Principles Crux Invariants
+## The Line Count Invariant
 
-A code change $\Delta S$ transitions system state space $S \rightarrow S'$. The reviewer audits three irreducible invariants:
+Line count is never an independent defect metric.
+A 200-line cohesive module with a deep interface is superior to ten shallow classes.
+Reviewers focus on clear boundary seams, encapsulation, and low cognitive coupling.
+Functions over 60 lines or files over 400 lines trigger structural triage, not automatic rejection.
+
+---
+
+## Multi-Agent Architecture (Option A)
+
+The orchestrator coordinates three parallel, isolated subagents:
 
 ```mermaid
 flowchart TD
-    Reviewer["Skeptic Reviewer Subagent"]
-    Reviewer --> I1["1. Epistemic Truth (Refutability)"]
-    Reviewer --> I2["2. Ontological Truth (State Safety)"]
-    Reviewer --> I3["3. Structural Topology (Clean Boundaries)"]
+    Orch["Code Review Orchestrator"] --> S1["1. Spec & Intent Alignment"]
+    Orch --> S2["2. Quality & Structural Boundaries"]
+    Orch --> S3["3. Security & Hardening"]
+    S1 --> Synth["Synthesis, Deduplication & Routing"]
+    S2 --> Synth
+    S3 --> Synth
 ```
 
-### 1. Epistemic Truth (VDD / Refutability)
-- **Refutability Criterion**: Every test must be capable of failing when the behavior is broken. A test that passes regardless of implementation provides 0 bits of information.
-- **Target HEAD Authority**: Audit findings must be verified against the review target's committed HEAD or pinned diff digest, never a stale checkout or truncated diff snippet (see [lane-coordination.md](../herdr/references/lane-coordination.md)). An authoritative green compiler or typecheck (`tsc`, `basedpyright`) refutes broken-reference claims within its program coverage; record the command and verify that modified files were included in the program.
-- **Red Flag (Paper Tigers)**: Reject tests that mock the unit under test (SUT), assert tautologies (`assert True`), or only assert `mock.called` without asserting return state or side-effect outcomes.
-- **Negative Path Invariant**: Critical execution paths must assert refusal and error modes (timeouts, bad payloads, malformed inputs), not only the happy path.
+### 1. Spec & Intent Alignment (`spec-intent`)[^mattpocock]
 
-### 2. Ontological Truth (EDD / State Safety & Anti-Laziness)
-- **Anti-Laziness Criterion**: The implementation must solve the generalized problem, not just hardcode outputs to satisfy test fixtures.
-- **Red Flag (Shortcuts & Swallows)**: Reject hardcoded return values tailored to sample inputs, empty `catch`/`except` blocks, stubbed dummy branches, or unhandled `TODO` markers.
-- **State Invariant**: Domain models must make invalid states unrepresentable. Primitive obsession without validation invariants is rejected.
-- **Concurrency Invariant**: Any concurrency change must state empirical measurement (when claiming perf gains or removing bounds), per-task bounds/timeouts, and failure direction. Prove the failure direction points to the domain's safe side (fail-closed with caps for auth, quotas, rate limits; fail-open only when no-op fallback is explicitly safe).
-- **Ratchet & Baseline Invariant**: Edits touching suppression baselines or pinned counts must re-pin in the same change with a non-increasing count and updated identities, never widened. Shrinking counts are encouraged.
-- **Contract & Spec Fidelity**: Diff must satisfy concrete commitments from the product/tech spec (required behaviors, stated constraints, required validation/migration/compatibility steps).
-- **Scope Creep Guard**: Reject significant unrequested architectural scope, speculative scaffolding, or out-of-scope refactorings not mandated by the spec or task.
-- **Material Mismatch Criterion**: Flag spec drift only when material (missing required behavior, contradiction of spec decision, absent required validation/migration, or unplanned scope bloat).
+- **Role**: Primary review axis. Validates implementation fidelity against user intent.
+- **SOT Hierarchy**: Pinned technical spec > Issue tracker criteria > Commit messages.
+- **Degraded Mode**: When no specification exists, infers provisional intent from tests. Emits `[HIGH] intent-unverifiable` and caps route at `remediate`.
+- **Audits**: Missing requirements, material spec drift, unrequested behavior, and scope creep.
 
-### 3. Structural Topology (Clean Architecture & Boundary Seams)
-- **The Dependency Rule**: Source code dependencies point inward toward domain entities. Core business logic MUST NOT import delivery mechanisms (CLI, HTTP, ORM, frameworks, database drivers).
-- **Single Responsibility (SRP)**: Each module has one reason to change. Business logic, serialization/wire format, and transport must remain separated.
-- **Encapsulation & Seams**: Cross subsystem boundaries exclusively through explicit interfaces or DTOs. Never expose raw internal database entities or mutable state across boundaries.
-- **Design Alignment**: File paths, schemas, interfaces, or CLI flags changed in implementation must match `design.md`.
+### 2. Code Quality & Structural Boundaries (`quality-boundaries`)[^addy-quality][^addy-simplify][^keel][^programming-expert]
+
+- **Role**: Combines implementation quality, test refutability, and structural seam governance.
+- **Intra-File Quality (VDD)**: Rejects paper tiger mocks, tautological assertions, and silent exception swallows.
+- **Inter-Module Seams**: Enforces Clean Architecture inward dependencies and Ousterhout's Deep Design. Preserves exact behavior.
+- **Size Triage Trigger**: Audits large functions (>60 lines) or files (>400 lines) for state leaks and mixed responsibilities.
+
+### 3. Security & Hardening (`security-hardening`)[^addy-security]
+
+- **Role**: Threat modeling and vulnerability defense.
+- **STRIDE Analysis**: Audits spoofing, tampering, repudiation, information disclosure, denial of service, and privilege escalation.
+- **Defenses**: Verifies boundary input validation, injection resistance, secret protection, LLM output guards, and fail-closed concurrency.
 
 ---
 
-## Operating Protocol (Keel & Coding-Protocol)
+## Operating Protocol
 
-1. **Evidence State Only (Coding-Protocol §1-3)**:
-   - Reviewer holds **judgment authority** only, never **mutation authority**.
-   - Reviewer is strictly forbidden from editing files, fixing bugs, or rewriting code.
-2. **Scale by Risk (Coding-Protocol §1)**:
-   - **Zero Nitpicks**: Skip all formatting, whitespace, syntax, or styling issues handled by linters.
-   - **Pragmatism Boundary**: Do not fail code over harmless implementation-level variations (e.g., naming, internal helper layout, low-level structure) if behavioral contracts, invariants, and refutable tests hold.
-   - Surface only **`[BLOCKING]`** (contract breach, fake mock, security hole, unhandled failure, material spec contradiction) and **`[HIGH]`** (architectural leak, design drift, state corruption risk, unplanned scope creep) issues.
+1. **Evidence State Only (`coding-protocol`[^coding-protocol])**:
+   - Reviewers hold judgment authority only, never mutation authority.
+   - Reviewers never edit files, fix bugs, or rewrite code.
+2. **Scale by Risk**:
+   - Skip formatting, whitespace, syntax, and style issues covered by linters.
+   - Surface only actionable `[BLOCKING]`, `[HIGH]`, and significant `[INFO]` defects.
 3. **Subagent-First Isolation**:
-   - Run in a fresh subagent context with only diff, spec, and verification logs.
-   - Do NOT inherit the author's conversational rationalizations (eliminates anchoring bias).
+   - Subagents execute concurrently in fresh, isolated contexts.
+   - Subagents evaluate objective artifacts without author rationalizations.
 
 ---
 
-## Review Process
+## Three-Phase Review Workflow
 
-### Step 1: Ingest Evidence
-Retrieve:
-- `diff`: `git diff <base>...HEAD` or list of modified files.
-- `spec`: BDD scenarios, issue description, or `design.md` (optional).
-- `eval_evidence`: Test runner, typecheck, or linter outputs (optional).
+### Phase 1: Ingest Evidence & Pre-Package Bundle
 
-Run deterministic pre-scan via `uv run skills/code-review/scripts/review_gate.py scan-diff --diff-file <path>` to flag empty exception handlers, skipped tests, and illegal boundary imports.
+1. Generate the review bundle with `$SKILL_DIR/scripts/review_package.py`[^superpowers]:
+   ```bash
+   uv run $SKILL_DIR/scripts/review_package.py [base] [head] --spec <path>
+   ```
+   This creates a consolidated bundle with commit log, diffstat, extended context diff (`-U10`), and specification.
+2. Run deterministic pre-scan with `$SKILL_DIR/scripts/review_gate.py`:
+   ```bash
+   uv run $SKILL_DIR/scripts/review_gate.py scan-diff --diff-file <path>
+   ```
+   Flags empty exception handlers, skipped tests, and illegal boundary imports.
 
-### Step 2: Adversarial Crux Audit
-Evaluate diff strictly against the 3 Invariants:
-- Did the author write real tests, or paper tigers?
-- Did the author implement genuine logic, or lazy shortcuts?
-- Does the code violate inward dependency direction or leak abstraction seams?
-- Has `design.md` drifted from implementation?
+### Phase 2: Dispatch 3 Parallel Subagents
 
-### Step 3: Score & Gate Classification
-Score the submission on a 1–10 scale:
-- **1-4 (Failing/Blocked)**: Broken contract, fake mock pass, empty error swallow, or core architectural inversion.
-- **5-7 (Remediate)**: Working happy path, but paper tiger tests, missing failure paths, boundary leaks, or SOT drift.
-- **8-10 (Passing)**: Robust, refutable tests, clean dependencies, domain invariants protected, SOT in sync.
+Dispatch the three subagents concurrently with the review bundle:
 
-**Routing Rules**:
-- `Route: continue` $\rightarrow$ Score $\ge 8$, zero `BLOCKING` issues, SOT in sync.
-- `Route: remediate` $\rightarrow$ Score $< 8$, or any `BLOCKING`/`HIGH` issues, or SOT drift.
-- `Route: blocked` $\rightarrow$ Fundamental architectural flaw or irrecoverable specification mismatch.
+- Subagent 1 (`spec-intent`): Audits intent alignment and scope containment.
+- Subagent 2 (`quality-boundaries`): Audits test refutability, code clarity, and structural seams.
+- Subagent 3 (`security-hardening`): Audits threat vectors and boundary defenses.
+
+### Phase 3: Synthesize, Deduplicate, and Route
+
+1. Present subagent reports side-by-side under dedicated headings.
+2. Deduplicate overlapping findings targeting identical `file:line` locations using `$SKILL_DIR/scripts/review_gate.py`.
+3. Apply tie-break precedence when trade-offs conflict:
+   `Intent > Security > Structural > Standards`.
+4. Compute the workflow route:
+   - `continue`: Quality score $\ge 8$, zero `BLOCKING` or `HIGH` issues, intent verified, SOT in sync.
+   - `remediate`: Quality score $< 8$, any `BLOCKING` or `HIGH` defect, or material intent drift.
+   - `blocked`: Critical architectural failure or irrecoverable specification contradiction.
 
 ---
 
 ## Mandatory Response Contract
 
-Format output per `skills/ai-engineering-expert/subskills/subagent-engineering/references/inter-agent-message-contract.md`:
+Format outputs per the standard inter-agent response contract:
 
 ```markdown
 ## Summary
-<Carmack-style technical evaluation: core invariants verified, architectural fitness, failure mode resiliency, observed tradeoffs>
 
-## Artifacts
-- <path/to/review_report.md (or inline report)>
+<Concise technical assessment of intent alignment, structural seams, and security posture>
 
 ## Route
+
 continue | remediate | blocked
-Issues:
-- [BLOCKING|HIGH] <brief issue title, ≤10 words>
+
+## Issues
+
+- [BLOCKING|HIGH|INFO] <file>:<line> (<invariant>): <concise defect title>
+
+## Subagent Reports
+
+### Spec & Intent Alignment
+
+- Status: Aligned | Degraded | Drifting
+- Findings: <actionable items or confirmation>
+
+### Quality & Structural Boundaries
+
+- Status: Clean | Needs Simplification | Seam Leak
+- Findings: <actionable items or confirmation>
+
+### Security & Hardening
+
+- Status: Secure | Vulnerable
+- Findings: <actionable items or confirmation>
 
 ## Gate Verdict
-Score: <1-10>/10 (Quality Gate: 8)
+
+Score: <1-10>/10 (Threshold: 8)
 Status: PASS | FAIL
-
-## Crux Invariant Violations
-- [BLOCKING|HIGH] <file>:<line>
-  - Invariant: [VDD-Refutability | EDD-Intent | Clean-Architecture]
-  - Defect: <precise description of what breaks>
-  - Impact: <how state corrupts, why test is a paper tiger, or how boundary leaks>
-  - Remediation: <concrete actionable fix>
-
-## SOT Sync (Design Alignment)
-Status: In Sync | Drift Detected
-Details: <amendments required for design.md, if any>
+SOT Sync: In Sync | Drift Detected (<details>)
 ```
 
 ---
 
 ## References & Tools
-- [Crux Rubric & Heuristics](references/crux-rubric.md): Concrete examples of paper tigers, anti-laziness patterns, and Clean Architecture checks.
-- Script: `skills/code-review/scripts/review_gate.py` for deterministic diff scanning and verdict validation.
+
+- [Design Contract](references/design-contract.md): Full contract governing subagents, SOT hierarchy, and tie-breaks.
+- [Crux Rubric](references/crux-rubric.md): Concrete examples of paper tigers, anti-laziness patterns, and seam leaks.
+- Review Package Generator: `$SKILL_DIR/scripts/review_package.py` creates consolidated diff and spec bundles.
+- Deterministic Review Gate: `$SKILL_DIR/scripts/review_gate.py` runs AST scans and validates verdicts.
+
+---
+
+## Footnote References
+
+[^mattpocock]: https://github.com/mattpocock/skills/blob/main/skills/engineering/code-review/SKILL.md
+
+[^addy-quality]: https://github.com/addyosmani/agent-skills/tree/main/skills/code-review-and-quality
+
+[^addy-simplify]: https://github.com/addyosmani/agent-skills/tree/main/skills/code-simplification
+
+[^addy-security]: https://github.com/addyosmani/agent-skills/tree/main/skills/security-and-hardening
+
+[^superpowers]: https://github.com/obra/superpowers/tree/main/skills/subagent-driven-development/scripts/review-package
+
+[^keel]: skills/keel/SKILL.md
+
+[^coding-protocol]: skills/coding-protocol/SKILL.md
+
+[^programming-expert]: skills/programming-expert/SKILL.md

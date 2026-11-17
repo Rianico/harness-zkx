@@ -16,9 +16,13 @@ from review_gate import (
     Finding,
     ReviewVerdict,
     compute_route,
+    deduplicate_findings,
     evaluate_goal_gate,
     format_remediation_markdown,
     scan_diff_for_red_flags,
+)
+from review_gate import (
+    main as gate_main,
 )
 
 
@@ -695,3 +699,90 @@ def test_evaluate_goal_gate_fail_semantic():
     assert res.goal_attained is False
     assert res.route == "remediate"
     assert any("Mock on SUT" in iss for iss in res.remediation_issues)
+
+
+def test_deduplicate_findings_same_location_keeps_higher_severity():
+    """Duplicate findings at the same location and invariant keep higher severity."""
+    f1 = Finding(
+        severity="HIGH",
+        invariant="Spec-Intent",
+        location="src/auth.py:45",
+        defect="Missing role check",
+        remediation="Check user role",
+    )
+    f2 = Finding(
+        severity="BLOCKING",
+        invariant="Spec-Intent",
+        location="src/auth.py:45",
+        defect="Bypassed role check entirely",
+        remediation="Enforce mandatory role check",
+    )
+    deduped = deduplicate_findings([f1, f2])
+    assert len(deduped) == 1
+    assert deduped[0].severity == "BLOCKING"
+    assert deduped[0].defect == "Bypassed role check entirely"
+
+
+def test_deduplicate_findings_tie_break_precedence_sort():
+    """Findings are sorted by severity, then tie-break precedence: Intent > Security > Structural > Standards."""
+    f_standards = Finding(
+        severity="HIGH",
+        invariant="Standards",
+        location="src/b.py:10",
+        defect="Suboptimal idiom",
+        remediation="Use match statement",
+    )
+    f_security = Finding(
+        severity="HIGH",
+        invariant="Security-Hardening",
+        location="src/c.py:20",
+        defect="Unsanitized SQL input",
+        remediation="Use parameterized query",
+    )
+    f_intent = Finding(
+        severity="HIGH",
+        invariant="Spec-Intent",
+        location="src/a.py:5",
+        defect="Spec requirement omitted",
+        remediation="Implement missing spec requirement",
+    )
+    f_structural = Finding(
+        severity="HIGH",
+        invariant="Clean-Architecture",
+        location="src/d.py:30",
+        defect="Domain imports ORM",
+        remediation="Invert dependency",
+    )
+    deduped = deduplicate_findings([f_standards, f_structural, f_security, f_intent])
+    assert len(deduped) == 4
+    # All are HIGH severity, so ordered by invariant precedence: Intent (1) > Security (2) > Structural (3) > Standards (4)
+    assert deduped[0].invariant == "Spec-Intent"
+    assert deduped[1].invariant == "Security-Hardening"
+    assert deduped[2].invariant == "Clean-Architecture"
+    assert deduped[3].invariant == "Standards"
+
+
+def test_validate_verdict_cli(monkeypatch, capsys, tmp_path: Path):
+    """CLI validate-verdict calculates route and prints JSON verdict."""
+    findings_file = tmp_path / "findings.json"
+    _ = findings_file.write_text(
+        '[{"severity": "INFO", "invariant": "Code-Quality", "location": "a.py:1", "defect": "ok", "remediation": "none"}]',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "review_gate.py",
+            "validate-verdict",
+            "--score",
+            "9",
+            "--findings-json",
+            str(findings_file),
+        ],
+    )
+    exit_code = gate_main()
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert '"route": "continue"' in captured.out
+    assert '"status": "PASS"' in captured.out
