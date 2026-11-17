@@ -401,6 +401,18 @@ def current_pane_id(herdr: str, env: Mapping[str, str]) -> str:
     return text_field(raw, "result", "pane", "pane_id")
 
 
+def current_workspace_id(herdr: str, env: Mapping[str, str]) -> str:
+    """Resolve the calling workspace: env first, then `herdr pane current --current`."""
+    env_ws = env.get("HERDR_WORKSPACE_ID")
+    if env_ws:
+        return env_ws
+    raw = run_herdr_checked([herdr, "pane", "current", "--current"], env)
+    try:
+        return text_field(raw, "result", "pane", "workspace_id")
+    except HerdrError:
+        return text_field(raw, "result", "pane", "pane_id").split(":", 1)[0]
+
+
 def fetch_inventory(
     herdr: str, env: Mapping[str, str]
 ) -> tuple[list[Mapping[str, object]], list[Mapping[str, object]]]:

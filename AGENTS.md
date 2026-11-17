@@ -51,6 +51,7 @@ This project implements the methodology in `skills/ai-engineering-expert/SKILL.m
   - When running under Herdr (`HERDR_ENV=1`), always use harness scripts in `skills/herdr/scripts/` (never raw CLI):
     - Dispatch: `uv run skills/herdr/scripts/herdr_dispatch.py <worker> --file <ticket>`
     - Reply: `uv run skills/herdr/scripts/herdr_reply.py <caller> "<STATUS> <artifacts> <issues>"`
+    - Workspace affinity: keep spawned panes/lanes in the calling workspace (`--workspace "$HERDR_WORKSPACE_ID"`).
 - **Issue Tracker & Triage**:
   - GitHub CLI (`gh`). Vocabulary: `docs/agents/triage-labels.md`. Guide: `docs/agents/issue-tracker.md`.
 - **Contribution & Changelog**:

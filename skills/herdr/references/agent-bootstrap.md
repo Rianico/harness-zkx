@@ -67,7 +67,7 @@ Follow this 6-step sequence when provisioning any coding agent in Herdr:
 
    `--cwd` must name a registered linked worktree. Bootstrap refuses a missing directory, a path that is not a registered linked worktree, and the main checkout once the repository already has linked worktrees (exit 2), naming the expected worktree and the actual pane cwd. `status` and `doctor` report namespace and layout drift; `retire` only removes clean trees and merged branches. Forbidden in every lane tree: `git switch -C`, `-B`, or `-f`, `git stash`, and `git worktree add --force`.
 1. **User Confirmation**: Confirm role ↔ agent kind ↔ provider ↔ model mapping with user.
-2. **Pane Allocation**: Split pane with `--no-focus`, `--label <role>`, and `--cwd "$WORKTREE_PATH"` (that role's worktree claimed in Step 0).
+2. **Pane Allocation**: Split pane with `--no-focus`, `--label <role>`, and `--cwd "$WORKTREE_PATH"` (that role's worktree claimed in Step 0). When creating a new tab with `herdr tab create`, always supply `--workspace "$HERDR_WORKSPACE_ID"` so newly provisioned tabs stay inside the caller's workspace.
    ```bash
    uv run "$SKILL_DIR/scripts/herdr_pane.py" right --label reviewer --cwd "$WORKTREE_PATH" --no-focus
    ```

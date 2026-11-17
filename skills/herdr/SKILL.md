@@ -105,7 +105,7 @@ A pane hosts an agent or runs a plain process. `agent start` requires an availab
 
 ## Use IDs and the calling pane
 
-Public IDs are opaque stable handles: workspace `w1`, tab `w1:t1`, pane `w1:p1`. Prefer `--current` when targeting the calling pane. Omitting the target defaults to the UI-focused pane, so always target explicitly.
+Public IDs are opaque stable handles: workspace `w1`, tab `w1:t1`, pane `w1:p1`. Prefer `--current` when targeting the calling pane. Omitting the target defaults to the UI-focused pane, so always target explicitly. Pass `--workspace "$HERDR_WORKSPACE_ID"` when creating tabs (`herdr tab create`) so newly spawned tabs remain in the calling workspace.
 
 ## Name a target, then hand off
 

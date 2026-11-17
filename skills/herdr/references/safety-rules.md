@@ -24,6 +24,10 @@ Create worktrees through the repository's worktree tool rather than `herdr workt
 - Gate 0 scans staged additions before every other gate. It refuses `ghp_`, `github_pat_`, `AKIA`, and private-key headers. Remove the secret, mark a reviewed false positive with a narrow `# SAFETY:` comment on that line, or list the file in `.secrets.allowlist`.
 - NEVER pass `--no-verify` to skip a hook or gate. Fix the failing check at its source. Also refused: `--no-gpg-sign`, `--force` pushes, and raw `git worktree add` or `git merge` where the repository provides a `wt` path.
 
+## Workspace Affinity
+
+Spawned tabs and panes must remain in the same Herdr workspace as the active session. When creating a tab via `herdr tab create`, always pass `--workspace "$HERDR_WORKSPACE_ID"`. Never omit `--workspace`, which defaults to the UI-focused workspace and scatters lane panes across unrelated workspaces.
+
 ## Consent-gated or irreversible actions
 
 > [!warning] Consent-gated or irreversible actions
