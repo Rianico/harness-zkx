@@ -27,13 +27,13 @@ Depth for `$SKILL_DIR/SKILL.md`. Architecture, role boundaries, and contract pro
   - Concurrency locks and task states: [2. Task Leases and Trajectories](#2-task-leases-and-trajectories).
   - Agent delegation state: [3. Token Observability and Delegation Detection](#3-token-observability-and-delegation-detection).
   - Subagent boundaries: [4. The Iron Curtain and Unified Message Format](#4-the-iron-curtain-and-unified-message-format).
-  - Branch merges: [5. Superset Task-Branch Integrations](#5-superset-task-branch-integrations).
+  - Branch merges: [5. Superset Task-Branch Integrations](#5-superset-task-branch-integrations) and [5b. Intent-Bounded Lane Land Pattern](#5b-intent-bounded-lane-land-pattern).
 
 ---
 
 ## Context and Delegation Architecture
 
-When a workflow requires high-level coordination and focused execution, the Root Orchestrator provisions an in-lane **Task Manager (TM)** alongside one or more **Implementers (Callees)** in dedicated panes within a shared workspace or tab.
+When a workflow requires high-level coordination and focused execution, the Root Orchestrator provisions the in-lane **Task Manager (TM)**. The TM provisions and manages the **Implementers (Callees)**, each in a dedicated pane within a shared workspace or tab.
 
 `herdr_prompt.py` and `herdr_dispatch.py` open every dispatch with the script-rendered A2A frontmatter envelope (`sender`/`receiver` addresses, correlation IDs, live `group` roster), close it with the Herdr skill notice, and end with the reply contract. The canonical sample lives in `$SKILL_DIR/SKILL.md` under **Know your post**.
 
@@ -62,7 +62,7 @@ When a workflow requires high-level coordination and focused execution, the Root
    - **Topology**: Root Orchestrator ↔ Task Manager ↔ Implementers across dedicated Herdr panes.
    - **Protocol**: Event-driven via `herdr_dispatch.py` and `herdr_reply.py` governed by Task Leases and Token Observability.
    - **Scope**: In-lane execution inside the role's provisioned worktree (`<repo>.<task-group>.<role>`): lane planning, ticket dispatch, verification gates, code review verdicts, status triad (`COMPLETED`, `BLOCKED`, `REJECTED`).
-   - **Rule**: Even single-ticket lanes go `Orch → TM → Impl`: the orchestrator provisions one worktree per role and the topology, but never dispatches callee tickets directly. Each writer owns exactly one worktree, and a branch is checked out in exactly one worktree. TM and Implementers run natively inside their assigned worktrees from turn zero. Reviewers evaluate a pinned SHA on a read-only tree.
+   - **Rule**: Even single-ticket lanes go `Orch → TM → Impl`. The Orchestrator provisions the TM pane and the TM's worktree. The TM provisions and manages each Implementer pane and worktree. The Orchestrator never learns an Implementer's pane id or identity, and never addresses an Implementer directly. Each writer owns exactly one worktree, and a branch is checked out in exactly one worktree. TM and Implementers run natively inside their assigned worktrees from turn zero. Reviewers evaluate a pinned SHA on a read-only tree.
    - **Lifecycle**: Branches follow `lane/<task-group>/<role>/<ticket>`. `herdr-worktree claim` moves a clean tree onto its branch from an explicit base and records it in `.lane/tasks.yaml`. Inspect [agent-bootstrap](agent-bootstrap.md) for the `--cwd` matrix. A tree still named `<repo>.<sanitized-branch>` instead of `<repo>.<task-group>.<role>` is reported as `layout`; `status` prints the migration command for it — `retire` the old tree, then `claim` the same branch into the canonical name — and `doctor` carries the same flag.
    - **Commit-addressed review**: Freeze review targets at a SHA. Inspect using `git diff <base>..<sha>` and `git show <sha>:<path>`. Never mutate the implementer's tree to reproduce a review.
 
@@ -161,7 +161,7 @@ The Root Orchestrator owns problem definition, global constraints, topology prov
 
 - **Explicit Allow List**:
   - Confirm role-to-agent mapping (role, agent kind, provider, model) before lane provisioning.
-  - Claim one isolated worktree per role with `uv run ${herdr_skill}/scripts/herdr_worktree.py claim <path> lane/<task-group>/<role>/<ticket> --base <ref>`, allocate panes and tabs, and launch each with `--cwd` set to that role's path.
+  - Claim the Task Manager's worktree with `uv run ${herdr_skill}/scripts/herdr_worktree.py claim <path> lane/<task-group>/<role>/<ticket> --base <ref>`, allocate the TM pane and tab, and launch it with `--cwd` set to the TM's path. The TM claims one worktree per Implementer and manages those panes.
   - Label every pane immediately with meaningful text matching its role.
   - Boot TM and Implementers with verified bootstrap flags.
   - Issue brief to TM specifying intent, constraints, acceptance criteria, verification contract, and sizing budget.
@@ -648,6 +648,7 @@ All coding agents delegate heavy, noisy tasks to platform-native subagents:
 
 ### 4. The Iron Curtain and Unified Message Format
 - **The Iron Curtain**: Role-internal subagents are strictly private tools for the host pane agent. Subagents **NEVER** invoke Herdr CLI commands or helper scripts (`herdr_reply.py`, `herdr_dispatch.py`, `herdr_overview.py`). Only the host agent interfaces with the lane.
+- **Asymmetric Reply Routing**: an Implementer reports strictly to its Task Manager via `herdr_reply.py`. An `Impl -> Orch` reply is mechanically refused with exit 2. Only the operator may waive that refusal with `--force` on `herdr_reply.py`. The upward path is therefore Impl -> TM -> Orch. A Task Manager in an `impl`-prefixed lane may still reply to the Orchestrator.
 - **Synthesized IDD/GDD Communication Invariant**: Every dispatch pairs teleological purpose (**IDD**: Problem, Proposed Outcome, Constraints) with verifiable targets (**GDD/EDD**: Check Command, Required Evidence).
 - **Dual-Mode Response Contract**: All replies follow the **Final Reply Template** aligned with `skills/ai-engineering-expert/subskills/subagent-engineering/references/inter-agent-message-contract.md`:
   - Status Triad: `COMPLETED <sha>` | `BLOCKED <reason>` | `REJECTED <reason>`
@@ -661,3 +662,23 @@ All coding agents delegate heavy, noisy tasks to platform-native subagents:
 ### 5. Superset Task-Branch Integrations
 
 The sanctioned merge path squashes a task branch into a single commit, so the landed history carries none of the cited per-unit SHAs. When the task branch is a strict descendant of the integration branch, integrate with `git merge --ff-only` instead: the fast-forward writes no new commit and every cited SHA stays on the landed history. Confirm the superset first with `git merge-base --is-ancestor`; a branch that is not a descendant stays on the squash path.
+
+### 5b. Intent-Bounded Lane Land Pattern
+
+A task branch lands into its feature branch `feat/<slug>` by squash (`wt merge --squash`), never directly into `dev` or `main`. The intent boundary, not a line cap, decides what the squash contains: an incidental bug introduced and fixed inside the task folds into that boundary.
+
+```text
+<type>(<scope>): <summary>
+
+### Why (Intent)
+
+### What (Invariants)
+
+### Things Intentionally Not Touched
+
+Closes #NN
+```
+
+Preserve every `Co-authored-by:` trailer from the task commits when squashing, on its own line.
+
+The feature branch lands to `dev` and `dev` to `main` by pull request, never by auto-merge.

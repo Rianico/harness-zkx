@@ -2796,6 +2796,75 @@ def test_group_members_scoped_to_the_lane_slug() -> None:
     assert members == ["pep758-tm@w9:p1", "pep758-impl@w9:p2"]
 
 
+def _orchestrated_lane() -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    panes = [
+        {"pane_id": "w9:p1", "workspace_id": "w9"},
+        {"pane_id": "w9:p2", "workspace_id": "w9"},
+        {"pane_id": "w9:p3", "workspace_id": "w9"},
+    ]
+    agents = [
+        {"pane_id": "w9:p1", "name": "pep758-tm"},
+        {"pane_id": "w9:p2", "name": "pep758-impl"},
+        {"pane_id": "w9:p3", "name": "pep758-orch"},
+    ]
+    return panes, agents
+
+
+def test_group_members_prune_orchestrator_from_an_implementer_envelope() -> None:
+    panes, agents = _orchestrated_lane()
+
+    members = herdr_prompt.resolve_group_members(
+        panes, agents, "w9:p1", ["pep758-impl"], lane_slug="pep758"
+    )
+
+    assert members == ["pep758-tm@w9:p1", "pep758-impl@w9:p2"]
+
+
+def test_group_members_prune_an_addressed_orchestrator_from_a_multi_target_implementer_envelope() -> (
+    None
+):
+    panes, agents = _orchestrated_lane()
+
+    members = herdr_prompt.resolve_group_members(
+        panes, agents, "w9:p1", ["pep758-impl", "pep758-orch"], lane_slug="pep758"
+    )
+
+    assert members == ["pep758-tm@w9:p1", "pep758-impl@w9:p2"]
+
+
+def test_group_members_keep_orchestrator_in_a_non_implementer_envelope() -> None:
+    panes, agents = _orchestrated_lane()
+
+    members = herdr_prompt.resolve_group_members(
+        panes, agents, "w9:p1", ["pep758-tm"], lane_slug="pep758"
+    )
+
+    assert members == [
+        "pep758-tm@w9:p1",
+        "pep758-impl@w9:p2",
+        "pep758-orch@w9:p3",
+    ]
+
+
+def test_group_members_pruning_keeps_a_caller_named_with_an_orch_segment() -> None:
+    panes = [
+        {"pane_id": "w9:p1", "workspace_id": "w9"},
+        {"pane_id": "w9:p2", "workspace_id": "w9"},
+        {"pane_id": "w9:p3", "workspace_id": "w9"},
+    ]
+    agents = [
+        {"pane_id": "w9:p1", "name": "pep758-tm-orch"},
+        {"pane_id": "w9:p2", "name": "pep758-impl"},
+        {"pane_id": "w9:p3", "name": "pep758-orch"},
+    ]
+
+    members = herdr_prompt.resolve_group_members(
+        panes, agents, "w9:p1", ["pep758-impl"], lane_slug="pep758"
+    )
+
+    assert members == ["pep758-tm-orch@w9:p1", "pep758-impl@w9:p2"]
+
+
 def test_group_members_keep_a_slugless_receiver_in_the_roster() -> None:
     panes = [
         {"pane_id": "w9:p1", "workspace_id": "w9"},

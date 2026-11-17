@@ -53,9 +53,9 @@ Please approve this configuration or provide desired overrides for agent kind, p
 
 Follow this 6-step sequence when provisioning any coding agent in Herdr:
 
-0. **Worktree Pre-provisioning**: For multi-agent lane coordination, claim one isolated worktree **per role** before any pane starts, so Task Manager, each Implementer, and the Reviewer run inside their own tree from turn zero. Never let a callee create or switch a worktree.
+0. **Worktree Pre-provisioning**: For multi-agent lane coordination, the Root Orchestrator claims the Task Manager's worktree. The Task Manager claims one worktree per Implementer, before that Implementer's pane starts. The Task Manager also claims the Reviewer's tree per the table. Every role then runs inside its own tree from turn zero. The Orchestrator never learns an Implementer's pane id or identity. Never let a callee create or switch a worktree.
    ```bash
-   WORKTREE_PATH=$(uv run "$SKILL_DIR/scripts/herdr_worktree.py" claim ../<repo>.w11-t7.impl-1 lane/w11-t7/impl-1/<ticket> --base main)
+   WORKTREE_PATH=$(uv run "$SKILL_DIR/scripts/herdr_worktree.py" claim ../<repo>.w11-t7.impl-1 lane/w11-t7/impl-1/<ticket> --base feat/<slug>)
    uv run "$SKILL_DIR/scripts/herdr_worktree.py" status --worktree "$WORKTREE_PATH" --json
    ```
 
@@ -77,7 +77,7 @@ Follow this 6-step sequence when provisioning any coding agent in Herdr:
    ```
    Bootstrap then waits a bounded settle (`--settle SEC`, default 5) before it reports the pane bootstrapped: a pane spawned a moment ago can report `interactive_ready: true` while it is still initialising (#238), so the first prompt would be swallowed. Only a fresh spawn settles — a dispatch to an already-running pane pays nothing — and `--settle 0` waits not at all.
 4. **Folder Trust Handling**:
-   - For `pi`: `--approve` is injected automatically from `kinds.yaml` — verify `-- --approve` is in the start argv instead of hand-adding flags.
+   - For `pi`: `--approve` is injected automatically from `kinds.yaml` — verify `-- --approve --exclude-tools=subagents_enable` is in the start argv (the second flag keeps `subagent` eager) instead of hand-adding flags.
    - For `qodercli`: `agent start` reports `interactive_ready: true` and a `Ready` title even while the trust selector is up, so read the pane. Either send one bare Enter (`herdr agent send-keys <name> enter`) and confirm the `YOLO` status line, or pre-seed `permissions.trustDirectories` in the config root the binary reads (`~/.qoder`, or `~/.qoder-cn` for the CN build) before starting. A prompt cannot dismiss the selector. See [Qoder CLI](agents/qodercli.md).
    - For other agents: Inspect pane output for any initial consent/login prompts.
 5. **State Settling**: Confirm the agent is ready before dispatching tickets or prompts. Read the pane text: a freshly started agent can be weakly recognized — its record reports `idle`/`done` with revision 0 — and a wanted state at revision 0 is unsatisfiable, so the wait helper exits 2 instead of settling, because `herdr-wait` cannot observe a weakly-recognized agent to completion. The `--source recent-unwrapped` pane read exits 0 and prints what the pane shows, so a trust selector or login prompt is visible before the first prompt; `herdr-prompt` and `herdr-dispatch` then re-check readiness themselves and abort with a `UsageError` when the pane never converges. Wait on the state barrier only for a strongly-recognized agent, and use Dispatch-&-Yield for `agy` and revision-0 agents ([Safety Rules](safety-rules.md)).
@@ -103,7 +103,7 @@ A compacted agent forgets its lane: it stops delegating to subagents and exits w
 | `cline` | `AGENTS.md` append (prefers an existing `.clinerules`) | `.clinerules` \| `AGENTS.md` |
 | `codex`, `copilot`, `qodercli`, `agy`, unknown | `AGENTS.md` append | `AGENTS.md` |
 
-Delivery follows `skills/herdr/references/kinds.yaml`: `inline` kinds (`pi`, `claude`) receive `--append-system-prompt`; `file` kinds and unknown kinds get the universal `AGENTS.md` append. Trust flags ride after `--` as native agent args, configured per kind (verified: `pi` → `--approve`, `claude` → `--dangerously-skip-permissions`); unverified kinds carry none. The same file declares `revision_moves` per kind. `agy` sets it false because its revision never moves, so the unconfirmed-acceptance warning does not send that kind to a revision-based re-check — a wanted state at revision 0 is unsatisfiable and the wait helper exits 2 — and names the agy bridge's status title instead. When `--cwd` names a worktree, bootstrap cds the pane there first (`--cwd-timeout`, default 10s), refuses to start when the pane does not converge, then refuses (exit 2) a missing directory, a target that is not a registered linked worktree, or the main checkout once the repository has linked worktrees; the diagnostic names the expected worktree and the actual pane cwd. The file target dir is `--cwd`, else the `--pane` cwd read from `herdr pane list`, else `$PWD`.
+Delivery follows `skills/herdr/references/kinds.yaml`: `inline` kinds (`pi`, `claude`) receive `--append-system-prompt`; `file` kinds and unknown kinds get the universal `AGENTS.md` append. Trust flags ride after `--` as native agent args, configured per kind (verified: `pi` → `--approve` plus `--exclude-tools=subagents_enable` (keeps `subagent` eager from the first turn), `claude` → `--dangerously-skip-permissions`); unverified kinds carry none. The same file declares `revision_moves` per kind. `agy` sets it false because its revision never moves, so the unconfirmed-acceptance warning does not send that kind to a revision-based re-check — a wanted state at revision 0 is unsatisfiable and the wait helper exits 2 — and names the agy bridge's status title instead. When `--cwd` names a worktree, bootstrap cds the pane there first (`--cwd-timeout`, default 10s), refuses to start when the pane does not converge, then refuses (exit 2) a missing directory, a target that is not a registered linked worktree, or the main checkout once the repository has linked worktrees; the diagnostic names the expected worktree and the actual pane cwd. The file target dir is `--cwd`, else the `--pane` cwd read from `herdr pane list`, else `$PWD`.
 
 Reusing a pane is the respawn path: `herdr-bootstrap --pane <id> --role <role> --task-group <prefix> --cwd <worktree>` starts the next generation in the pane it is given, so the pane id, its label, and its worktree survive while the new agent takes the shell — the `--pane`/`--cwd` matrix above applies unchanged. The lane-level view — which tabs a lane has, how the crew is split, and how a respawn is marked with a tab revision — is in [lane-coordination](lane-coordination.md#lane-topology--revisions).
 
@@ -130,9 +130,9 @@ Implementer roles — the docs' `impl-<n>` vocabulary, scoped or bare (`impl-1`,
 
 ```text
 Implementer: single writer for your task; never edit outside your worktree.
-Coordination: reply to TM via `herdr-reply`; await TM review before completion.
-Evidence: red-then-green test results, artifacts reported by path.
-Blockers: report immediately, never idle.
+Subagents: MUST delegate exploration (Scout), edits (Editor); host pane verifies gates, commits.
+Reply strictly to TM via `herdr-reply`; NEVER message the Orchestrator.
+Evidence: red-then-green test results, artifacts reported by path; blockers: report immediately, never idle.
 ```
 
 Task Manager roles — the tactical coordination vocabulary (`tm`, `task-manager`, `coord`,
@@ -144,6 +144,7 @@ Task Manager: coordination, design, and review authority only; NEVER edit source
 Dispatch: explore problem space; decompose briefs into atomic tickets; dispatch via `herdr-dispatch`.
 Review Loop: run verification gates in pane; audit callee diffs with review subagents before accepting (`impl -> code review -> impl`).
 Synthesize: track lane progress; synthesize results and report completion to caller via `herdr-reply`.
+Verify Callee: reject implementer replies that lack evidence of subagent delegation.
 ```
 
 Orchestrator roles — the root coordination vocabulary (`orch`, `orchestrator`), scoped or bare

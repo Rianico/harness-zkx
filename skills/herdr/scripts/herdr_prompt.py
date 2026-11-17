@@ -77,7 +77,7 @@ from herdr_agent import (
 from herdr_agent import (
     read_interactive_ready as read_interactive_ready,
 )
-from herdr_bootstrap import load_kind_entry
+from herdr_bootstrap import is_implementer_role, is_orch_role, load_kind_entry
 
 # Intended flat sibling import: `uv run <script>.py` puts the script directory on sys.path.
 from herdr_cli import (
@@ -435,6 +435,13 @@ def resolve_group_members(
             resolved_targets.add(t)
         elif t in agent_panes:
             resolved_targets.add(agent_panes[t])
+    # Isolation (#360): an implementer reads this envelope, so it must not carry an ancestor
+    # orchestrator identity — that would invite the direct reply the lane forbids. Only the roster
+    # (`others`) changes, so delivery to every `resolved_targets` pane still happens, but an
+    # addressed orchestrator is absent from the roster the implementer reads.
+    target_roles = [name for name, pid in agent_panes.items() if pid in resolved_targets]
+    target_roles.extend(t for t in target_panes if t not in agent_panes and t not in pane_ws)
+    implementer_envelope = any(is_implementer_role(role) for role in target_roles)
 
     caller_ws = pane_ws.get(caller_pane_id)
     target_workspaces = {pane_ws.get(p) for p in resolved_targets if pane_ws.get(p)}
@@ -464,6 +471,10 @@ def resolve_group_members(
             continue
         if pane_ws.get(pid) in workspaces_to_check:
             others.append(f"{name}@{pid}")
+    if implementer_envelope:
+        # The caller is always first and never pruned, so a Task Manager whose own name carries an
+        # orchestrator-like segment (`impl-hardening-orch`) still appears in its own envelope.
+        others = [m for m in others if not is_orch_role(m.split("@", 1)[0])]
     members.extend(sorted(dict.fromkeys(others)))
     return members
 

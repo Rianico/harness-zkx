@@ -17,7 +17,12 @@ Depth for `$SKILL_DIR/SKILL.md`. Read before any consent-gated or irreversible a
 
 ## Worktrees
 
-Create worktrees through the repository's worktree tool rather than `herdr worktree` — repo hooks, port allocation, and the pre-merge gate run only there. A global Worktrunk install counts: detect `wt` on `PATH` (`which wt`) just as you would a repo-local `wt.toml` / `.config/wt.toml`, and prefer `herdr_worktree.py` for lane allocation (see [branch-worktree-pr](../../branch-worktree-pr/SKILL.md)).
+Create worktrees through the repository's worktree tool rather than `herdr worktree` — repo hooks, port allocation, and the pre-merge gate run only there. A global Worktrunk install counts: detect `wt` on `PATH` (`which wt`) just as you would a repo-local `wt.toml` / `.config/wt.toml`, and prefer `herdr_worktree.py` for lane allocation (see [branch-worktree-pr](../../branch-worktree-pr/SKILL.md)). `herdr_worktree.py` uses the `wt` (Worktrunk) backend when `wt` is on `PATH` and falls back to `git worktree` otherwise.
+
+## Gate 0: Secret Scanning
+
+- Gate 0 scans staged additions before every other gate. It refuses `ghp_`, `github_pat_`, `AKIA`, and private-key headers. Remove the secret, mark a reviewed false positive with a narrow `# SAFETY:` comment on that line, or list the file in `.secrets.allowlist`.
+- NEVER pass `--no-verify` to skip a hook or gate. Fix the failing check at its source. Also refused: `--no-gpg-sign`, `--force` pushes, and raw `git worktree add` or `git merge` where the repository provides a `wt` path.
 
 ## Consent-gated or irreversible actions
 
