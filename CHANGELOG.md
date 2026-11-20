@@ -154,6 +154,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * **gh-router:** warn before the ready flip when ## [Unreleased] carries no entry for the new PR (#208)
 
 ### Bug Fixes
+* **herdr:** correct the pi `exclude-tools` flag docs to the space-separated form — `pi.md` and `agent-bootstrap.md` no longer document the unsupported `=` syntax (#368)
 * **herdr:** enforce 3-tier lane coordination and subagent-first execution — dispatch pre-guard prevents orchestrators from dispatching directly to implementers, pane-id target checks stop auto-starting orphaned agents, trailing-segment role matching fixes slug over-match, and bootstrap contracts provide explicit subagent-first instructions. (#356)
 * **gh-router/pr-land:** the derived PR title forks its range from the remote-tracking base — `_branch_subject` routes `resolve_base`'s bare branch name through `digest_base`, so a stale local `main` behind `origin/main` can no longer name another PR's landed commit in the title; an explicit SHA or `origin/…` base passes through, and the single-ref and empty-subject merge paths are unchanged. (#354)
 * **gh-router/pr-land:** `--watch` reads a `skipping` check by the head's full check-run list — a skip whose name succeeded on the head reads green, while any other skip stays not green, so a later stale-payload skip can no longer shadow an earlier success or a failure; the extra read runs only when a bucket is skipping, and a failed read fails closed with no traceback. (#354)
