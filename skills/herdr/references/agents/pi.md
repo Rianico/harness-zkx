@@ -8,7 +8,7 @@ Reference for running Pi coding agent under Herdr.
 
 ## Folder Trust & Approval
 - Pass `--approve` (or `-a`) after `--` to trust project-local files and skip interactive approval prompts.
-- Pass `--exclude-tools=subagents_enable` after `--` to skip pi-subagents' `subagents_enable` loader, so `subagent` is active from the first turn. One token, because kinds.yaml trust flags must start with '-'.
+- Pass `--exclude-tools subagents_enable` (two tokens) after `--` to skip pi-subagents' `subagents_enable` loader, so `subagent` is active from the first turn. pi built-ins require space-separated values: the `=` form never matches and fails with `Error: Unknown option: --exclude-tools`.
 - Prevents UI blocking during automated task execution.
 
 ## Provider & Model Configuration
