@@ -847,6 +847,20 @@ def live_workspace() -> dict[str, object]:
     }
 
 
+def live_workspace_listing() -> dict[str, object]:
+    """One `workspace list` entry: only the fields herdr 0.9.5 requires."""
+    return {
+        "workspace_id": "w9",
+        "number": 1,
+        "label": "main",
+        "focused": True,
+        "pane_count": 2,
+        "tab_count": 1,
+        "active_tab_id": "w9:t1",
+        "agent_status": "idle",
+    }
+
+
 def live_layout() -> dict[str, object]:
     """One `PaneLayoutSnapshot`: every required field of the layout and its panes."""
     return {
@@ -963,6 +977,7 @@ def test_split_pane_reads_result_pane_and_sends_the_expected_tokens(
             "/bin/herdr",
             "pane",
             "split",
+            "--pane",
             "w9:p1",
             "--direction",
             "right",
@@ -997,6 +1012,7 @@ def test_split_pane_sends_ratio_between_direction_and_cwd(
             "/bin/herdr",
             "pane",
             "split",
+            "--pane",
             "w9:p1",
             "--direction",
             "right",
@@ -1014,8 +1030,19 @@ def test_split_pane_omits_ratio_when_not_set(monkeypatch: pytest.MonkeyPatch) ->
 
     _ = herdr_cli.split_pane("/bin/herdr", {}, pane_id="w9:p1", direction="down")
 
-    assert calls == [["/bin/herdr", "pane", "split", "w9:p1", "--direction", "down"]]
+    assert calls == [["/bin/herdr", "pane", "split", "--pane", "w9:p1", "--direction", "down"]]
     assert "--ratio" not in calls[0]
+
+
+def test_split_pane_formats_ratio_like_the_lane_plan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = json.dumps({"result": {"type": "pane_info", "pane": live_pane("w9:p3")}})
+    calls = stub_response(monkeypatch, payload)
+
+    _ = herdr_cli.split_pane("/bin/herdr", {}, pane_id="w9:p1", ratio=0.1234567)
+
+    assert calls == [["/bin/herdr", "pane", "split", "--pane", "w9:p1", "--ratio", "0.123457"]]
 
 
 @pytest.mark.parametrize("ratio", [float("nan"), float("inf")])
@@ -1108,6 +1135,56 @@ def test_get_agent_names_a_missing_required_field(monkeypatch: pytest.MonkeyPatc
         _ = herdr_cli.get_agent("/bin/herdr", {}, "impl")
 
 
+def test_get_agent_reads_an_absent_state_labels_key_as_an_empty_map(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    agent = live_agent()
+    del agent["state_labels"]
+    del agent["tokens"]
+    _ = stub_response(monkeypatch, json.dumps({"result": {"type": "agent_info", "agent": agent}}))
+
+    found = herdr_cli.get_agent("/bin/herdr", {}, "impl")
+
+    assert found.state_labels == {}
+    assert found.tokens == {}
+
+
+def test_get_agent_reads_a_null_state_labels_key_as_an_empty_map(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    agent = live_agent()
+    agent["state_labels"] = None
+    agent["tokens"] = None
+    _ = stub_response(monkeypatch, json.dumps({"result": {"type": "agent_info", "agent": agent}}))
+
+    found = herdr_cli.get_agent("/bin/herdr", {}, "impl")
+
+    assert found.state_labels == {}
+    assert found.tokens == {}
+
+
+def test_get_agent_names_a_non_object_state_labels(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    agent = live_agent()
+    agent["state_labels"] = ["#370"]
+    _ = stub_response(monkeypatch, json.dumps({"result": {"type": "agent_info", "agent": agent}}))
+
+    with pytest.raises(herdr_cli.HerdrError, match=r"no usable 'state_labels'"):
+        _ = herdr_cli.get_agent("/bin/herdr", {}, "impl")
+
+
+def test_get_agent_names_a_non_string_token_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    agent = live_agent()
+    agent["tokens"] = {"ticket": 7}
+    _ = stub_response(monkeypatch, json.dumps({"result": {"type": "agent_info", "agent": agent}}))
+
+    with pytest.raises(herdr_cli.HerdrError, match=r"no usable 'tokens'"):
+        _ = herdr_cli.get_agent("/bin/herdr", {}, "impl")
+
+
 def test_list_agents_reads_every_entry(monkeypatch: pytest.MonkeyPatch) -> None:
     second = live_agent()
     second["pane_id"] = "w9:p2"
@@ -1128,6 +1205,39 @@ def test_list_agents_names_the_offending_entry(monkeypatch: pytest.MonkeyPatch) 
 
     with pytest.raises(herdr_cli.HerdrError, match=r"agents\[1\] has no usable 'terminal_id'"):
         _ = herdr_cli.list_agents("/bin/herdr", {})
+
+
+def test_list_workspaces_reads_every_entry(monkeypatch: pytest.MonkeyPatch) -> None:
+    second = live_workspace_listing()
+    second["workspace_id"] = "w1P"
+    second["number"] = 2
+    payload = json.dumps(
+        {"result": {"type": "workspace_list", "workspaces": [live_workspace_listing(), second]}}
+    )
+    calls = stub_response(monkeypatch, payload)
+
+    workspaces = herdr_cli.list_workspaces("/bin/herdr", {})
+
+    assert calls == [["/bin/herdr", "workspace", "list"]]
+    assert [workspace.workspace_id for workspace in workspaces] == ["w9", "w1P"]
+    assert workspaces[0].active_tab_id == "w9:t1"
+    assert workspaces[0].pane_count == 2
+    assert workspaces[0].tokens == {}
+    assert workspaces[0].worktree is None
+
+
+def test_list_workspaces_names_the_offending_entry(monkeypatch: pytest.MonkeyPatch) -> None:
+    broken = live_workspace_listing()
+    del broken["active_tab_id"]
+    payload = json.dumps(
+        {"result": {"type": "workspace_list", "workspaces": [live_workspace_listing(), broken]}}
+    )
+    _ = stub_response(monkeypatch, payload)
+
+    with pytest.raises(
+        herdr_cli.HerdrError, match=r"workspaces\[1\] has no usable 'active_tab_id'"
+    ):
+        _ = herdr_cli.list_workspaces("/bin/herdr", {})
 
 
 def test_prompt_agent_sends_wait_flags_only_when_set(
@@ -1262,6 +1372,30 @@ def test_wait_pane_output_names_a_missing_read(monkeypatch: pytest.MonkeyPatch) 
     _ = stub_response(monkeypatch, payload)
 
     with pytest.raises(herdr_cli.HerdrError, match=r"result\.read"):
+        _ = herdr_cli.wait_pane_output("/bin/herdr", {}, "w9:p1", "READY")
+
+
+def test_wait_pane_output_admits_an_empty_snapshot_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    match = live_match()
+    match["read"] = {**live_read(), "text": ""}
+    _ = stub_response(monkeypatch, json.dumps({"result": {"type": "output_matched", **match}}))
+
+    found = herdr_cli.wait_pane_output("/bin/herdr", {}, "w9:p1", "READY")
+
+    assert found.read.text == ""
+
+
+def test_wait_pane_output_names_a_missing_snapshot_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    read = live_read()
+    del read["text"]
+    payload = json.dumps({"result": {"type": "output_matched", **live_match(), "read": read}})
+    _ = stub_response(monkeypatch, payload)
+
+    with pytest.raises(herdr_cli.HerdrError, match=r"result\.read has no usable 'text'"):
         _ = herdr_cli.wait_pane_output("/bin/herdr", {}, "w9:p1", "READY")
 
 

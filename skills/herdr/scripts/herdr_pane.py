@@ -37,11 +37,13 @@ from herdr_cli import (
     current_pane_id,
     entrypoint,
     find_herdr,
-    payload_field,
+    get_pane_layout,
+    rename_pane,
     require_herdr_env,
     resolve_lane_base_dir,
     run_herdr_checked,
     scoped_agent_name,
+    split_pane,
     text_field,
     validate_agent_name,
 )
@@ -156,20 +158,11 @@ def resolve_cwd(requested: str | None, env: Mapping[str, str]) -> str:
 
 
 def pane_size(pane_id: str, herdr: str, env: Mapping[str, str]) -> tuple[int, int]:
-    raw = run_herdr_checked([herdr, "pane", "layout", "--pane", pane_id], env)
-    panes = payload_field(raw, "result", "layout", "panes")
-    if not isinstance(panes, list):
-        raise HerdrError(f"pane layout is not a pane list: {raw.strip()[:200]}")
-    for entry in panes:
-        if not isinstance(entry, dict) or entry.get("pane_id") != pane_id:
-            continue
-        rect = entry.get("rect")
-        if not isinstance(rect, dict):
-            continue
-        width, height = rect.get("width"), rect.get("height")
-        if not isinstance(width, int) or not isinstance(height, int):
-            raise HerdrError(f"pane {pane_id} layout rect is not numeric: {rect!r}")
-        return width, height
+    """The pane's own rectangle in cells, from its tab's layout snapshot."""
+    layout = get_pane_layout(herdr, env, pane_id)
+    for entry in layout.panes:
+        if entry.pane_id == pane_id:
+            return entry.rect.width, entry.rect.height
     raise HerdrError(f"pane {pane_id} was not present in its own layout response")
 
 
@@ -256,13 +249,19 @@ def build_split_argv(
     extra_env: Sequence[str],
     focus: bool,
 ) -> list[str]:
+    """The `pane split` argv: the `--dry-run` plan, and the shape the typed wrapper must send.
+
+    It also carries the pre-call validation (ratio range, `KEY=VALUE` shape), so a refusal
+    happens before herdr is invoked on every path.
+    """
+
     argv = [herdr, "pane", "split", "--pane", pane_id, "--direction", direction]
-    if cwd:
-        argv += ["--cwd", cwd]
     if ratio is not None:
         if not 0.0 < ratio < 1.0:
             raise UsageError(f"--ratio {ratio} is out of range: want 0 < ratio < 1")
         argv += ["--ratio", f"{ratio:g}"]
+    if cwd:
+        argv += ["--cwd", cwd]
     for item in extra_env:
         if "=" not in item:
             raise UsageError(f"--env {item!r} is malformed: want KEY=VALUE")
@@ -289,7 +288,7 @@ def format_summary(
     return summary
 
 
-def split_pane(options: Options, env: Mapping[str, str]) -> int:
+def split_command(options: Options, env: Mapping[str, str]) -> int:
     require_herdr_env(env)
     herdr = find_herdr(env)
     label = options.label
@@ -309,13 +308,16 @@ def split_pane(options: Options, env: Mapping[str, str]) -> int:
         if options.direction
         else auto_direction(caller, herdr, env)
     )
+    env_vars = [*lane_anchor_env_args(env, options.env), *options.env]
+    # Built on every path: this is the `--dry-run` plan and the pre-call validation, and
+    # `test_dry_run_plan_equals_the_argv_the_typed_split_sends` holds it to the typed argv.
     argv = build_split_argv(
         herdr,
         caller,
         direction,
         cwd=cwd,
         ratio=options.ratio,
-        extra_env=[*lane_anchor_env_args(env, options.env), *options.env],
+        extra_env=env_vars,
         focus=options.focus,
     )
     if options.dry_run:
@@ -324,14 +326,26 @@ def split_pane(options: Options, env: Mapping[str, str]) -> int:
             rename_argv = pane_rename_argv(herdr, "<new_pane_id>", label)
             print(shlex.join(rename_argv))
         return EXIT_OK
-    raw = run_herdr_checked(argv, env)
-    new_pane = text_field(raw, "result", "pane", "pane_id")
-    if label:
-        rename_argv = pane_rename_argv(herdr, new_pane, label)
-        _ = run_herdr_checked(rename_argv, env)
     if options.json:
+        # `--json` is this helper's one verbatim passthrough: it prints the daemon's own bytes,
+        # and a re-serialized `PaneInfo` would not be that response.
+        raw = run_herdr_checked(argv, env)
+        if label:
+            rename_pane(herdr, env, text_field(raw, "result", "pane", "pane_id"), label)
         print(raw, end="" if raw.endswith("\n") else "\n")
         return EXIT_OK
+    new_pane = split_pane(
+        herdr,
+        env,
+        pane_id=caller,
+        direction=direction,
+        ratio=options.ratio,
+        cwd=cwd,
+        env_vars=env_vars,
+        focus=options.focus,
+    ).pane_id
+    if label:
+        rename_pane(herdr, env, new_pane, label)
     print(
         format_summary(
             new_pane,
@@ -426,7 +440,7 @@ def run_command(options: Options, env: Mapping[str, str]) -> int:
 
 def _dispatch(options: Options, env: Mapping[str, str]) -> int:
     """Pick the verb from the parsed options; no subcommand means split."""
-    handler = run_command if options.command is not None else split_pane
+    handler = run_command if options.command is not None else split_command
     return handler(options, env)
 
 

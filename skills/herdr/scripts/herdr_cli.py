@@ -605,6 +605,14 @@ def _required_text(entry: Mapping[str, object], key: str, *, where: str) -> str:
     return value
 
 
+def _required_text_allow_empty(entry: Mapping[str, object], key: str, *, where: str) -> str:
+    """Read a required string that may be empty; an empty pane snapshot is a legal success."""
+    value = entry.get(key)
+    if not isinstance(value, str):
+        raise _field_error(entry, key, where=where, want="a string")
+    return value
+
+
 def _required_int(entry: Mapping[str, object], key: str, *, where: str) -> int:
     value = entry.get(key)
     if not isinstance(value, int) or isinstance(value, bool):
@@ -638,6 +646,7 @@ def _optional_bool(entry: Mapping[str, object], key: str, *, where: str) -> bool
 
 
 def _string_map(entry: Mapping[str, object], key: str, *, where: str) -> Mapping[str, str]:
+    """Read a string map; herdr 0.9.5 marks `state_labels`/`tokens` optional, so absence is `{}`."""
     value = entry.get(key)
     if value is None:
         return MappingProxyType({})
@@ -820,10 +829,7 @@ def _workspace_worktree(entry: Mapping[str, object], *, where: str) -> Workspace
     )
 
 
-# Parser for the model, exercised by tests; no wrapper in this module returns it yet (#371).
-def _workspace_info(  # pyright: ignore[reportUnusedFunction]
-    entry: Mapping[str, object], *, where: str
-) -> WorkspaceInfo:
+def _workspace_info(entry: Mapping[str, object], *, where: str) -> WorkspaceInfo:
     return WorkspaceInfo(
         workspace_id=_required_text(entry, "workspace_id", where=where),
         number=_required_int(entry, "number", where=where),
@@ -845,7 +851,7 @@ def _pane_read(entry: Mapping[str, object], *, where: str) -> PaneRead:
         tab_id=_required_text(entry, "tab_id", where=where),
         source=_required_text(entry, "source", where=where),
         format=_required_text(entry, "format", where=where),
-        text=_required_text(entry, "text", where=where),
+        text=_required_text_allow_empty(entry, "text", where=where),
         revision=_required_int(entry, "revision", where=where),
         truncated=_required_bool(entry, "truncated", where=where),
     )
@@ -907,19 +913,20 @@ def split_pane(
 ) -> PaneInfo:
     """`herdr pane split`: read the new pane from `.result.pane`.
 
-    An omitted `pane_id` leaves the target to herdr (the calling pane when it can resolve
-    one, else the focused pane). `--ratio` rides only when set, and a non-finite ratio is
-    refused before any call.
+    The target pane rides as `--pane` when the caller names one; an omitted `pane_id` leaves
+    the target to herdr (the calling pane when it can resolve one, else the focused pane).
+    `--ratio` rides only when set, formatted like the `%g` its callers already print, and a
+    non-finite ratio is refused before any call.
     """
     if ratio is not None and not math.isfinite(ratio):
         raise UsageError(f"pane split: --ratio {ratio} is not finite")
     argv = [herdr, "pane", "split"]
     if pane_id is not None:
-        argv.append(pane_id)
+        argv += ["--pane", pane_id]
     if direction is not None:
         argv += ["--direction", direction]
     if ratio is not None:
-        argv += ["--ratio", str(ratio)]
+        argv += ["--ratio", f"{ratio:g}"]
     if cwd is not None:
         argv += ["--cwd", cwd]
     for item in env_vars:
@@ -975,6 +982,15 @@ def list_agents(herdr: str, env: Mapping[str, str]) -> tuple[AgentInfo, ...]:
     return tuple(
         _agent_info(item, where=f"agent list result.agents[{index}]")
         for index, item in enumerate(entries(raw, "result", "agents"))
+    )
+
+
+def list_workspaces(herdr: str, env: Mapping[str, str]) -> tuple[WorkspaceInfo, ...]:
+    """`herdr workspace list`: read every `.result.workspaces` entry; an index names a bad one."""
+    raw = run_herdr_checked([herdr, "workspace", "list"], env)
+    return tuple(
+        _workspace_info(item, where=f"workspace list result.workspaces[{index}]")
+        for index, item in enumerate(entries(raw, "result", "workspaces"))
     )
 
 
