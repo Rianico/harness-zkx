@@ -75,9 +75,10 @@ lowercase hex, the shape no reader can tell from an abbreviation — must name a
 lane anchor. One that does not is refused (exit 2) naming the token, the anchor, and the
 waiver, before any record or lease exists; the same `--allow-unresolvable-sha <TOKEN>` waives
 it, and a waived token is recorded as waived, never as a sha. Where git cannot answer — no
-work tree, no binary, or a redirected object store — the check is skipped loudly and the token
-is recorded as unverified, because an unanswerable probe has proven nothing. `BLOCKED` and
-`REJECTED` reasons are prose, never read as a commit.
+work tree, no binary, a redirected object store, or no resolvable lane anchor — the check is
+skipped loudly and the token is recorded as unverified, because an unanswerable probe has
+proven nothing; a missing anchor is never swapped for the process's working directory. `BLOCKED`
+and `REJECTED` reasons are prose, never read as a commit.
 
     herdr-reply orchestrator "COMPLETED artifacts=[...] issues=[]"
     herdr-reply orchestrator --file result.md
@@ -102,7 +103,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 import herdr_lease
 
@@ -131,7 +132,9 @@ from herdr_cli import (
     KNOWN_AGENT_KINDS,
     METHOD_CONSTRAINT_EPILOG,
     STDIN,
+    BareShellRefusal,
     HerdrError,
+    ShellPaneInfo,
     UsageError,
     add_shared_argument,
     decode_payload,
@@ -153,6 +156,7 @@ from herdr_cli import (
     verify_target_not_bare_shell,
 )
 from herdr_envelope import (
+    CallerContext,
     caller_anchor,
     format_delivery_summary,
     render_envelope,
@@ -396,6 +400,15 @@ class StatusCommit:
     marker: str | None
 
 
+def _report_skipped_status_commit(payload_path: str, sha: str, reason: str) -> None:
+    """Report an unanswerable status-line probe loudly; the token stays unverified, never a sha."""
+    print(
+        f"herdr-reply: SHA guard skipped for the status line in {payload_path}: {reason}; "
+        f"unchecked: `{sha}`",
+        file=sys.stderr,
+    )
+
+
 def verify_status_line_commit(
     mapped: str | None,
     sha: str | None,
@@ -415,10 +428,13 @@ def verify_status_line_commit(
 
     A token waived by name is admitted and reported on stderr, and it is never returned as a sha:
     the verdict says it was waived, and the task history records `waived=<token>`. A git that
-    cannot answer — no work tree, no binary, or one of `GIT_LOCATION_REDIRECT_VARS` pointing the
-    probe at another repository's objects — has proven nothing, so the reply is admitted with a
-    skip line naming the token and the verdict records `unverified=<token>`, never a commit.
-    Unverifiable is never unresolvable (#247 D2), and no unproven token is ever recorded as one.
+    cannot answer — no work tree, no binary, one of `GIT_LOCATION_REDIRECT_VARS` pointing the
+    probe at another repository's objects, or no resolvable lane anchor at all — has proven
+    nothing, so the reply is admitted with a skip line naming the token and the verdict records
+    `unverified=<token>`, never a commit. An unresolvable anchor is unverifiable rather than an
+    invitation to probe the process's working directory, so one payload keeps one verdict from
+    every directory. Unverifiable is never unresolvable (#247 D2), and no unproven token is ever
+    recorded as one.
     """
     if mapped != "completed" or sha is None or not _SHA_RE.fullmatch(sha):
         return StatusCommit(None, None)
@@ -429,26 +445,28 @@ def verify_status_line_commit(
             file=sys.stderr,
         )
         return StatusCommit(None, f"{STATUS_COMMIT_WAIVED}={sha}")
-    directory = cwd if cwd is not None else Path.cwd()
+    if cwd is None:
+        _report_skipped_status_commit(
+            payload_path,
+            sha,
+            "the lane anchor could not be resolved, so git cannot be asked about any commit",
+        )
+        return StatusCommit(None, f"{STATUS_COMMIT_UNVERIFIED}={sha}")
     redirect = git_location_redirect(env)
-    if redirect is not None or not git_can_resolve_commits(directory):
+    if redirect is not None or not git_can_resolve_commits(cwd):
         reason = (
             f"git's location is redirected by {redirect}, so the token could resolve in another "
             "repository"
             if redirect is not None
-            else f"git cannot resolve commits in {directory} (no work tree, or no git binary)"
+            else f"git cannot resolve commits in {cwd} (no work tree, or no git binary)"
         )
-        print(
-            f"herdr-reply: SHA guard skipped for the status line in {payload_path}: {reason}; "
-            f"unchecked: `{sha}`",
-            file=sys.stderr,
-        )
+        _report_skipped_status_commit(payload_path, sha, reason)
         return StatusCommit(None, f"{STATUS_COMMIT_UNVERIFIED}={sha}")
-    if names_a_commit(sha, directory):
+    if names_a_commit(sha, cwd):
         return StatusCommit(sha, None)
     raise UsageError(
         f"payload {payload_path} names COMPLETED {sha}, but that token names no commit in this "
-        f"lane ({directory}). The second token of a COMPLETED status line is the reply's commit, "
+        f"lane ({cwd}). The second token of a COMPLETED status line is the reply's commit, "
         f"so correct it — or waive an intentional non-commit token with {ALLOW_UNRESOLVABLE_SHA} "
         f"{sha}. Refusing to record or submit the reply"
     )
@@ -1205,7 +1223,91 @@ def record_sender_status(
         report_lease_trouble("trajectory note", exc)
 
 
+# ── one reply delivery, in the phases its state resolves in (#372) ─────────────────────
+
+
+@dataclass(frozen=True)
+class _RevivePlan:
+    """The caller's address and the spawn that makes it an agent again (#237).
+
+    `target` is where the prompt is delivered: the revived agent's name when a spawn was
+    planned, otherwise the caller's own name or pane id. Frozen so no later phase can rebind
+    the delivery target; `argv` and `invariant` are None when the caller already has a live
+    agent.
+    """
+
+    target: str
+    shell_info: ShellPaneInfo | None
+    argv: list[str] | None
+    invariant: str | None
+
+
+@dataclass(frozen=True)
+class _Payload:
+    """The admitted reply text and the status line's proven commit claim."""
+
+    body: str
+    mapped: str
+    commit: StatusCommit
+
+
+@dataclass(frozen=True)
+class _Correlation:
+    """The sender, its lease, and the task this reply advances (#246 D1.2)."""
+
+    sender: str | None
+    lease: dict[str, object] | None
+    ticket_id: str | None
+    linked_task_id: str | None
+    linkage_warning: str | None
+    envelope_ticket_id: str | None
+
+
+@dataclass(frozen=True)
+class _LaneIdentity:
+    """The caller/receiver pair and the one inventory snapshot both were read from."""
+
+    caller: CallerContext
+    receiver: CallerContext | None
+    inventory: tuple[Sequence[Mapping[str, object]], Sequence[Mapping[str, object]]]
+
+
+@dataclass(frozen=True)
+class _Delivery:
+    """What the prompt carries and what its status line reports."""
+
+    anchor: str
+    receiver_pane: str | None
+    delivered: str
+    source: str
+    record_id: str | None
+    shape: str
+
+
+@dataclass(frozen=True)
+class _ReplyContext:
+    """One reply delivery's threaded state, in the order the phases resolve it."""
+
+    plan: _RevivePlan
+    payload: _Payload
+    correlation: _Correlation
+    delivery: _Delivery
+
+
 def reply_caller(options: Options, env: Mapping[str, str]) -> int:
+    """Deliver one reply: admit the invocation, revive the caller, prove, record, then send."""
+    herdr, target, auto_kind = _reply_preconditions(options, env)
+    plan = _revive_target(options, env, herdr, target, auto_kind)
+    if plan is None:
+        return EXIT_USAGE
+    payload = _parse_and_validate_payload(options, env)
+    correlation = _correlate_reply(options, env, herdr)
+    delivery = _compose_delivery(options, env, herdr, plan, payload, correlation)
+    return _execute_prompt(options, env, herdr, _ReplyContext(plan, payload, correlation, delivery))
+
+
+def _reply_preconditions(options: Options, env: Mapping[str, str]) -> tuple[str, str, str | None]:
+    """Validate the invocation and resolve the herdr binary, the target, and the revive kind."""
     require_herdr_env(env)
     herdr = find_herdr(env)
     target = options.target.strip()
@@ -1216,132 +1318,177 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
     if options.settle < 0:
         raise UsageError(f"--settle {options.settle} must not be negative")
 
-    if options.auto_start:
-        auto_kind = options.auto_start.strip().lower()
-        if not auto_kind or auto_kind not in KNOWN_AGENT_KINDS:
-            raise UsageError(
-                f"--auto-start kind {options.auto_start!r} is not a recognized agent kind (known: {', '.join(sorted(KNOWN_AGENT_KINDS))})"
-            )
+    if not options.auto_start:
+        return herdr, target, None
+    auto_kind = options.auto_start.strip().lower()
+    if not auto_kind or auto_kind not in KNOWN_AGENT_KINDS:
+        raise UsageError(
+            f"--auto-start kind {options.auto_start!r} is not a recognized agent kind "
+            f"(known: {', '.join(sorted(KNOWN_AGENT_KINDS))})"
+        )
+    return herdr, target, auto_kind
 
+
+def _revive_target(
+    options: Options, env: Mapping[str, str], herdr: str, target: str, auto_kind: str | None
+) -> _RevivePlan | None:
+    """Resolve the caller pane, reviving it into a live agent when `--auto-start` names one (#237).
+
+    None means the pane is a bare shell and no revive was asked for: the stored recovery hint was
+    printed instead, and the reply stops with exit 2.
+    """
     shell_info = inspect_target_shell_pane(herdr, target, env)
-    revive_argv: list[str] | None = None
-    revive_invariant: str | None = None
-    if shell_info is not None:
-        if options.auto_start:
-            kind = options.auto_start.strip().lower()
-            start_name = (
-                shell_info.suggested_name
-                if shell_info.suggested_name != "<name>"
-                else f"agent-{shell_info.pane_id.replace(':', '-')}"
-            )
-            revive_argv = [
-                herdr,
-                "agent",
-                "start",
-                start_name,
-                "--kind",
-                kind,
-                "--pane",
-                shell_info.pane_id,
-            ]
-            # #237: a revived caller is a fresh agent, so it receives the same invariant
-            # injection as a bootstrapped one — otherwise the reply lands on a contract-less
-            # agent. The role is unknowable here, so the agent name stands in, exactly as
-            # `herdr-bootstrap` falls back to the name when no role is given. The snippet file
-            # for an inline kind lives under the resolved store base: any absolute path the
-            # spawned binary can read will do, and the pane cwd is not needed for it. A file
-            # kind is appended to the pane's live cwd, the surface that kind reads; with no
-            # determinable cwd, or a tracked target the append would change, the revive is
-            # refused loudly rather than delivering to an agent that holds no contract.
-            # Deliberately stricter than bootstrap's tracked rule (which offers an override
-            # flag): the reply path carries no such flag, so ambiguity refuses.
-            entry = load_kind_entry(kind)
-            snippet = render_invariant(start_name)
-            agent_args: list[str] = []
-            invariant_surface: str | None = None
-            if entry.inline_invariant:
-                if not entry.invariant_flag:
-                    raise UsageError(
-                        f"--auto-start kind {kind!r} names no invariant flag in kinds.yaml; "
-                        "refusing to revive a caller that would hold no lane contract"
-                    )
-                invariant_file = lane_invariant_path(
-                    str(herdr_lease.resolve_base_dir(env=env)), start_name
-                )
-                if not options.dry_run:
-                    try:
-                        write_role_invariant(invariant_file, snippet)
-                    except OSError as exc:
-                        raise UsageError(f"cannot write {invariant_file}: {exc}") from exc
-                agent_args += [entry.invariant_flag, str(invariant_file)]
-                invariant_surface = str(invariant_file)
-            else:
-                pane_dir = pane_cwd(herdr, shell_info.pane_id, env)
-                if not pane_dir:
-                    raise UsageError(
-                        f"cannot determine the cwd of pane {shell_info.pane_id}; a {kind!r} "
-                        "caller reads its invariant from a file there, so reviving it would "
-                        "deliver this reply to an agent with no lane contract — bootstrap the "
-                        "caller explicitly instead"
-                    )
-                agents_file = target_path(pane_dir, kind)
-                try:
-                    current = read_if_exists(agents_file)
-                except OSError as exc:
-                    raise UsageError(f"cannot read {agents_file}: {exc}") from exc
-                if planned_invariant_content(current, snippet) != current:
-                    # Tri-state: True or None (unknown) is not certainly untracked.
-                    tracked = target_is_tracked(agents_file, env)
-                    if tracked is None or tracked:
-                        raise UsageError(
-                            f"refusing to append the lane invariant to {agents_file}: its "
-                            "version-control state is not certainly untracked — bootstrap the "
-                            "caller explicitly with --allow-tracked-invariant instead of "
-                            "reviving it into a contract-less agent"
-                        )
-                    if not options.dry_run:
-                        try:
-                            _ = append_invariant(agents_file, snippet)
-                        except OSError as exc:
-                            raise UsageError(f"cannot write {agents_file}: {exc}") from exc
-                invariant_surface = str(agents_file)
-            agent_args += entry.trust_flags
-            for arg in agent_args:
-                if "\n" in arg or "\r" in arg:
-                    raise UsageError(f"revive agent args must be single-line: {arg!r}")
-            if agent_args:
-                revive_argv += ["--", *agent_args]
-            revive_invariant = invariant_surface
-            if not options.dry_run:
-                _ = run_herdr_checked(revive_argv, env)
-                # A revived caller is a fresh spawn too: settle before the reply is delivered
-                # (#237), so its first prompt is not swallowed by a pane still initialising.
-                settle_fresh_pane(options.settle)
-            target = start_name
-        else:
-            if emit_recovery_diagnostic(herdr, env, target, recovery_file_arg(options)):
-                return EXIT_USAGE
-            diag = format_shell_pane_diagnostic(
-                target=target,
-                pane_id=shell_info.pane_id,
-                label=shell_info.label,
-                foreground_proc=shell_info.foreground_proc,
-                is_label_match=shell_info.is_label_match,
-                suggested_name=shell_info.suggested_name,
-                suggested_kind=shell_info.suggested_kind,
-            )
-            raise UsageError(diag)
-    else:
+    if shell_info is None:
         verify_target_not_bare_shell(herdr, target, env)
+        return _RevivePlan(target=target, shell_info=None, argv=None, invariant=None)
+    if auto_kind is None:
+        if emit_recovery_diagnostic(herdr, env, target, recovery_file_arg(options)):
+            return None
+        _refuse_bare_shell(target, shell_info)
+    return _start_revived_caller(options, env, herdr, auto_kind, shell_info)
 
-    payload = read_payload(options.file, options.message)
-    body = payload
-    if options.file and options.file != STDIN:
-        source = f"File: {options.file}"
-    elif options.message is not None:
-        source = f"Payload: inline ({len(payload.encode('utf-8'))} bytes)"
+
+def _refuse_bare_shell(target: str, shell_info: ShellPaneInfo) -> NoReturn:
+    """Refuse a caller pane that is a bare shell (#369): the prompt has nowhere to land.
+
+    Raised as `BareShellRefusal` so a caller holding the structural remedy —
+    `herdr_dispatch`'s `--auto-start` hook — keys on the type, not on this module's prose. The
+    message stays `format_shell_pane_diagnostic`'s, so the operator reads the same diagnosis.
+    """
+    raise BareShellRefusal(
+        format_shell_pane_diagnostic(
+            target=target,
+            pane_id=shell_info.pane_id,
+            label=shell_info.label,
+            foreground_proc=shell_info.foreground_proc,
+            is_label_match=shell_info.is_label_match,
+            suggested_name=shell_info.suggested_name,
+            suggested_kind=shell_info.suggested_kind,
+        )
+    )
+
+
+def _start_revived_caller(
+    options: Options,
+    env: Mapping[str, str],
+    herdr: str,
+    kind: str,
+    shell_info: ShellPaneInfo,
+) -> _RevivePlan:
+    """Plan the spawn, inject the lane invariant, and start the caller unless `--dry-run` (#237)."""
+    start_name = (
+        shell_info.suggested_name
+        if shell_info.suggested_name != "<name>"
+        else f"agent-{shell_info.pane_id.replace(':', '-')}"
+    )
+    argv = [herdr, "agent", "start", start_name, "--kind", kind, "--pane", shell_info.pane_id]
+    agent_args, invariant = _revive_agent_args(options, env, herdr, kind, start_name, shell_info)
+    for arg in agent_args:
+        if "\n" in arg or "\r" in arg:
+            raise UsageError(f"revive agent args must be single-line: {arg!r}")
+    if agent_args:
+        argv += ["--", *agent_args]
+    if not options.dry_run:
+        _ = run_herdr_checked(argv, env)
+        # A revived caller is a fresh spawn too: settle before the reply is delivered (#237), so
+        # its first prompt is not swallowed by a pane still initialising.
+        settle_fresh_pane(options.settle)
+    return _RevivePlan(target=start_name, shell_info=shell_info, argv=argv, invariant=invariant)
+
+
+def _revive_agent_args(
+    options: Options,
+    env: Mapping[str, str],
+    herdr: str,
+    kind: str,
+    start_name: str,
+    shell_info: ShellPaneInfo,
+) -> tuple[list[str], str]:
+    """The revived caller's invariant args and the surface they name (#237).
+
+    A revived caller is a fresh agent, so it receives the same invariant injection as a
+    bootstrapped one — otherwise the reply lands on a contract-less agent. The role is
+    unknowable here, so the agent name stands in, exactly as `herdr-bootstrap` falls back to the
+    name when no role is given. The snippet file for an inline kind lives under the resolved
+    store base: any absolute path the spawned binary can read will do, and the pane cwd is not
+    needed for it. A file kind is appended to the pane's live cwd, the surface that kind reads;
+    with no determinable cwd, or a tracked target the append would change, the revive is refused
+    loudly rather than delivering to an agent that holds no contract. Deliberately stricter than
+    bootstrap's tracked rule (which offers an override flag): the reply path carries no such
+    flag, so ambiguity refuses.
+    """
+    entry = load_kind_entry(kind)
+    snippet = render_invariant(start_name)
+    if entry.inline_invariant:
+        if not entry.invariant_flag:
+            raise UsageError(
+                f"--auto-start kind {kind!r} names no invariant flag in kinds.yaml; "
+                "refusing to revive a caller that would hold no lane contract"
+            )
+        args, surface = _inline_invariant_args(
+            options, env, entry.invariant_flag, start_name, snippet
+        )
     else:
-        source = f"Payload: stdin ({len(payload.encode('utf-8'))} bytes)"
+        args, surface = _file_invariant_args(options, env, herdr, kind, shell_info, snippet)
+    return [*args, *entry.trust_flags], surface
+
+
+def _inline_invariant_args(
+    options: Options, env: Mapping[str, str], invariant_flag: str, start_name: str, snippet: str
+) -> tuple[list[str], str]:
+    """Write the snippet under the lane store and name it on the spawn argv."""
+    invariant_file = lane_invariant_path(str(herdr_lease.resolve_base_dir(env=env)), start_name)
+    if not options.dry_run:
+        try:
+            write_role_invariant(invariant_file, snippet)
+        except OSError as exc:
+            raise UsageError(f"cannot write {invariant_file}: {exc}") from exc
+    return [invariant_flag, str(invariant_file)], str(invariant_file)
+
+
+def _file_invariant_args(
+    options: Options,
+    env: Mapping[str, str],
+    herdr: str,
+    kind: str,
+    shell_info: ShellPaneInfo,
+    snippet: str,
+) -> tuple[list[str], str]:
+    """Append the snippet to the file kind's surface in the pane's live cwd, refusing ambiguity."""
+    pane_dir = pane_cwd(herdr, shell_info.pane_id, env)
+    if not pane_dir:
+        raise UsageError(
+            f"cannot determine the cwd of pane {shell_info.pane_id}; a {kind!r} "
+            "caller reads its invariant from a file there, so reviving it would "
+            "deliver this reply to an agent with no lane contract — bootstrap the "
+            "caller explicitly instead"
+        )
+    agents_file = target_path(pane_dir, kind)
+    try:
+        current = read_if_exists(agents_file)
+    except OSError as exc:
+        raise UsageError(f"cannot read {agents_file}: {exc}") from exc
+    if planned_invariant_content(current, snippet) != current:
+        # Tri-state: True or None (unknown) is not certainly untracked.
+        tracked = target_is_tracked(agents_file, env)
+        if tracked is None or tracked:
+            raise UsageError(
+                f"refusing to append the lane invariant to {agents_file}: its "
+                "version-control state is not certainly untracked — bootstrap the "
+                "caller explicitly with --allow-tracked-invariant instead of "
+                "reviving it into a contract-less agent"
+            )
+        if not options.dry_run:
+            try:
+                _ = append_invariant(agents_file, snippet)
+            except OSError as exc:
+                raise UsageError(f"cannot write {agents_file}: {exc}") from exc
+    return [], str(agents_file)
+
+
+def _parse_and_validate_payload(options: Options, env: Mapping[str, str]) -> _Payload:
+    """Read the payload and prove its status line and cited SHAs before anything is written."""
+    payload = read_payload(options.file, options.message)
     mapped, sha, _line = parse_status_line(payload)
     if mapped is None:
         # #246 D1.1: the Final Reply Template requires the body to start at its status line.
@@ -1355,8 +1502,8 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
             "skills/herdr/references/lane-coordination.md); refusing to record or submit the reply"
         )
     # #369 m5: the status line's second token is the reply's commit, so it is proven here too —
-    # ahead of the store and of `--dry-run`, like the body guard below, so a refused claim leaves no
-    # record, consumes no lease, and never reaches task history.
+    # ahead of the store and of `--dry-run`, like the body guard below, so a refused claim leaves
+    # no record, consumes no lease, and never reaches task history.
     commit = verify_status_line_commit(
         mapped,
         sha,
@@ -1375,6 +1522,18 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
         cwd=lane_git_dir(env),
         env=env,
     )
+    return _Payload(body=payload, mapped=mapped, commit=commit)
+
+
+def _correlate_reply(options: Options, env: Mapping[str, str], herdr: str) -> _Correlation:
+    """Resolve the sender, its lease, and the task this reply advances (#246 D1.2).
+
+    The lease is consumed by the first reply, so the task is resolved from the whole store —
+    the explicit flag, else the lease — and an unresolvable answer is recorded unlinked with one
+    warning line. No step infers (#246 E1.2): the rendered contract carries `--ticket`, so a
+    reply that names nothing mutates nothing. The resolution only ever reads the store, so
+    `--dry-run` runs it too: the preview carries the correlation the real send carries.
+    """
     sender = resolve_current_agent(herdr, env)
     lease: dict[str, object] | None = None
     if sender:
@@ -1384,17 +1543,7 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
             report_lease_trouble("lease correlation", exc)
         else:
             lease = stored if isinstance(stored, dict) else None
-    ticket_id: str | None = None
-    if isinstance(lease, dict):
-        lease_ticket = lease.get("ticket_id")
-        if isinstance(lease_ticket, str):
-            ticket_id = lease_ticket
-    # #246 D1.2: the lease is consumed by the first reply, so the task this reply advances is
-    # resolved from the whole store — the explicit flag, else the lease — and an unresolvable
-    # answer is recorded unlinked with one warning line. No step infers (#246 E1.2): the
-    # rendered contract carries `--ticket`, so a reply that names nothing mutates nothing. The
-    # resolution only ever reads the store, so `--dry-run` runs it too: the preview carries the
-    # correlation the real send carries, while recording nothing.
+    ticket_id = _lease_ticket(lease)
     linked_task_id, linkage_warning = resolve_task_linkage(
         sender=sender,
         lease=lease,
@@ -1403,134 +1552,318 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
         env=env,
     )
     # The envelope names the task this reply ADVANCES: `envelope.id` is either that linked task
-    # id, matching the store row below, or a generated `unlinked-…` id when nothing was bound —
-    # A2A requires a non-empty `Task.id`, so `''` is never rendered. The resolver already carries
-    # the whole precedence — the `--in-reply-to` record, then `--ticket`, then the sender's lease
-    # when neither was supplied (#246 D1.2) — so its answer needs no fallback. `or in_reply_to`
-    # was one, and it was a wrong one: when an EXPLICIT binding was refused the resolver returns
+    # id, matching the store row, or a generated `unlinked-…` id when nothing was bound — A2A
+    # requires a non-empty `Task.id`, so `''` is never rendered. The resolver already carries the
+    # whole precedence — the `--in-reply-to` record, then `--ticket`, then the sender's lease when
+    # neither was supplied (#246 D1.2) — so its answer needs no fallback. `or in_reply_to` was
+    # one, and it was a wrong one: when an EXPLICIT binding was refused the resolver returns
     # `None` while the lease half of the pair still named a task, so the envelope advertised a
     # task the reply deliberately refused to bind, and a reader of `id`/`metadata.in_reply_to`
     # drew a linkage the store row contradicts. A refused binding now renders the generated
     # `unlinked-…` id, never the lease's task, and drops both correlation keys, exactly as the
     # unlinked record does.
-    # `ticket_id` prefers the lease's ticket, else the resolved task record's ticket, read back
-    # through `get_task`. `status.state` is the status the payload's first token stated, mapped
-    # above (a payload with no status is refused before this line renders anything).
-    envelope_task_id = linked_task_id
-    envelope_ticket_id = ticket_id
-    if envelope_ticket_id is None and envelope_task_id is not None:
-        try:
-            task_record = get_task(envelope_task_id, env=env)
-        except Exception:
-            task_record = None
-        if isinstance(task_record, dict):
-            record_ticket = task_record.get("ticket_id")
-            if isinstance(record_ticket, str) and record_ticket:
-                envelope_ticket_id = record_ticket
+    return _Correlation(
+        sender=sender,
+        lease=lease,
+        ticket_id=ticket_id,
+        linked_task_id=linked_task_id,
+        linkage_warning=linkage_warning,
+        envelope_ticket_id=_envelope_ticket(ticket_id, linked_task_id, env),
+    )
+
+
+def _lease_ticket(lease: Mapping[str, object] | None) -> str | None:
+    """The ticket the sender's lease names, or None when the lease names none."""
+    if lease is None:
+        return None
+    lease_ticket = lease.get("ticket_id")
+    return lease_ticket if isinstance(lease_ticket, str) else None
+
+
+def _envelope_ticket(
+    ticket_id: str | None, linked_task_id: str | None, env: Mapping[str, str]
+) -> str | None:
+    """The lease's ticket, else the resolved task record's ticket, read back through `get_task`."""
+    if ticket_id is not None or linked_task_id is None:
+        return ticket_id
+    try:
+        task_record = get_task(linked_task_id, env=env)
+    except Exception:
+        return ticket_id
+    if not isinstance(task_record, dict):
+        return ticket_id
+    record_ticket = task_record.get("ticket_id")
+    if isinstance(record_ticket, str) and record_ticket:
+        return record_ticket
+    return ticket_id
+
+
+def _resolve_lane_identity(
+    options: Options, env: Mapping[str, str], herdr: str, target: str
+) -> _LaneIdentity:
+    """Read one inventory snapshot and apply the lane-isolation gate (#360).
+
+    Checked before any record is written or prompt is sent: an implementer answers its Task
+    Manager, never the orchestrator. `--force` is the operator's deliberate override, mirroring
+    `herdr_dispatch.check_orchestrator_dispatch`.
+    """
     panes, agents = fetch_inventory(herdr, env)
-    caller_ctx = resolve_caller(herdr, env, inventory=(panes, agents))
+    caller = resolve_caller(herdr, env, inventory=(panes, agents))
     receiver = resolve_receiver(panes, agents, target)
-    # Lane isolation (#360), checked before any record is written or prompt is sent: an
-    # implementer answers its Task Manager, never the orchestrator. `--force` is the operator's
-    # deliberate override, mirroring `herdr_dispatch.check_orchestrator_dispatch`.
     if not options.force:
-        caller_role = caller_ctx.agent or caller_ctx.label or ""
+        caller_role = caller.agent or caller.label or ""
         target_role = (
             (receiver.agent or receiver.label or target) if receiver is not None else target
         )
         check_implementer_reply(caller_role, target_role)
-    # ADR-0020 active reconciliation (#182 t2), anchored on the physical ids this snapshot
-    # already resolved: `caller_ctx.pane_id` names the orchestrator pane, `caller_ctx.tab_id`
-    # names the lane's tab, and each worker is keyed by its own `pane_id`. Task-group source:
-    # no `--task-group` flag exists here, so the slug is read back from the lane's records (see
-    # `resolve_lane_task_group`); with none recorded the tab title and the orchestrator name are
-    # skipped with one stderr line, and the worker-name half still runs. Best-effort by contract:
-    # no rename below can change this exit status or delay the delivery after it.
+    return _LaneIdentity(caller=caller, receiver=receiver, inventory=(panes, agents))
+
+
+def _reconcile_caller_lane(
+    options: Options,
+    env: Mapping[str, str],
+    herdr: str,
+    correlation: _Correlation,
+    lane: _LaneIdentity,
+) -> None:
+    """Run the lane's active ID-anchored reconciliation pass (ADR-0020, #182 t2).
+
+    Anchored on the physical ids the snapshot already resolved: `caller.pane_id` names the
+    orchestrator pane, `caller.tab_id` names the lane's tab, and each worker is keyed by its own
+    `pane_id`. Task-group source: no `--task-group` flag exists here, so the slug is read back
+    from the lane's records (see `resolve_lane_task_group`); with none recorded the tab title and
+    the orchestrator name are skipped with one stderr line, and the worker-name half still runs.
+    Best-effort by contract: no rename below can change this exit status or delay the delivery
+    after it.
+    """
     _ = reconcile_lane(
         herdr,
         env,
-        task_group=resolve_lane_task_group(lease, envelope_task_id, env),
+        task_group=resolve_lane_task_group(correlation.lease, correlation.linked_task_id, env),
         marker="herdr-reply",
         dry_run=options.dry_run,
         missing_note=(
             "no task group recorded for this lane, so the tab title and the orchestrator "
             "name were left alone"
         ),
-        pane_id=caller_ctx.pane_id,
-        tab_id=caller_ctx.tab_id,
-        inventory=(panes, agents),
+        pane_id=lane.caller.pane_id,
+        tab_id=lane.caller.tab_id,
+        inventory=lane.inventory,
     )
-    anchor = f"[You: {caller_anchor(caller_ctx)}]"
+
+
+def _payload_source(options: Options, payload: str) -> str:
+    """Where the admitted payload came from, as the delivery summary names it."""
+    if options.file and options.file != STDIN:
+        return f"File: {options.file}"
+    if options.message is not None:
+        return f"Payload: inline ({len(payload.encode('utf-8'))} bytes)"
+    return f"Payload: stdin ({len(payload.encode('utf-8'))} bytes)"
+
+
+def _persist_reply_record(
+    env: Mapping[str, str],
+    target: str,
+    payload: _Payload,
+    correlation: _Correlation,
+    shape: str,
+    evidence: str | None,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Persist the payload as a store record; a store that cannot answer degrades to a pointer.
+
+    Any failure is reported through `report_lease_trouble` and degraded to the NOT RECORDED
+    reason, exactly as `persist_reply` documents: delivery never depends on the store.
+    """
+    try:
+        entry = build_reply_entry(
+            payload.body,
+            sender=correlation.sender,
+            caller=target,
+            ticket_id=correlation.ticket_id,
+            task_id=correlation.linked_task_id,
+            in_reply_to=correlation.linked_task_id,
+            mapped=payload.mapped,
+            sha=payload.commit.sha,
+            shape=shape,
+            evidence=evidence,
+        )
+        return persist_reply(entry, payload.body, env=env)
+    except Exception as exc:
+        report_lease_trouble("reply record", exc)
+        return None, _one_line(str(exc))
+
+
+def _compose_delivery(
+    options: Options,
+    env: Mapping[str, str],
+    herdr: str,
+    plan: _RevivePlan,
+    payload: _Payload,
+    correlation: _Correlation,
+) -> _Delivery:
+    """Render the envelope, record the payload, and compose the prompt: pointer first, body last.
+
+    `status.state` is the status the payload's first token stated, mapped onto the envelope's
+    lifecycle state; a payload with no status was refused before anything rendered.
+    """
+    lane = _resolve_lane_identity(options, env, herdr, plan.target)
+    _reconcile_caller_lane(options, env, herdr, correlation, lane)
+    anchor = f"[You: {caller_anchor(lane.caller)}]"
     reply_envelope = render_envelope(
-        caller_ctx,
-        receiver=receiver or target,
+        lane.caller,
+        receiver=lane.receiver or plan.target,
         include_recovery=options.verbose,
-        ticket_id=envelope_ticket_id,
-        task_id=envelope_task_id,
-        in_reply_to=envelope_task_id,
-        tab_id=caller_ctx.tab_id,
-        state=reply_state(mapped),
+        ticket_id=correlation.envelope_ticket_id,
+        task_id=correlation.linked_task_id,
+        in_reply_to=correlation.linked_task_id,
+        tab_id=lane.caller.tab_id,
+        state=reply_state(payload.mapped),
     )
-    shape, heading = payload_shape(payload)
-    # The pointer and the index row carry the same bounded label, never the heading text.
-    evidence = evidence_label(heading)
+    shape, heading = payload_shape(payload.body)
     prelude = render_prelude(reply_envelope)
+    source = _payload_source(options, payload.body)
+    receiver_pane = lane.receiver.pane_id if lane.receiver is not None else None
     record_id: str | None = None
     if options.dry_run:
         # A dry run submits nothing, so it records nothing: the payload stays pointer-free. What it
         # DOES resolve is the task linkage, and a refused binding is a fact about the correlation
-        # the preview is about to print — silent here, the preview would show a clean
-        # `unlinked-…` id where the live send says why nothing was bound (#182 t5 2.5a). No record
-        # clause: a preview attempts no record, so it can only claim the refusal.
-        if linkage_warning:
-            print(f"herdr-reply: {linkage_warning}", file=sys.stderr)
-        delivered = f"{prelude}{payload}"
+        # the preview is about to print — silent here, the preview would show a clean `unlinked-…`
+        # id where the live send says why nothing was bound (#182 t5 2.5a). No record clause: a
+        # preview attempts no record, so it can only claim the refusal.
+        if correlation.linkage_warning:
+            print(f"herdr-reply: {correlation.linkage_warning}", file=sys.stderr)
+        delivered = f"{prelude}{payload.body}"
     else:
-        stored: dict[str, Any] | None
-        reason: str | None
-        try:
-            entry = build_reply_entry(
-                payload,
-                sender=sender,
-                caller=target,
-                ticket_id=ticket_id,
-                task_id=linked_task_id,
-                in_reply_to=linked_task_id,
-                mapped=mapped,
-                sha=commit.sha,
-                shape=shape,
-                evidence=heading,
-            )
-            stored, reason = persist_reply(entry, payload, env=env)
-        except Exception as exc:
-            report_lease_trouble("reply record", exc)
-            stored, reason = None, _one_line(str(exc))
-        if stored is not None:
-            record_id = str(stored["id"])
-        if linkage_warning:
-            # (#246 D1.5 F1) The record claim is caller-side, and emitted only after the store
-            # has answered: the resolver cannot know whether the record will be written, and the
-            # same branch records or not depending on whether the store resolves at all. Claim a
-            # record only when one was written, and say plainly when none was, so the warning
-            # never contradicts the NOT RECORDED pointer in the prompt delivered in this run.
-            # Every warning is unlinked (#246 E1.2): the explicit bindings stay silent, so the
-            # clause always states a recording outcome.
-            clause = RECORDED_CLAUSE if stored is not None else NOT_RECORDED_CLAUSE
-            print(f"herdr-reply: {linkage_warning}{clause}", file=sys.stderr)
-        if shape == "incomplete" and stored is not None:
-            # One line, naming the shape that was missing and where the record lives, so the
-            # sender can correct the payload instead of guessing (#299). The reply has already
-            # been delivered: this line reports the recording verdict and changes nothing.
-            print(
-                INCOMPLETE_STDERR.format(record=_record_path(stored, env)),
-                file=sys.stderr,
-            )
-        pointer = pointer_block(shape=shape, evidence=evidence, stored=stored, reason=reason)
+        record_id, pointer = _record_prompt(env, plan.target, payload, correlation, shape, heading)
         # The pointer rides between the envelope and the body; the body stays last.
-        delivered = f"{prelude}{pointer}\n\n{payload}" if pointer else f"{prelude}{payload}"
-    payload = delivered
+        delivered = (
+            f"{prelude}{pointer}\n\n{payload.body}" if pointer else f"{prelude}{payload.body}"
+        )
+    return _Delivery(
+        anchor=anchor,
+        receiver_pane=receiver_pane,
+        delivered=delivered,
+        source=source,
+        record_id=record_id,
+        shape=shape,
+    )
 
-    argv = [herdr, "agent", "prompt", target, payload]
+
+def _record_prompt(
+    env: Mapping[str, str],
+    target: str,
+    payload: _Payload,
+    correlation: _Correlation,
+    shape: str,
+    heading: str | None,
+) -> tuple[str | None, str | None]:
+    """Record the payload and report the recording verdict; return `(record_id, pointer)`."""
+    stored, reason = _persist_reply_record(env, target, payload, correlation, shape, heading)
+    record_id = str(stored["id"]) if stored is not None else None
+    if correlation.linkage_warning:
+        # (#246 D1.5 F1) The record claim is caller-side, and emitted only after the store has
+        # answered: the resolver cannot know whether the record will be written, and the same
+        # branch records or not depending on whether the store resolves at all. Claim a record
+        # only when one was written, and say plainly when none was, so the warning never
+        # contradicts the NOT RECORDED pointer in the prompt delivered in this run. Every warning
+        # is unlinked (#246 E1.2): the explicit bindings stay silent, so the clause always states
+        # a recording outcome.
+        clause = RECORDED_CLAUSE if stored is not None else NOT_RECORDED_CLAUSE
+        print(f"herdr-reply: {correlation.linkage_warning}{clause}", file=sys.stderr)
+    if shape == "incomplete" and stored is not None:
+        # One line, naming the shape that was missing and where the record lives, so the sender
+        # can correct the payload instead of guessing (#299). The reply has already been
+        # delivered: this line reports the recording verdict and changes nothing.
+        print(
+            INCOMPLETE_STDERR.format(record=_record_path(stored, env)),
+            file=sys.stderr,
+        )
+    # The pointer and the index row carry the same bounded label, never the heading text.
+    return record_id, pointer_block(
+        shape=shape, evidence=evidence_label(heading), stored=stored, reason=reason
+    )
+
+
+def _print_dry_run(options: Options, context: _ReplyContext, argv: list[str]) -> None:
+    """Print the delivery argv, plus the revive plan under `--json`; submit nothing."""
+    plan, delivery = context.plan, context.delivery
+    if options.json:
+        # A revive plan shows the spawn, the invariant surface, its settle, and the delivery
+        # argv; a plain plan stays the delivery argv alone.
+        if plan.argv is None:
+            print(json.dumps(argv))
+            return
+        print(
+            json.dumps(
+                {
+                    "agent_start": plan.argv,
+                    "role_invariant": plan.invariant,
+                    "settle": options.settle,
+                    "agent_prompt": argv,
+                }
+            )
+        )
+        return
+    dry_pane_str = (
+        f" ({delivery.receiver_pane})"
+        if delivery.receiver_pane and delivery.receiver_pane != plan.target
+        else ""
+    )
+    status = f"{delivery.anchor} dry-run: would reply to {plan.target}{dry_pane_str}"
+    print(
+        format_delivery_summary(status, delivery.delivered, context.payload.body, delivery.source)
+    )
+
+
+def _update_lease_and_status(herdr: str, env: Mapping[str, str], context: _ReplyContext) -> None:
+    """Record the reply's verdict in task history, then release the sender's lease.
+
+    Both delivery outcomes that count as delivered — a settled wait and a timed-out one — write
+    the same verdict before the release: the payload's own token plus the status line's commit
+    claim, so a verified sha is recorded as a sha and an unproven token only as its marker.
+    """
+    record_sender_status(
+        herdr,
+        env,
+        context.payload.mapped,
+        context.payload.commit.sha,
+        record_id=context.delivery.record_id,
+        shape=context.delivery.shape,
+        task_id=context.correlation.linked_task_id,
+        sha_marker=context.payload.commit.marker,
+    )
+    release_active_lease(herdr, env)
+
+
+def _report_delivery(
+    options: Options, env: Mapping[str, str], herdr: str, context: _ReplyContext, raw: str
+) -> None:
+    """Print herdr's raw response under `--json`, else the human delivery summary."""
+    delivery = context.delivery
+    if options.json:
+        print(raw, end="" if raw.endswith("\n") else "\n")
+        return
+    target = context.plan.target
+    size = len(delivery.delivered.encode("utf-8"))
+    state = settled_state(raw)
+    suffix = f"  state={state}" if state else ""
+    rev, pane = fetch_agent_revision(herdr, target, env)
+    shell_info = context.plan.shell_info
+    resolved_pane = pane or (shell_info.pane_id if shell_info else None)
+    pane_str = f" ({resolved_pane})" if resolved_pane and resolved_pane != target else ""
+    rev_str = f"  revision={rev}" if rev else ""
+    status = f"{delivery.anchor} replied to {target}{pane_str}  bytes={size}{rev_str}{suffix}"
+    print(
+        format_delivery_summary(status, delivery.delivered, context.payload.body, delivery.source)
+    )
+
+
+def _execute_prompt(
+    options: Options, env: Mapping[str, str], herdr: str, context: _ReplyContext
+) -> int:
+    """Build the delivery argv, honour `--dry-run`, and submit the prompt."""
+    plan, delivery = context.plan, context.delivery
+    argv = [herdr, "agent", "prompt", plan.target, delivery.delivered]
     if options.wait:
         argv.append("--wait")
     if options.timeout is not None:
@@ -1539,24 +1872,7 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
         argv += ["--timeout", str(options.timeout)]
 
     if options.dry_run:
-        if options.json:
-            # A revive plan shows the spawn, the invariant surface, its settle, and the
-            # delivery argv; a plain plan stays the delivery argv alone.
-            if revive_argv is None:
-                print(json.dumps(argv))
-            else:
-                plan: dict[str, object] = {
-                    "agent_start": revive_argv,
-                    "role_invariant": revive_invariant,
-                    "settle": options.settle,
-                    "agent_prompt": argv,
-                }
-                print(json.dumps(plan))
-        else:
-            dry_pane = receiver.pane_id if receiver is not None else None
-            dry_pane_str = f" ({dry_pane})" if dry_pane and dry_pane != target else ""
-            status = f"{anchor} dry-run: would reply to {target}{dry_pane_str}"
-            print(format_delivery_summary(status, delivered, body, source))
+        _print_dry_run(options, context, argv)
         return EXIT_OK
 
     done = run_herdr(argv, env)
@@ -1564,55 +1880,25 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
         detail = (done.stderr or done.stdout).strip() or f"exit status {done.returncode}"
         code = error_code(done.stderr)
         if code == BLOCKED_CODE:
-            print(f"herdr-reply: {target}: {detail}", file=sys.stderr)
+            print(f"herdr-reply: {plan.target}: {detail}", file=sys.stderr)
             return EXIT_BLOCKED
         if code == TIMEOUT_CODE:
-            record_sender_status(
-                herdr,
-                env,
-                mapped,
-                commit.sha,
-                record_id=record_id,
-                shape=shape,
-                task_id=linked_task_id,
-                sha_marker=commit.marker,
-            )
-            release_active_lease(herdr, env)
+            _update_lease_and_status(herdr, env, context)
             raise WaitTimeout(
-                f"reply delivered to {target} but wait timed out; caller is processing asynchronously"
+                f"reply delivered to {plan.target} but wait timed out; "
+                "caller is processing asynchronously"
             )
         if code == "agent_not_found":
-            if emit_recovery_diagnostic(herdr, env, target, recovery_file_arg(options)):
+            if emit_recovery_diagnostic(herdr, env, plan.target, recovery_file_arg(options)):
                 return EXIT_USAGE
-            diag = diagnose_agent_not_found(herdr, target, env)
+            diag = diagnose_agent_not_found(herdr, plan.target, env)
             if diag:
                 raise UsageError(diag)
-        raise HerdrError(f"herdr agent prompt {target} failed: {detail}")
+        raise HerdrError(f"herdr agent prompt {plan.target} failed: {detail}")
 
-    record_sender_status(
-        herdr,
-        env,
-        mapped,
-        commit.sha,
-        record_id=record_id,
-        shape=shape,
-        task_id=linked_task_id,
-        sha_marker=commit.marker,
-    )
-    release_active_lease(herdr, env)
+    _update_lease_and_status(herdr, env, context)
     _ = decode_response(done.stdout)
-    state = settled_state(done.stdout)
-    if options.json:
-        print(done.stdout, end="" if done.stdout.endswith("\n") else "\n")
-    else:
-        size = len(payload.encode("utf-8"))
-        suffix = f"  state={state}" if state else ""
-        rev, pane = fetch_agent_revision(herdr, target, env)
-        resolved_pane = pane or (shell_info.pane_id if shell_info else None)
-        pane_str = f" ({resolved_pane})" if resolved_pane and resolved_pane != target else ""
-        rev_str = f"  revision={rev}" if rev else ""
-        status = f"{anchor} replied to {target}{pane_str}  bytes={size}{rev_str}{suffix}"
-        print(format_delivery_summary(status, delivered, body, source))
+    _report_delivery(options, env, herdr, context, done.stdout)
     return EXIT_OK
 
 

@@ -4,12 +4,13 @@ Integration cases route through the shared stub `herdr`; payload assertions read
 recorded argv, which is what proves byte-for-byte delivery.
 """
 
+import inspect
 import json
 import os
 import re
 import shutil
 import subprocess
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, cast
 
@@ -258,6 +259,72 @@ def test_dry_run_prints_exact_argv_without_prompting(stub: StubHarness, tmp_path
     argv: list[str] = json.loads(done.stdout)
     assert argv[1:5] == ["agent", "prompt", "reviewer", METACHARS]
     assert argv[-1] == "--wait"
+    assert argv[-1] == "--wait"
+
+
+# ── the single prompt-argv seam (#372 M3) ───────────────────────────────────────────
+#
+# `build_prompt_argv` is the only place this module may assemble `["agent", "prompt", …]`.
+# A second construction site would re-decide the flag order. `herdr_cli.prompt_agent` cannot
+# substitute: it returns `AgentInfo` and discards the raw stdout that `decode_response`,
+# `settled_state`, and the `--json` passthrough need — and the stderr code that separates
+# exit 3/4 from exit 1.
+
+
+def test_the_submission_argv_is_exactly_build_prompt_argv(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path, "hi")),
+        "--wait",
+        "--until",
+        "idle",
+        "--until",
+        "done",
+        "--timeout",
+        "120000",
+        "--no-caller-context",
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (call,) = stub.prompts()
+    assert call[1:5] == ["agent", "prompt", "reviewer", "hi"]
+    assert call == herdr_prompt.build_prompt_argv(
+        call[0], "reviewer", "hi", wait=True, until=["idle", "done"], timeout=120000
+    )
+
+
+def test_the_dry_run_argv_is_exactly_build_prompt_argv(stub: StubHarness, tmp_path: Path) -> None:
+    """`--until`/`--timeout` without `--wait` is a shape this file relies on."""
+    done = stub.run(
+        "reviewer",
+        "--file",
+        str(payload_file(tmp_path, "hi")),
+        "--dry-run",
+        "--json",
+        "--until",
+        "idle",
+        "--timeout",
+        "5000",
+        "--no-caller-context",
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert stub.prompts() == []
+    argv: list[str] = json.loads(done.stdout)
+    assert argv == herdr_prompt.build_prompt_argv(
+        argv[0], "reviewer", "hi", wait=False, until=["idle"], timeout=5000
+    )
+
+
+def test_build_prompt_argv_is_the_only_prompt_argv_construction_site() -> None:
+    """A second literal would bypass the one place that orders these flags."""
+    literal = re.compile(r'"agent",\s*"prompt"')
+
+    assert len(literal.findall(SCRIPT.read_text(encoding="utf-8"))) == 1
+    assert literal.search(inspect.getsource(herdr_prompt.build_prompt_argv)) is not None
 
 
 # ── integration: outcome taxonomy ───────────────────────────────────────────────────
@@ -299,6 +366,85 @@ def test_other_herdr_error_exits_herdr(stub: StubHarness, tmp_path: Path) -> Non
     assert done.returncode == herdr_cli.EXIT_HERDR
     assert "not found" in done.stderr
     assert "Traceback" not in done.stderr
+
+
+# ── prompt_one: four failure classifications and the --json passthrough (#372 M1) ───
+#
+# Characterization pins for the submission body: herdr's answer becomes a `Dispatch`
+# (blocked / wait timeout) or a typed refusal, and these must not move while `prompt_one` is
+# split into smaller functions. The not-found case needs a race to be reachable: the target
+# passed the gate as an agent, then its pane became a shell.
+
+
+def _submit_once(stub: StubHarness, target: str = "reviewer") -> herdr_prompt.Dispatch:
+    options = herdr_prompt.Options(targets=[target], no_caller_context=True)
+    return herdr_prompt.prompt_one(
+        str(stub.herdr),
+        target,
+        "hi",
+        options,
+        stub.base_env(),
+        body="hi",
+        source="Payload: stdin (2 bytes)",
+        caller_ref="",
+    )
+
+
+def test_a_blocked_rejection_returns_a_blocked_dispatch(
+    stub: StubHarness, capsys: pytest.CaptureFixture[str]
+) -> None:
+    stub.write_state(
+        {
+            **DEFAULT_STATE,
+            "prompt_error": {"code": "agent_blocked", "message": "agent reviewer is blocked"},
+        }
+    )
+
+    dispatch = _submit_once(stub)
+
+    assert dispatch == herdr_prompt.Dispatch("reviewer", blocked=True)
+    assert "agent reviewer is blocked" in capsys.readouterr().err
+
+
+def test_a_wait_timeout_returns_a_timeout_dispatch(stub: StubHarness) -> None:
+    stub.write_state(
+        {**DEFAULT_STATE, "prompt_error": {"code": "timeout", "message": "wait timed out"}}
+    )
+
+    assert _submit_once(stub) == herdr_prompt.Dispatch("reviewer", wait_timed_out=True)
+
+
+def test_any_other_failure_is_a_herdr_error(stub: StubHarness) -> None:
+    stub.write_state(
+        {
+            **DEFAULT_STATE,
+            "prompt_error": {"code": "daemon_unreachable", "message": "daemon unreachable"},
+        }
+    )
+
+    with pytest.raises(herdr_prompt.HerdrError, match="herdr agent prompt reviewer failed"):
+        _ = _submit_once(stub)
+
+
+def test_agent_not_found_over_a_shell_pane_is_a_usage_error(stub: StubHarness) -> None:
+    stub.write_state(
+        {**DEFAULT_STATE, "prompt_error": {"code": "agent_not_found", "message": "not found"}}
+    )
+
+    with pytest.raises(herdr_prompt.UsageError, match="no live agent"):
+        _ = _submit_once(stub, target="w9:p2")
+
+
+def test_json_passthrough_prints_only_the_raw_response(stub: StubHarness, tmp_path: Path) -> None:
+    """The `--json` branch is a passthrough: no status line and no delivery summary."""
+    done = stub.run(
+        "reviewer", "--file", str(payload_file(tmp_path, "hi")), "--json", "--no-caller-context"
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert json.loads(done.stdout)["id"] == "cli:agent:prompt"
+    assert "prompted reviewer" not in done.stdout
+    assert done.stdout.endswith("\n") and not done.stdout.endswith("\n\n")
 
 
 # ── integration: --label resolves what a person reads off the pane ──────────────────
@@ -397,6 +543,100 @@ def test_a_missing_target_is_rejected_before_reading_the_payload(stub: StubHarne
     assert done.returncode == herdr_cli.EXIT_USAGE
     assert "pass TARGET" in done.stderr
     assert stub.prompts() == []
+
+
+# ── typed target verdicts: shell refusal (exit 2), daemon failure (exit 1) ───────────
+#
+# `resolve_targets` is the one gate a send passes. `herdr-dispatch` keys its auto-start
+# remedy on the exception *type*, not on prose: a verified shell raises `BareShellRefusal`
+# and a daemon that cannot answer raises `HerdrError`. The `--label` branch is pinned as it
+# behaves today, including where it fails open (see Issues).
+
+
+def _fail_agent_list(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make only `herdr agent list` unreachable; every other verb still reaches the stub."""
+    real = herdr_cli.run_herdr
+
+    def fake(argv: Sequence[str], env: Mapping[str, str]) -> subprocess.CompletedProcess[str]:
+        if list(argv)[1:3] == ["agent", "list"]:
+            return subprocess.CompletedProcess(list(argv), 1, "", '{"error":"daemon unreachable"}')
+        return real(argv, env)
+
+    monkeypatch.setattr(herdr_cli, "run_herdr", fake)
+
+
+def test_a_bare_shell_target_raises_the_typed_refusal(stub: StubHarness) -> None:
+    stub.write_state(DEFAULT_STATE)
+    options = herdr_prompt.Options(targets=["w9:p2"])
+
+    with pytest.raises(herdr_prompt.BareShellRefusal, match="no live agent"):
+        _ = herdr_prompt.resolve_targets(options, str(stub.herdr), stub.base_env())
+
+
+def test_an_unreadable_daemon_raises_herdr_error_not_a_shell_refusal(
+    stub: StubHarness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stub.write_state(DEFAULT_STATE)
+    _fail_agent_list(monkeypatch)
+    options = herdr_prompt.Options(targets=["reviewer"])
+
+    with pytest.raises(
+        herdr_prompt.HerdrError, match="could not verify target 'reviewer'"
+    ) as refused:
+        _ = herdr_prompt.resolve_targets(options, str(stub.herdr), stub.base_env())
+
+    assert not isinstance(refused.value, herdr_prompt.BareShellRefusal)
+
+
+def test_a_label_over_a_bare_shell_pane_refuses_as_a_plain_usage_error(
+    stub: StubHarness,
+) -> None:
+    """Exit 2 holds, but the label branch loses the typed refusal (see Issues)."""
+    stub.write_state(DEFAULT_STATE)
+    options = herdr_prompt.Options(label="scratch pad")
+
+    with pytest.raises(herdr_prompt.UsageError, match="no live agent") as refused:
+        _ = herdr_prompt.resolve_targets(options, str(stub.herdr), stub.base_env())
+
+    assert not isinstance(refused.value, herdr_prompt.BareShellRefusal)
+
+
+def test_a_label_over_a_bare_shell_pane_reaches_the_submission_when_agent_list_fails(
+    stub: StubHarness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """FAIL-OPEN today: pane list answers, agent list does not, so nothing verifies the pane."""
+    _fail_agent_list(monkeypatch)
+
+    done = stub.run(
+        "--label",
+        "scratch pad",
+        "--file",
+        str(payload_file(tmp_path, "hi")),
+        "--no-caller-context",
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert [call[3] for call in stub.prompts()] == ["w9:p2"]
+
+
+def test_an_unreadable_agent_get_at_the_readiness_gate_refuses_as_a_usage_error(
+    stub: StubHarness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Today's taxonomy: the readiness gate fails soft, so this refusal is exit 2, not exit 1."""
+    monkeypatch.setattr(herdr_prompt, "_sleep", _sleep_recorder()[1])
+    stub.write_state({**DEFAULT_STATE, "agent_get_error": {"code": "daemon_unreachable"}})
+
+    code = herdr_prompt.main(
+        ["reviewer", "--file", str(payload_file(tmp_path, "hi")), "--no-caller-context"],
+        env=stub.base_env(),
+    )
+
+    assert code == herdr_cli.EXIT_USAGE
+    assert stub.prompts() == []
+    assert "did not settle for prompt delivery" in capsys.readouterr().err
 
 
 # ── metadata: PEP 723 conformance ────────────────────────────────────────────────────

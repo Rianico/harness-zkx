@@ -2187,6 +2187,48 @@ def test_reply_maps_blocked_and_rejected_statuses(
     assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
 
 
+def test_a_blocked_prompt_exits_three_and_touches_no_task_state(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """`agent_blocked` is exit 3: a human must answer, so no event is recorded and no lease moves."""
+    task_id = lease_in_anchor(tmp_path)
+
+    done = stub.run(
+        "orchestrator",
+        "COMPLETED\n\n## Evidence\n- 1 passed\n",
+        env={"HERDR_LANE_DIR": str(tmp_path)},
+        state={**DEFAULT_STATE, "prompt_error": "agent_blocked"},
+    )
+
+    assert done.returncode == herdr_cli.EXIT_BLOCKED, (done.stdout, done.stderr)
+    assert "orchestrator" in done.stderr
+    assert len(stub.prompts()) == 1
+    assert completed_events(tmp_path, task_id) == []
+    assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is not None
+
+
+def test_a_timed_out_wait_exits_four_after_recording_and_releasing(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """`timeout` is exit 4: the prompt was delivered, so the verdict is recorded and the lease released."""
+    task_id = lease_in_anchor(tmp_path)
+
+    done = stub.run(
+        "orchestrator",
+        "COMPLETED\n\n## Evidence\n- 1 passed\n",
+        "--wait",
+        "--timeout",
+        "15000",
+        env={"HERDR_LANE_DIR": str(tmp_path)},
+        state={**DEFAULT_STATE, "prompt_error": "timeout"},
+    )
+
+    assert done.returncode == herdr_reply.EXIT_WAIT_TIMEOUT, (done.stdout, done.stderr)
+    assert "wait timed out" in done.stderr
+    assert len(completed_events(tmp_path, task_id)) == 1
+    assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
+
+
 def test_reply_emits_recovery_diagnostic_for_exited_target(
     stub: StubHarness, tmp_path: Path
 ) -> None:
@@ -2278,6 +2320,58 @@ def test_reply_without_recovery_keeps_existing_shell_diagnostic(
     assert done.returncode == herdr_cli.EXIT_USAGE
     assert "no live agent" in done.stderr
     assert "has exited" not in done.stderr
+    assert stub.prompts() == []
+
+
+def test_a_bare_shell_caller_refusal_is_typed_and_exits_two(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Without `--auto-start` a bare-shell caller is refused, typed so a remedy can hook it.
+
+    The exception type is the contract `herdr_dispatch`'s auto-start hook keys on; the message
+    stays `format_shell_pane_diagnostic`'s, and the exit status stays 2.
+    """
+    state = _shell_target_state()
+
+    done = stub.run("lens-orchestrator", "COMPLETED", env={"PWD": str(tmp_path)}, state=state)
+
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "matches pane wM:p1N" in done.stderr
+    assert "no live agent is running in this pane" in done.stderr
+    assert stub.prompts() == []
+
+    stub.write_state(state)
+    options = herdr_reply.Options(target="lens-orchestrator", message="COMPLETED", settle=0)
+    with pytest.raises(herdr_cli.BareShellRefusal) as refusal:
+        _ = herdr_reply.reply_caller(options, stub.base_env())
+    assert isinstance(refusal.value, herdr_cli.BareShellRefusal)
+    assert str(refusal.value) in done.stderr
+
+
+def test_the_recovery_hint_returns_two_before_the_shell_diagnostic(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """A stored recovery block is the whole answer: exit 2 with the hint, never the shell prose."""
+    _ = herdr_lease.acquire_lease(
+        "reviewer",
+        "183_tasks_yaml_and_preflight_impl.md",
+        "orchestrator",
+        base_dir=tmp_path,
+        ticket_id="#183",
+        task_id="#183#recovery-returns",
+        caller_recovery=RECOVERY,
+    )
+
+    done = stub.run(
+        "lens-orchestrator",
+        "COMPLETED",
+        env={"PWD": str(tmp_path)},
+        state=_shell_target_state(),
+    )
+
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "Suggested recovery" in done.stderr
+    assert "no live agent" not in done.stderr
     assert stub.prompts() == []
 
 
@@ -4600,3 +4694,39 @@ def test_an_unverifiable_status_line_token_is_never_recorded_as_a_commit(
     assert len(events) == 1
     assert "sha" not in events[0], "an unverified token is never recorded as a commit"
     assert events[0]["note"] == "completed unverified=deadbeef"
+
+
+def test_an_unresolvable_lane_anchor_is_unverifiable_and_never_probes_the_cwd(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`cwd=None` means the probe cannot answer, so the token is unverified and `Path.cwd()` is never read.
+
+    The lane anchor is the only directory a status-line claim may be checked against. Handing the
+    guard the process's own working directory gave one payload two verdicts, one per invocation
+    directory; an unanswerable probe reports the token unchecked instead.
+    """
+
+    probed: list[Path] = []
+    ambient_cwd = Path.cwd
+
+    def recording_cwd() -> Path:
+        probed.append(ambient_cwd())
+        return ambient_cwd()
+
+    monkeypatch.setattr(Path, "cwd", recording_cwd)
+    commit = herdr_reply.verify_status_line_commit(
+        "completed",
+        "deadbeef",
+        payload_path="reply.md",
+        cwd=None,
+        env={},
+        waived=(),
+    )
+
+    assert commit.sha is None
+    assert probed == [], "an unresolvable lane anchor never falls back to the ambient cwd"
+    assert commit.marker == "unverified=deadbeef"
+    stderr = capsys.readouterr().err
+    assert "SHA guard skipped" in stderr
+    assert "reply.md" in stderr
+    assert "deadbeef" in stderr

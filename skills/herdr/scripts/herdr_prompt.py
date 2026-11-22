@@ -51,6 +51,7 @@ import argparse
 import json
 import math
 import re
+import subprocess
 import sys
 import time
 from collections.abc import Mapping, Sequence
@@ -99,6 +100,7 @@ from herdr_cli import (
     entry_optional_text,
     entrypoint,
     error_code,
+    failure_detail,
     fetch_inventory,
     find_herdr,
     read_payload_stream,
@@ -1149,6 +1151,132 @@ class Dispatch:
     blocked: bool = False
 
 
+def _print_dry_run(
+    argv: Sequence[str],
+    target: str,
+    payload: str,
+    options: Options,
+    *,
+    anchor: str,
+    pane_hint: str | None,
+    body: str,
+    source: str,
+) -> None:
+    """Report a `--dry-run` without sending: the exact argv, or the trimmed summary."""
+    if options.json:
+        print(json.dumps(list(argv)))
+        return
+    dry_pane_str = f" ({pane_hint})" if pane_hint and pane_hint != target else ""
+    status = f"{anchor}dry-run: would prompt {target}{dry_pane_str}"
+    print(format_delivery_summary(status, payload, body, source))
+
+
+def _prompt_failure(
+    done: subprocess.CompletedProcess[str],
+    herdr: str,
+    target: str,
+    env: Mapping[str, str],
+) -> Dispatch:
+    """Map a failed submission onto exit 3, exit 4, or a typed refusal (never a silent pass)."""
+    detail = failure_detail(done)
+    code = error_code(done.stderr)
+    if code == BLOCKED_CODE:
+        print(f"herdr-prompt: {target}: {detail}", file=sys.stderr)
+        return Dispatch(target, blocked=True)
+    if code == TIMEOUT_CODE:
+        # Not a dispatch failure: the prompt was accepted and the agent is
+        # working; only the wait ran out. Reported as exit 4, never exit 1.
+        return Dispatch(target, wait_timed_out=True)
+    if code == "agent_not_found":
+        diag = diagnose_agent_not_found(herdr, target, env)
+        if diag:
+            raise UsageError(diag)
+    raise HerdrError(f"herdr agent prompt {target} failed: {detail}")
+
+
+def _warn_unconfirmed_acceptance(herdr: str, target: str, env: Mapping[str, str]) -> None:
+    """Report an unconfirmed `--no-wait` handshake; never re-send to "confirm" (see #193)."""
+    _, last_status, _ = agent_readiness(herdr, target, env)
+    kind = resolve_agent_kinds(herdr, [target], env)[target]
+    if revision_can_move(kind):
+        remedy = "check with herdr-wait before resubmitting"
+    else:
+        # A revision-0 kind (#238): its revision never moves, so a wanted state is
+        # unsatisfiable and re-reading the state feed can confirm nothing. Name the
+        # signal that is trustworthy there instead of the one that structurally cannot be.
+        # Which signal that is comes from the kind's own contract, never from a constant.
+        remedy = (
+            f"confirm through {revision_static_surface(kind)}, which is trustworthy "
+            "where the raw state feed is not, and await the reply callback; a state "
+            "re-check cannot confirm delivery for this kind"
+        )
+    print(
+        f"herdr-prompt: warning: acceptance was not confirmed within "
+        f"{_format_seconds(HANDSHAKE_TIMEOUT_SECONDS)}s for {target} "
+        f"(last status={last_status or 'unknown'}, revision unchanged); the CLI accepted "
+        f"the payload — {remedy}",
+        file=sys.stderr,
+    )
+
+
+def _print_prompted(
+    done: subprocess.CompletedProcess[str],
+    target: str,
+    payload: str,
+    options: Options,
+    *,
+    state: str | None,
+    pane: str | None,
+    revision: str | None,
+    anchor: str,
+    body: str,
+    source: str,
+) -> None:
+    """Report a delivered prompt: herdr's raw response (`--json`) or the trimmed summary."""
+    if options.json:
+        print(done.stdout, end="" if done.stdout.endswith("\n") else "\n")
+        return
+    size = len(payload.encode("utf-8"))
+    suffix = f"  state={state}" if state else ""
+    pane_str = f" ({pane})" if pane and pane != target else ""
+    rev_str = f"  revision={revision}" if revision else ""
+    status = f"{anchor}prompted {target}{pane_str}  bytes={size}{rev_str}{suffix}"
+    print(format_delivery_summary(status, payload, body, source))
+
+
+def _finish_delivery(
+    done: subprocess.CompletedProcess[str],
+    herdr: str,
+    target: str,
+    payload: str,
+    options: Options,
+    env: Mapping[str, str],
+    *,
+    anchor: str,
+    body: str,
+    source: str,
+) -> Dispatch:
+    """Read the post-send revision, report the acceptance, and build the per-target outcome."""
+    post_rev, pane = (
+        fetch_agent_revision(herdr, target, env) if not options.no_caller_context else (None, None)
+    )
+    _ = decode_response(done.stdout)
+    state = settled_state(done.stdout)
+    _print_prompted(
+        done,
+        target,
+        payload,
+        options,
+        state=state,
+        pane=pane,
+        revision=post_rev,
+        anchor=anchor,
+        body=body,
+        source=source,
+    )
+    return Dispatch(target, state=state, blocked=state == BLOCKED)
+
+
 def prompt_one(
     herdr: str,
     target: str,
@@ -1177,82 +1305,37 @@ def prompt_one(
         until=options.until,
         timeout=options.timeout,
     )
-    dry_pane_str = f" ({pane_hint})" if pane_hint and pane_hint != target else ""
     anchor = f"[You: {caller_ref}] " if caller_ref else ""
     if options.dry_run:
-        if options.json:
-            print(json.dumps(argv))
-        else:
-            status = f"{anchor}dry-run: would prompt {target}{dry_pane_str}"
-            print(format_delivery_summary(status, payload, body, source))
+        _print_dry_run(
+            argv,
+            target,
+            payload,
+            options,
+            anchor=anchor,
+            pane_hint=pane_hint,
+            body=body,
+            source=source,
+        )
         return Dispatch(target)
 
     _ = wait_for_ready(herdr, target, env, skip_screen_check=options.skip_screen_check)
 
-    pre_revision: str | None = None
-    if options.no_wait:
-        pre_revision, _ = fetch_agent_revision(herdr, target, env)
+    pre_revision = fetch_agent_revision(herdr, target, env)[0] if options.no_wait else None
 
     done = run_herdr(argv, env)
     if done.returncode != 0:
-        detail = (done.stderr or done.stdout).strip() or f"exit status {done.returncode}"
-        code = error_code(done.stderr)
-        if code == BLOCKED_CODE:
-            print(f"herdr-prompt: {target}: {detail}", file=sys.stderr)
-            return Dispatch(target, blocked=True)
-        if code == TIMEOUT_CODE:
-            # Not a dispatch failure: the prompt was accepted and the agent is
-            # working; only the wait ran out. Reported as exit 4, never exit 1.
-            return Dispatch(target, wait_timed_out=True)
-        if code == "agent_not_found":
-            diag = diagnose_agent_not_found(herdr, target, env)
-            if diag:
-                raise UsageError(diag)
-        raise HerdrError(f"herdr agent prompt {target} failed: {detail}")
+        return _prompt_failure(done, herdr, target, env)
 
+    # Exit 0 from `herdr agent prompt` confirms acceptance; the handshake only reports it.
+    # Failing here, or re-sending to "confirm", both re-created #193: a delivered prompt
+    # reported as dropped, and a duplicate injection.
     if options.no_wait and not verify_prompt_accepted(herdr, target, env, pre_revision):
-        # Exit 0 from `herdr agent prompt` confirms acceptance; this observation only reports
-        # it. Failing here, or re-sending to "confirm", both re-created #193: a delivered
-        # prompt reported as dropped, and a duplicate injection.
-        _, last_status, _ = agent_readiness(herdr, target, env)
-        kind = resolve_agent_kinds(herdr, [target], env)[target]
-        if revision_can_move(kind):
-            remedy = "check with herdr-wait before resubmitting"
-        else:
-            # A revision-0 kind (#238): its revision never moves, so a wanted state is
-            # unsatisfiable and re-reading the state feed can confirm nothing. Name the
-            # signal that is trustworthy there instead of the one that structurally cannot be.
-            # Which signal that is comes from the kind's own contract, never from a constant.
-            remedy = (
-                f"confirm through {revision_static_surface(kind)}, which is trustworthy "
-                "where the raw state feed is not, and await the reply callback; a state "
-                "re-check cannot confirm delivery for this kind"
-            )
-        print(
-            f"herdr-prompt: warning: acceptance was not confirmed within "
-            f"{_format_seconds(HANDSHAKE_TIMEOUT_SECONDS)}s for {target} "
-            f"(last status={last_status or 'unknown'}, revision unchanged); the CLI accepted "
-            f"the payload — {remedy}",
-            file=sys.stderr,
-        )
+        _warn_unconfirmed_acceptance(herdr, target, env)
 
-    post_rev, post_pane = (
-        fetch_agent_revision(herdr, target, env) if not options.no_caller_context else (None, None)
+    return _finish_delivery(
+        done, herdr, target, payload, options, env, anchor=anchor, body=body, source=source
     )
-    pane = post_pane
-
-    _ = decode_response(done.stdout)
-    state = settled_state(done.stdout)
-    if options.json:
-        print(done.stdout, end="" if done.stdout.endswith("\n") else "\n")
-    else:
-        size = len(payload.encode("utf-8"))
-        suffix = f"  state={state}" if state else ""
-        pane_str = f" ({pane})" if pane and pane != target else ""
-        rev_str = f"  revision={post_rev}" if post_rev else ""
-        status = f"{anchor}prompted {target}{pane_str}  bytes={size}{rev_str}{suffix}"
-        print(format_delivery_summary(status, payload, body, source))
-    return Dispatch(target, state=state, blocked=state == BLOCKED)
 
 
 def prompt_agents(options: Options, env: Mapping[str, str]) -> int:
