@@ -51,12 +51,15 @@ Local addition to the absorbed upstream Herdr skill; not part of `herdrdev/herdr
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import json
 import os
 import sys
 import tempfile
-from collections.abc import Callable, Mapping, Sequence
+import threading
+from collections.abc import Callable, Generator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -408,10 +411,112 @@ def _write_state(
     base_dir: Path | str | None = None,
     env: Mapping[str, str] | None = None,
 ) -> None:
-    """Persist `state` to the canonical tasks file, atomically."""
+    """Persist `state` to the canonical tasks file, atomically.
+
+    The write replaces the whole document, so a caller that loaded it first holds
+    `locked_tasks_state` for the load-mutate-write span; this function itself only
+    replaces the file.
+    """
     herdr_cli.atomic_write_yaml(
         resolve_tasks_file(base_dir, env=env), state, default_flow_style=False
     )
+
+
+# ── the writer lock: the tasks store is one whole-file read-modify-write ─────────────
+# Every writer loads the mapping, mutates one row, and replaces the whole document under a
+# single `os.replace`. Two writers that overlap therefore lose one of the two mutations in
+# silence (#369) — a lost lease reads as a free worker. So writers serialize on an exclusive
+# advisory `flock` held for exactly the load-mutate-write span, and readers never take it:
+# the file is replaced atomically, so every read is already a whole document.
+#
+# An `flock` belongs to the open file description, not to the process or the thread, which
+# decides the shape of the nesting rule below: a second descriptor for the same file blocks
+# on the descriptor this thread already holds, so a nested write (`transition` resolves its
+# target under the lock and then calls `record_event`, which locks the same store again)
+# would deadlock on itself. One re-entrant mutex per resolved lock path serializes threads of
+# this process; a per-thread depth counter makes a nested entry a no-op; and the outermost
+# `with` owns the only descriptor, so `flock` runs once and is released once.
+
+
+class _LockDepth(threading.local):
+    """This thread's nesting depth per resolved lock path."""
+
+    def __init__(self) -> None:
+        self.depths: dict[str, int] = {}
+
+
+_lock_depth = _LockDepth()
+_path_guards: dict[str, threading.RLock] = {}
+_path_guards_lock = threading.Lock()
+
+
+def _path_guard(key: str) -> threading.RLock:
+    """The one re-entrant mutex for `key`; the threads of this process queue on it."""
+    with _path_guards_lock:
+        guard = _path_guards.get(key)
+        if guard is None:
+            guard = threading.RLock()
+            _path_guards[key] = guard
+        return guard
+
+
+@contextmanager
+def _flocked(lock_path: Path) -> Generator[None]:
+    """Hold the exclusive advisory lock on `lock_path`; every exit path releases it."""
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(descriptor)
+
+
+@contextmanager
+def locked_tasks_state(
+    base_dir: Path | str | None = None,
+    env: Mapping[str, str] | None = None,
+) -> Generator[Path]:
+    """Hold the writer lock on the resolved tasks store, yielding that file's path.
+
+    The lock file is the resolved write target plus `.lock` (`<base>/.lane/tasks.yaml.lock`),
+    so every writer that resolves one base contends on one inode. Exclusive and blocking: the
+    caller's load-mutate-write span is serialized against other processes and other threads. It
+    is advisory and cooperative — a writer that never enters here is not held back — and readers
+    stay outside it on purpose (`get_lease`, `get_task`, `list_active_leases`, `list_tasks`),
+    because `_write_state` replaces the file atomically and a dispatcher polling for work must
+    never wait on a writer.
+
+    Nesting is re-entrant for the same thread and lock path: the depth counter makes the inner
+    entry a no-op and the outer `with` owns the descriptor, so `transition` -> `record_event`
+    cannot block on the lock it already holds. Two threads of one process serialize through the
+    per-path mutex, and a different lock path nests as a separate lock. The key is the resolved
+    path string, so a nested entry spelled differently for one physical store — a case variant
+    of a case-insensitive volume, the split #229 documents — would take a second descriptor for
+    the same inode and wait; no write path does that, because each hands its own resolved base
+    down the chain. Every exit path — normal, exception, cancellation — releases it, because
+    the descriptor is closed in a `finally`.
+    """
+    tasks_file = resolve_tasks_file(base_dir, env=env)
+    lock_path = tasks_file.with_name(f"{tasks_file.name}.lock")
+    key = str(lock_path)
+    depths = _lock_depth.depths
+    guard = _path_guard(key)
+    if depths.get(key, 0):
+        with guard:
+            depths[key] += 1
+            try:
+                yield tasks_file
+            finally:
+                depths[key] -= 1
+        return
+    with guard:
+        depths[key] = 1
+        try:
+            with _flocked(lock_path):
+                yield tasks_file
+        finally:
+            del depths[key]
 
 
 def get_lease(
@@ -477,88 +582,89 @@ def acquire_lease(
     the live anchors.
     """
     store = resolve_base_dir(base_dir, env=env)
-    state = _load_state(_state_read_path_in(store))
-    leases = state["active_leases"]
+    with locked_tasks_state(base_dir=store):
+        state = _load_state(_state_read_path_in(store))
+        leases = state["active_leases"]
 
-    keys_to_remove = [
-        key
-        for key, value in leases.items()
-        if key != target
-        and (
-            value.get("target") == target
-            or (pane_id is not None and value.get("pane_id") == pane_id)
-        )
-    ]
-    for key in keys_to_remove:
-        del leases[key]
+        keys_to_remove = [
+            key
+            for key, value in leases.items()
+            if key != target
+            and (
+                value.get("target") == target
+                or (pane_id is not None and value.get("pane_id") == pane_id)
+            )
+        ]
+        for key in keys_to_remove:
+            del leases[key]
 
-    now = _now_iso()
-    lease: dict[str, Any] = {
-        "target": target,
-        "ticket": ticket_path,
-        "caller": caller,
-        "store": str(store),
-        "timestamp": now,
-        "acquired_at": now,
-    }
-    if pane_id:
-        lease["pane_id"] = pane_id
-    if tab_id:
-        lease["tab_id"] = tab_id
-    if context_id:
-        lease["context_id"] = context_id
-    if ticket_id is not None:
-        lease["ticket_id"] = ticket_id
-    if task_id is not None:
-        lease["task_id"] = task_id
-    if task_group:
-        lease["task_group"] = task_group
-    leases[target] = lease
-
-    if task_id is not None:
-        tasks = state["tasks"]
-        task = tasks.get(task_id)
-        previous_status = task.get("status") if isinstance(task, dict) else None
-        if not isinstance(task, dict):
-            task = {}
-            tasks[task_id] = task
-        task["ticket_id"] = ticket_id
-        task["task_id"] = task_id
-        task["ticket_path"] = ticket_path
-        if task_group:
-            task["task_group"] = task_group
-        task["status"] = STATE_SUBMITTED
-        task["assignee"] = target
-        task["caller"] = caller
+        now = _now_iso()
+        lease: dict[str, Any] = {
+            "target": target,
+            "ticket": ticket_path,
+            "caller": caller,
+            "store": str(store),
+            "timestamp": now,
+            "acquired_at": now,
+        }
         if pane_id:
-            task["pane_id"] = pane_id
+            lease["pane_id"] = pane_id
         if tab_id:
-            task["tab_id"] = tab_id
+            lease["tab_id"] = tab_id
         if context_id:
-            task["context_id"] = context_id
-        if caller_recovery is not None:
-            filtered = {key: value for key, value in dict(caller_recovery).items() if value}
-            if filtered:
-                task["caller_recovery"] = filtered
-        trajectory = task.get("trajectory")
-        if not isinstance(trajectory, list):
-            trajectory = []
-            task["trajectory"] = trajectory
-        trajectory.append(
-            {
-                "seq": len(trajectory) + 1,
-                "timestamp": now,
-                "event": "dispatched",
-                "actor": caller,
-                "role": role or caller,
-                "from_status": _status_for_write(previous_status) or STATE_SUBMITTED,
-                "to_status": STATE_SUBMITTED,
-                "note": "Dispatched ticket via herdr-dispatch",
-            }
-        )
+            lease["context_id"] = context_id
+        if ticket_id is not None:
+            lease["ticket_id"] = ticket_id
+        if task_id is not None:
+            lease["task_id"] = task_id
+        if task_group:
+            lease["task_group"] = task_group
+        leases[target] = lease
 
-    _write_state(state, base_dir=store)
-    return lease
+        if task_id is not None:
+            tasks = state["tasks"]
+            task = tasks.get(task_id)
+            previous_status = task.get("status") if isinstance(task, dict) else None
+            if not isinstance(task, dict):
+                task = {}
+                tasks[task_id] = task
+            task["ticket_id"] = ticket_id
+            task["task_id"] = task_id
+            task["ticket_path"] = ticket_path
+            if task_group:
+                task["task_group"] = task_group
+            task["status"] = STATE_SUBMITTED
+            task["assignee"] = target
+            task["caller"] = caller
+            if pane_id:
+                task["pane_id"] = pane_id
+            if tab_id:
+                task["tab_id"] = tab_id
+            if context_id:
+                task["context_id"] = context_id
+            if caller_recovery is not None:
+                filtered = {key: value for key, value in dict(caller_recovery).items() if value}
+                if filtered:
+                    task["caller_recovery"] = filtered
+            trajectory = task.get("trajectory")
+            if not isinstance(trajectory, list):
+                trajectory = []
+                task["trajectory"] = trajectory
+            trajectory.append(
+                {
+                    "seq": len(trajectory) + 1,
+                    "timestamp": now,
+                    "event": "dispatched",
+                    "actor": caller,
+                    "role": role or caller,
+                    "from_status": _status_for_write(previous_status) or STATE_SUBMITTED,
+                    "to_status": STATE_SUBMITTED,
+                    "note": "Dispatched ticket via herdr-dispatch",
+                }
+            )
+
+        _write_state(state, base_dir=store)
+        return lease
 
 
 def _same_store(recorded: str, store: Path) -> bool:
@@ -613,31 +719,32 @@ def release_lease(
     into the store the lease names.
     """
     store = resolve_base_dir(base_dir, env=env)
-    state = _load_state(_state_read_path_in(store))
-    leases = state["active_leases"]
-    keys_to_delete = [
-        key
-        for key, lease in leases.items()
-        if key == target or lease.get("target") == target or lease.get("pane_id") == target
-    ]
-    if not keys_to_delete:
-        return False
-    foreign: set[str] = set()
-    for key in keys_to_delete:
-        conflicting = _conflicting_store(leases[key].get("store"), store)
-        if conflicting is not None:
-            foreign.add(conflicting)
-    if foreign:
-        print(
-            f"herdr-lease: lease {target!r} was written to store {', '.join(sorted(foreign))} "
-            f"but this release resolved {store}; refusing to relocate the write, nothing released",
-            file=sys.stderr,
-        )
-        return False
-    for key in keys_to_delete:
-        del leases[key]
-    _write_state(state, base_dir=store)
-    return True
+    with locked_tasks_state(base_dir=store):
+        state = _load_state(_state_read_path_in(store))
+        leases = state["active_leases"]
+        keys_to_delete = [
+            key
+            for key, lease in leases.items()
+            if key == target or lease.get("target") == target or lease.get("pane_id") == target
+        ]
+        if not keys_to_delete:
+            return False
+        foreign: set[str] = set()
+        for key in keys_to_delete:
+            conflicting = _conflicting_store(leases[key].get("store"), store)
+            if conflicting is not None:
+                foreign.add(conflicting)
+        if foreign:
+            print(
+                f"herdr-lease: lease {target!r} was written to store {', '.join(sorted(foreign))} "
+                f"but this release resolved {store}; refusing to relocate the write, nothing released",
+                file=sys.stderr,
+            )
+            return False
+        for key in keys_to_delete:
+            del leases[key]
+        _write_state(state, base_dir=store)
+        return True
 
 
 def get_task(
@@ -1066,44 +1173,45 @@ def record_event(
             f"unknown status {to_status!r}; expected one of {', '.join(CANONICAL_STATUSES)} "
             f"(historical spellings {', '.join(HISTORICAL_STATUSES)} are also accepted)"
         )
-    state = _load_state(resolve_state_read_path(base_dir, env=env))
-    task = state["tasks"].get(task_id)
-    if not isinstance(task, dict):
-        return None
+    with locked_tasks_state(base_dir=base_dir, env=env):
+        state = _load_state(resolve_state_read_path(base_dir, env=env))
+        task = state["tasks"].get(task_id)
+        if not isinstance(task, dict):
+            return None
 
-    trajectory = task.get("trajectory")
-    if not isinstance(trajectory, list):
-        trajectory = []
-        task["trajectory"] = trajectory
+        trajectory = task.get("trajectory")
+        if not isinstance(trajectory, list):
+            trajectory = []
+            task["trajectory"] = trajectory
 
-    written_status = requested
-    from_status = _status_for_write(task.get("status"))
-    if written_status == WORKING_STATUS and _needs_delivered_mark(task, trajectory):
-        task["delivered"] = {
-            "event": DELIVERED_EVENT,
-            "task_id": task_id,
-            "ticket_id": task.get("ticket_id"),
+        written_status = requested
+        from_status = _status_for_write(task.get("status"))
+        if written_status == WORKING_STATUS and _needs_delivered_mark(task, trajectory):
+            task["delivered"] = {
+                "event": DELIVERED_EVENT,
+                "task_id": task_id,
+                "ticket_id": task.get("ticket_id"),
+                "timestamp": _now_iso(),
+                "actor": actor,
+            }
+        entry: dict[str, Any] = {
+            "seq": len(trajectory) + 1,
             "timestamp": _now_iso(),
+            "event": event or to_status,
             "actor": actor,
+            "role": role or actor,
+            "from_status": from_status,
+            "to_status": written_status,
         }
-    entry: dict[str, Any] = {
-        "seq": len(trajectory) + 1,
-        "timestamp": _now_iso(),
-        "event": event or to_status,
-        "actor": actor,
-        "role": role or actor,
-        "from_status": from_status,
-        "to_status": written_status,
-    }
-    if note is not None:
-        entry["note"] = note
-    if sha is not None:
-        entry["sha"] = sha
-    trajectory.append(entry)
-    task["status"] = written_status
+        if note is not None:
+            entry["note"] = note
+        if sha is not None:
+            entry["sha"] = sha
+        trajectory.append(entry)
+        task["status"] = written_status
 
-    _write_state(state, base_dir=base_dir, env=env)
-    return task
+        _write_state(state, base_dir=base_dir, env=env)
+        return task
 
 
 def transition(
@@ -1129,45 +1237,46 @@ def transition(
         )
     status = requested
 
-    state = _load_state(resolve_state_read_path(base_dir, env=env))
-    tasks = state["tasks"]
+    with locked_tasks_state(base_dir=base_dir, env=env):
+        state = _load_state(resolve_state_read_path(base_dir, env=env))
+        tasks = state["tasks"]
 
-    task_id: str | None = None
-    if target_or_task_id in tasks:
-        task_id = target_or_task_id
-    else:
-        leases = state["active_leases"]
-        lease = leases.get(target_or_task_id)
-        if not isinstance(lease, dict):
-            lease = next(
-                (
-                    candidate
-                    for candidate in leases.values()
-                    if candidate.get("target") == target_or_task_id
-                    or candidate.get("task_id") == target_or_task_id
-                ),
-                None,
-            )
-        if isinstance(lease, dict):
-            resolved = lease.get("task_id")
-            if isinstance(resolved, str):
-                task_id = resolved
+        task_id: str | None = None
+        if target_or_task_id in tasks:
+            task_id = target_or_task_id
+        else:
+            leases = state["active_leases"]
+            lease = leases.get(target_or_task_id)
+            if not isinstance(lease, dict):
+                lease = next(
+                    (
+                        candidate
+                        for candidate in leases.values()
+                        if candidate.get("target") == target_or_task_id
+                        or candidate.get("task_id") == target_or_task_id
+                    ),
+                    None,
+                )
+            if isinstance(lease, dict):
+                resolved = lease.get("task_id")
+                if isinstance(resolved, str):
+                    task_id = resolved
 
-    if task_id is None:
-        raise UsageError(f"no task found for {target_or_task_id!r}")
+        if task_id is None:
+            raise UsageError(f"no task found for {target_or_task_id!r}")
 
-    task = record_event(
-        task_id,
-        status,
-        note=note,
-        actor=actor,
-        role=role,
-        base_dir=base_dir,
-        env=env,
-    )
-    if task is None:
-        raise UsageError(f"no task found for {target_or_task_id!r}")
-    return task
+        task = record_event(
+            task_id,
+            status,
+            note=note,
+            actor=actor,
+            role=role,
+            base_dir=base_dir,
+            env=env,
+        )
+        if task is None:
+            raise UsageError(f"no task found for {target_or_task_id!r}")
+        return task
 
 
 @dataclass

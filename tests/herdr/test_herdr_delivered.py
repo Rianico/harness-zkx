@@ -136,12 +136,26 @@ def test_working_transition_keeps_a_single_store_write(tmp_path: Path) -> None:
 
 
 def test_no_timer_or_polling_machinery(tmp_path: Path) -> None:
-    """The mark fires on observation: no daemon, timer, socket, or poll loop."""
+    """The mark fires on observation: no background thread, timer, socket, or poll loop.
+
+    The delivered mark is written by the transition that observes consumption, so this module
+    owns no daemon and no wait of its own. A write mutex is not that machinery: #369's
+    `locked_tasks_state` holds an `flock` behind `threading.RLock`, which is why the old
+    blanket `threading` probe was narrowed to the constructs this pin exists to forbid.
+    """
     del tmp_path  # the seam is static; no store needed
     module_file = herdr_lease.__file__
     assert module_file is not None
     source = Path(module_file).read_text(encoding="utf-8")
-    for probe in ("threading", "socket", "Timer", "time.sleep", ".poll(", "select("):
+    for probe in (
+        "threading.Thread",
+        "Timer(",
+        "socket",
+        "time.sleep",
+        ".poll(",
+        "select(",
+        "daemon=",
+    ):
         assert probe not in source
 
 

@@ -83,8 +83,10 @@ from herdr_bootstrap import is_implementer_role, is_orch_role, load_kind_entry
 from herdr_cli import (
     EXIT_BLOCKED,
     EXIT_OK,
+    EXIT_USAGE,
     METHOD_CONSTRAINT_EPILOG,
     STDIN,
+    BareShellRefusal,
     HerdrError,
     UsageError,
     add_shared_argument,
@@ -1095,7 +1097,11 @@ def verify_prompt_accepted(
 
 
 def resolve_targets(options: Options, herdr: str, env: Mapping[str, str]) -> list[str]:
-    """Pick the prompt targets: explicit TARGETs, or the pane carrying --label."""
+    """Pick the prompt targets: explicit TARGETs, or the pane carrying --label.
+
+    The shell verdict blocks every path that can send; dry-run reports it as a note
+    because it cannot send.
+    """
     if options.label:
         if options.targets:
             raise UsageError("pass either TARGETs or --label, not both")
@@ -1113,11 +1119,23 @@ def resolve_targets(options: Options, herdr: str, env: Mapping[str, str]) -> lis
         raise UsageError("duplicate TARGETs; list each agent once")
     if not options.dry_run:
         reject_message_like_targets(options.targets)
-    if not options.no_caller_context:
-        validate_targets_not_kinds(options.targets, herdr, env)
-        if not options.dry_run:
-            for target in options.targets:
-                verify_target_not_bare_shell(herdr, target, env)
+    validate_targets_not_kinds(options.targets, herdr, env)
+    # The bare-shell check is a safety gate, not a UX flag (#369): it runs on every send
+    # path, `--no-caller-context` and `--dry-run` included. A dry run still sends nothing,
+    # so a shell verdict there cannot protect an injection: it prints the verdict and lets
+    # the preview through. A daemon that cannot answer stays fatal on both paths.
+    for target in options.targets:
+        try:
+            verify_target_not_bare_shell(herdr, target, env)
+        except BareShellRefusal:
+            if not options.dry_run:
+                raise
+            print(
+                f"herdr-prompt: note: target {target!r} is a bare shell with no live agent; "
+                f"a real send would be refused with exit {EXIT_USAGE}, so this dry run only "
+                "previews the would-send argv",
+                file=sys.stderr,
+            )
     return list(options.targets)
 
 

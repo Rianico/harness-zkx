@@ -14,6 +14,8 @@ import herdr_reply
 import pytest
 import yaml
 
+from tests.herdr.stub import SCRIPTS_DIR, StubHarness
+
 
 def test_error_code_reads_envelope() -> None:
     stderr = '{"error":{"code":"agent_blocked","message":"blocked"},"id":"cli:agent:prompt"}'
@@ -510,3 +512,213 @@ def test_current_workspace_id_derives_from_pane_id_split(
 
     monkeypatch.setattr(herdr_cli, "run_herdr_checked", fake_run)
     assert herdr_cli.current_workspace_id("/bin/herdr", {}) == "w99"
+
+
+# ── fail closed: the target is verified as an agent before any send (#369) ─────────
+#
+# `verify_target_not_bare_shell` asks the daemon what a target is running so prose is never
+# injected into a shell. Two defects made that gate optional (#369): an unreadable daemon
+# counted as "not a shell" (fail-open), and `--no-caller-context` skipped the check along
+# with the envelope lookups. These pin both closed. The three outcomes are distinct:
+# could not verify ⇒ `HerdrError` (exit 1, no send); verified shell ⇒ `BareShellRefusal`
+# (exit 2, no send); verified agent ⇒ the send happens, with or without the UX flags.
+
+PROMPT_SCRIPT = SCRIPTS_DIR / "herdr_prompt.py"
+SHELL_TARGET = "w9:p2"  # DEFAULT_STATE: a pane with no live agent
+AGENT_TARGET = "reviewer"  # DEFAULT_STATE: the live agent on w9:p1
+INVENTORY_CALLS: tuple[list[str], ...] = (["pane", "list"], ["agent", "list"])
+
+
+@pytest.fixture
+def stub(stub_factory: Callable[[Path], StubHarness]) -> StubHarness:
+    """The shared stub `herdr`, driven through `herdr-prompt` as in the prompt suite."""
+    return stub_factory(PROMPT_SCRIPT)
+
+
+def prompt_payload(tmp_path: Path, text: str = "hi") -> Path:
+    path = tmp_path / "payload.md"
+    _ = path.write_text(text, encoding="utf-8")
+    return path
+
+
+def inventory_failure(mode: str, argv: Sequence[str]) -> subprocess.CompletedProcess[str]:
+    """One unverifiable daemon answer: dead process, garbage, silence, or a missing field."""
+    if mode == "error":
+        return subprocess.CompletedProcess(list(argv), 1, "", '{"error":"daemon unreachable"}')
+    if mode == "garbage":
+        return subprocess.CompletedProcess(list(argv), 0, "not json at all", "")
+    if mode == "empty":
+        return subprocess.CompletedProcess(list(argv), 0, "", "")
+    return subprocess.CompletedProcess(list(argv), 0, json.dumps({"result": {}}), "")
+
+
+@pytest.fixture
+def failing_daemon(monkeypatch: pytest.MonkeyPatch, stub: StubHarness) -> Callable[[str], None]:
+    """Fail only the inventory reads; any other argv still reaches the stub and is logged."""
+
+    def install(mode: str) -> None:
+        real = herdr_cli.run_herdr
+
+        def fake(argv: Sequence[str], env: Mapping[str, str]) -> subprocess.CompletedProcess[str]:
+            if list(argv)[1:3] in INVENTORY_CALLS:
+                return inventory_failure(mode, argv)
+            return real(argv, env)
+
+        monkeypatch.setattr(herdr_cli, "run_herdr", fake)
+
+    return install
+
+
+DAEMON_FAILURES = [
+    pytest.param("error", id="exit-1"),
+    pytest.param("garbage", id="non-json"),
+    pytest.param("empty", id="empty-output"),
+    pytest.param("missing-field", id="missing-field"),
+]
+FLAG_VARIANTS = [
+    pytest.param((), id="envelope"),
+    pytest.param(("--no-caller-context",), id="no-caller-context"),
+]
+
+
+@pytest.mark.parametrize("mode", DAEMON_FAILURES)
+@pytest.mark.parametrize("flags", FLAG_VARIANTS)
+def test_an_unverifiable_target_refuses_the_send(
+    stub: StubHarness,
+    tmp_path: Path,
+    failing_daemon: Callable[[str], None],
+    mode: str,
+    flags: tuple[str, ...],
+) -> None:
+    """A daemon that cannot answer is not evidence of an agent: refuse, send nothing."""
+    failing_daemon(mode)
+
+    done = stub.run(AGENT_TARGET, "--file", str(prompt_payload(tmp_path)), *flags)
+
+    assert done.returncode == herdr_cli.EXIT_HERDR
+    assert "could not verify" in done.stderr
+    assert AGENT_TARGET in done.stderr
+    assert "herdr agent list" in done.stderr  # the remedy, not just the symptom
+    assert stub.prompts() == []
+
+
+@pytest.mark.parametrize("mode", DAEMON_FAILURES)
+def test_a_dry_run_still_verifies_and_refuses_an_unverifiable_target(
+    stub: StubHarness,
+    tmp_path: Path,
+    failing_daemon: Callable[[str], None],
+    mode: str,
+) -> None:
+    """`--dry-run` sends nothing, but it must not skip the check either."""
+    failing_daemon(mode)
+
+    done = stub.run(
+        AGENT_TARGET,
+        "--file",
+        str(prompt_payload(tmp_path)),
+        "--dry-run",
+        "--no-caller-context",
+    )
+
+    assert done.returncode == herdr_cli.EXIT_HERDR
+    assert "could not verify" in done.stderr
+    assert stub.prompts() == []
+
+
+@pytest.mark.parametrize("flags", FLAG_VARIANTS)
+def test_a_bare_shell_target_is_refused(
+    stub: StubHarness, tmp_path: Path, flags: tuple[str, ...]
+) -> None:
+    done = stub.run(SHELL_TARGET, "--file", str(prompt_payload(tmp_path)), *flags)
+
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "no live agent" in done.stderr
+    assert "Refusing injection" in done.stderr
+    assert "could not verify" not in done.stderr
+    assert stub.prompts() == []
+
+
+def test_a_dry_run_reports_a_bare_shell_target_instead_of_sending(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """A dry run cannot inject, so the shell verdict is a note, not a refusal (#369 C)."""
+    done = stub.run(
+        SHELL_TARGET,
+        "--file",
+        str(prompt_payload(tmp_path)),
+        "--dry-run",
+        "--no-caller-context",
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert f"note: target {SHELL_TARGET!r} is a bare shell" in done.stderr
+    assert f"refused with exit {herdr_cli.EXIT_USAGE}" in done.stderr
+    assert stub.prompts() == []
+
+
+@pytest.mark.parametrize("flags", FLAG_VARIANTS)
+def test_a_verified_agent_target_proceeds(
+    stub: StubHarness, tmp_path: Path, flags: tuple[str, ...]
+) -> None:
+    done = stub.run(AGENT_TARGET, "--file", str(prompt_payload(tmp_path)), "--no-wait", *flags)
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (call,) = stub.prompts()
+    assert call[3] == AGENT_TARGET
+
+
+def test_a_verified_agent_target_still_dry_runs_without_sending(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    done = stub.run(
+        AGENT_TARGET,
+        "--file",
+        str(prompt_payload(tmp_path)),
+        "--dry-run",
+        "--no-caller-context",
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert stub.prompts() == []
+
+
+def test_verify_raises_herdr_error_when_the_inventory_is_unreadable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def explode(_argv: Sequence[str], _env: Mapping[str, str]) -> str:
+        raise herdr_cli.HerdrError("herdr pane list failed: exit status 1")
+
+    monkeypatch.setattr(herdr_cli, "run_herdr_checked", explode)
+
+    with pytest.raises(herdr_cli.HerdrError, match="could not verify target 'w9:p1'"):
+        herdr_cli.verify_target_not_bare_shell("/bin/herdr", "w9:p1", {})
+
+
+def test_verify_raises_the_bare_shell_refusal_for_a_shell_pane(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stub_snapshot(
+        monkeypatch,
+        [{"pane_id": "w9:p2", "agent": None, "agent_status": "unknown"}],
+        [],
+    )
+
+    def failing_run(
+        argv: Sequence[str], _env: Mapping[str, str]
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(list(argv), 1, "", "")
+
+    monkeypatch.setattr(herdr_cli, "run_herdr", failing_run)
+
+    with pytest.raises(herdr_cli.BareShellRefusal, match="no live agent"):
+        herdr_cli.verify_target_not_bare_shell("/bin/herdr", "w9:p2", {})
+
+
+def test_verify_accepts_a_live_agent_target(monkeypatch: pytest.MonkeyPatch) -> None:
+    stub_snapshot(
+        monkeypatch,
+        [{"pane_id": "w9:p1", "agent": "pi", "agent_status": "idle"}],
+        [{"pane_id": "w9:p1", "name": "reviewer"}],
+    )
+
+    herdr_cli.verify_target_not_bare_shell("/bin/herdr", "reviewer", {})

@@ -930,9 +930,19 @@ def test_no_caller_context_sends_verbatim_without_lookups(
     (prompt_call,) = stub.prompts()
     assert prompt_call[4] == "hi"
     kinds = [call[1:3] for call in stub.calls()]
-    # The one-shot screen read (#252) rides between the status claim and the injection:
-    # settled `agent get`, one `agent read`, then `agent prompt`. No caller-context lookups.
-    assert kinds == [["agent", "get"], ["agent", "read"], ["agent", "prompt"]]
+    # #369: the kind preflight reads `agent list`, then the bare-shell gate reads both
+    # inventories, and both run with `--no-caller-context` too, so no prompt reaches a raw
+    # shell. Then the one-shot screen read (#252) rides between the status claim and the
+    # injection: settled `agent get`, one `agent read`, then `agent prompt`. No
+    # caller-context lookups.
+    assert kinds == [
+        ["agent", "list"],
+        ["pane", "list"],
+        ["agent", "list"],
+        ["agent", "get"],
+        ["agent", "read"],
+        ["agent", "prompt"],
+    ]
     assert "--no-caller-context drops the Sender/Receiver envelope" in done.stderr
 
 

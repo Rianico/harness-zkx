@@ -721,15 +721,28 @@ def _pane_has_live_agent(p: Mapping[str, object], agents: Sequence[Mapping[str, 
     )
 
 
-def inspect_target_shell_pane(
-    herdr: str, target: str, env: Mapping[str, str]
+def read_target_inventory(
+    herdr: str, env: Mapping[str, str]
+) -> tuple[list[Mapping[str, object]], list[Mapping[str, object]]]:
+    """Read the pane and agent inventories a target check needs, or raise `HerdrError`.
+
+    One read with no degradation, because the two callers answer an unreadable daemon
+    differently: `verify_target_not_bare_shell` must refuse, and `inspect_target_shell_pane`
+    still stands down so the diagnostic callers keep their existing behaviour.
+    """
+    panes = entries(run_herdr_checked([herdr, "pane", "list"], env), "result", "panes")
+    agents = entries(run_herdr_checked([herdr, "agent", "list"], env), "result", "agents")
+    return panes, agents
+
+
+def match_shell_pane(
+    herdr: str,
+    target: str,
+    panes: Sequence[Mapping[str, object]],
+    agents: Sequence[Mapping[str, object]],
+    env: Mapping[str, str],
 ) -> ShellPaneInfo | None:
-    """Inspect pane list, agent list, and process-info to detect an open shell pane without a live agent."""
-    try:
-        panes = entries(run_herdr_checked([herdr, "pane", "list"], env), "result", "panes")
-        agents = entries(run_herdr_checked([herdr, "agent", "list"], env), "result", "agents")
-    except HerdrError:
-        return None
+    """The pane `target` names, when no live agent occupies it; `None` for an agent target."""
 
     agent_names = {entry_optional_text(a, "name") for a in agents if entry_optional_text(a, "name")}
     agent_panes = {
@@ -794,6 +807,17 @@ def inspect_target_shell_pane(
     return None
 
 
+def inspect_target_shell_pane(
+    herdr: str, target: str, env: Mapping[str, str]
+) -> ShellPaneInfo | None:
+    """Diagnose a non-agent target; an unreadable inventory stands down to `None`."""
+    try:
+        panes, agents = read_target_inventory(herdr, env)
+    except HerdrError:
+        return None
+    return match_shell_pane(herdr, target, panes, agents, env)
+
+
 def diagnose_target_pane(herdr: str, target: str, env: Mapping[str, str]) -> str | None:
     """Inspect pane list, agent list, and process-info to diagnose a non-agent target."""
     info = inspect_target_shell_pane(herdr, target, env)
@@ -814,10 +838,43 @@ def diagnose_agent_not_found(herdr: str, target: str, env: Mapping[str, str]) ->
     return diagnose_target_pane(herdr, target, env)
 
 
+UNVERIFIED_TARGET_REMEDY = (
+    "check daemon health with `herdr agent list` and `herdr pane list`, "
+    "confirm the target is a listed agent, then retry"
+)
+
+
 def verify_target_not_bare_shell(herdr: str, target: str, env: Mapping[str, str]) -> None:
-    diag = diagnose_target_pane(herdr, target, env)
-    if diag is not None:
-        raise BareShellRefusal(diag)
+    """Refuse the send unless the daemon confirms the target is not a bare shell.
+
+    Fail closed (#369): an inventory the daemon cannot answer — a non-zero exit, a timeout,
+    unreadable or empty output, a missing field — is not evidence that the target is an
+    agent, so it raises `HerdrError` (exit status 1) naming the target and the remedy.
+    That stays distinct from a verified shell, which raises `BareShellRefusal` (exit status
+    2) with the shell diagnostic: `herdr_dispatch` keys its auto-start remedy on that type,
+    and an unreachable daemon must never trigger an agent start. A target the inventory
+    does not mention at all is a send-time question, not this one, so it proceeds.
+    """
+    try:
+        panes, agents = read_target_inventory(herdr, env)
+    except HerdrError as exc:
+        raise HerdrError(
+            f"could not verify target {target!r} is a live agent pane, so refusing to send: "
+            f"{exc}; {UNVERIFIED_TARGET_REMEDY}"
+        ) from exc
+    info = match_shell_pane(herdr, target, panes, agents, env)
+    if info is not None:
+        raise BareShellRefusal(
+            format_shell_pane_diagnostic(
+                target=target,
+                pane_id=info.pane_id,
+                label=info.label,
+                foreground_proc=info.foreground_proc,
+                is_label_match=info.is_label_match,
+                suggested_name=info.suggested_name,
+                suggested_kind=info.suggested_kind,
+            )
+        )
 
 
 def guard(prog: str, action: Callable[[], int]) -> int:

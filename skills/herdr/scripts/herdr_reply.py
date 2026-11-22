@@ -69,6 +69,16 @@ than let one resolve in another repository; the two verdict-neutral location ove
 non-resolving token is waived by name with `--allow-unresolvable-sha <TOKEN>`, and every waiver
 is reported on stderr — never a silent bypass.
 
+The payload's first line is admitted by its verdict before that body check (#369 m5). A
+`COMPLETED <token>` status line names the reply's commit, so a claim-shaped token — 7-40
+lowercase hex, the shape no reader can tell from an abbreviation — must name a commit at the
+lane anchor. One that does not is refused (exit 2) naming the token, the anchor, and the
+waiver, before any record or lease exists; the same `--allow-unresolvable-sha <TOKEN>` waives
+it, and a waived token is recorded as waived, never as a sha. Where git cannot answer — no
+work tree, no binary, or a redirected object store — the check is skipped loudly and the token
+is recorded as unverified, because an unanswerable probe has proven nothing. `BLOCKED` and
+`REJECTED` reasons are prose, never read as a commit.
+
     herdr-reply orchestrator "COMPLETED artifacts=[...] issues=[]"
     herdr-reply orchestrator --file result.md
     echo "COMPLETED" | herdr-reply orchestrator
@@ -91,6 +101,7 @@ import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import herdr_lease
@@ -357,6 +368,90 @@ def payload_origin(options: Options) -> str:
     if options.file and options.file != STDIN:
         return options.file
     return "<message>" if options.message is not None else "<stdin>"
+
+
+# ── the status line's commit claim (#369 m5) ──────────────────────────────────────────
+
+# The second token of a COMPLETED status line is the reply's commit claim. It is claim-shaped when
+# it is a 7-40 lowercase-hex token — the shape the backticked-SHA guard already reads — because
+# that is exactly the shape no reader can tell apart from a commit abbreviation. Every other
+# second token (`artifacts=[a.py]`, a branch name, prose) is not a claim: it was never recorded as
+# a sha and is left alone. BLOCKED and REJECTED never reach here, because `parse_status_line` reads
+# a second token only for COMPLETED.
+STATUS_COMMIT_WAIVED = "waived"
+STATUS_COMMIT_UNVERIFIED = "unverified"
+
+
+@dataclass(frozen=True)
+class StatusCommit:
+    """The status line's commit claim, as proven before anything records it.
+
+    `sha` is the token only when git proved it names a commit in this lane, and None otherwise, so
+    no record can present an unproven token as a commit. `marker` is the trajectory note's
+    metadata for an unproven token (`waived=<token>` or `unverified=<token>`); it is None for a
+    verified token and for a status line that claims no commit at all.
+    """
+
+    sha: str | None
+    marker: str | None
+
+
+def verify_status_line_commit(
+    mapped: str | None,
+    sha: str | None,
+    *,
+    payload_path: str,
+    cwd: Path | None,
+    env: Mapping[str, str],
+    waived: Sequence[str] = (),
+) -> StatusCommit:
+    """Prove, waive, or refuse the status line's commit claim before any record exists.
+
+    A claim-shaped token that names no commit in this lane is refused loudly (exit 2), naming the
+    token, the anchor the probe answered from, and the documented remedy — `--allow-unresolvable-sha
+    <TOKEN>` — because a review id or a drifted abbreviation in the sha position reads as a commit.
+    Refusing here, ahead of the store, means a refused payload leaves no record and consumes no
+    lease, exactly as the backticked-SHA guard does for the body.
+
+    A token waived by name is admitted and reported on stderr, and it is never returned as a sha:
+    the verdict says it was waived, and the task history records `waived=<token>`. A git that
+    cannot answer — no work tree, no binary, or one of `GIT_LOCATION_REDIRECT_VARS` pointing the
+    probe at another repository's objects — has proven nothing, so the reply is admitted with a
+    skip line naming the token and the verdict records `unverified=<token>`, never a commit.
+    Unverifiable is never unresolvable (#247 D2), and no unproven token is ever recorded as one.
+    """
+    if mapped != "completed" or sha is None or not _SHA_RE.fullmatch(sha):
+        return StatusCommit(None, None)
+    if sha in set(waived):
+        print(
+            f"herdr-reply: SHA guard waived `{sha}` ({ALLOW_UNRESOLVABLE_SHA}) as the status "
+            "line's commit: it names no commit in this lane",
+            file=sys.stderr,
+        )
+        return StatusCommit(None, f"{STATUS_COMMIT_WAIVED}={sha}")
+    directory = cwd if cwd is not None else Path.cwd()
+    redirect = git_location_redirect(env)
+    if redirect is not None or not git_can_resolve_commits(directory):
+        reason = (
+            f"git's location is redirected by {redirect}, so the token could resolve in another "
+            "repository"
+            if redirect is not None
+            else f"git cannot resolve commits in {directory} (no work tree, or no git binary)"
+        )
+        print(
+            f"herdr-reply: SHA guard skipped for the status line in {payload_path}: {reason}; "
+            f"unchecked: `{sha}`",
+            file=sys.stderr,
+        )
+        return StatusCommit(None, f"{STATUS_COMMIT_UNVERIFIED}={sha}")
+    if names_a_commit(sha, directory):
+        return StatusCommit(sha, None)
+    raise UsageError(
+        f"payload {payload_path} names COMPLETED {sha}, but that token names no commit in this "
+        f"lane ({directory}). The second token of a COMPLETED status line is the reply's commit, "
+        f"so correct it — or waive an intentional non-commit token with {ALLOW_UNRESOLVABLE_SHA} "
+        f"{sha}. Refusing to record or submit the reply"
+    )
 
 
 # ── persist first, then poke (#231) ─────────────────────────────────────────────────
@@ -1042,6 +1137,7 @@ def record_sender_status(
     record_id: str | None = None,
     shape: str | None = None,
     task_id: str | None = None,
+    sha_marker: str | None = None,
 ) -> None:
     """Append the sender's completion event to its task trajectory, when one is linked.
 
@@ -1056,9 +1152,11 @@ def record_sender_status(
     first reply, or the task a later reply re-bound to. When it is None the sender's lease is
     read here, which keeps a direct caller's behaviour unchanged.
 
-    The trajectory `note` is metadata only -- the mapped status token plus the hex `sha` when
-    the payload carries one (`completed 8c715091`, or just the status). A non-hex second token
-    is dropped, so no payload text reaches `.lane/tasks.yaml` (#231).
+    The trajectory `note` is metadata only -- the mapped status token plus the status line's
+    commit claim, never the raw status line: `completed 8c715091` for a token git proved, or
+    `completed unverified=<token>` / `completed waived=<token>` when it did not (#369 m5). Only a
+    proven `sha` reaches the `sha` field, and a non-hex second token is dropped, so no payload text
+    and no unproven claim reaches `.lane/tasks.yaml` (#231).
     """
     if not mapped:
         return
@@ -1086,7 +1184,12 @@ def record_sender_status(
         return
 
     validated_sha = sha if isinstance(sha, str) and _SHA_RE.fullmatch(sha) else None
-    note = f"{mapped} {validated_sha}" if validated_sha else mapped
+    if validated_sha:
+        note = f"{mapped} {validated_sha}"
+    elif sha_marker:
+        note = f"{mapped} {sha_marker}"
+    else:
+        note = mapped
     try:
         if linked is not None:
             _ = record_event(
@@ -1251,6 +1354,17 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
             "COMPLETED, BLOCKED, or REJECTED (see the Final Reply Template in "
             "skills/herdr/references/lane-coordination.md); refusing to record or submit the reply"
         )
+    # #369 m5: the status line's second token is the reply's commit, so it is proven here too —
+    # ahead of the store and of `--dry-run`, like the body guard below, so a refused claim leaves no
+    # record, consumes no lease, and never reaches task history.
+    commit = verify_status_line_commit(
+        mapped,
+        sha,
+        payload_path=payload_origin(options),
+        cwd=lane_git_dir(env),
+        env=env,
+        waived=options.allow_unresolvable_sha or (),
+    )
     # #247 D2: a backticked SHA-shaped token is an instruction, and an instruction that names no
     # commit points at nothing. This runs before any record exists — and before `--dry-run`
     # returns — so a refused payload consumes no lease and submits nothing.
@@ -1383,7 +1497,7 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
                 task_id=linked_task_id,
                 in_reply_to=linked_task_id,
                 mapped=mapped,
-                sha=sha,
+                sha=commit.sha,
                 shape=shape,
                 evidence=heading,
             )
@@ -1454,7 +1568,14 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
             return EXIT_BLOCKED
         if code == TIMEOUT_CODE:
             record_sender_status(
-                herdr, env, mapped, sha, record_id=record_id, shape=shape, task_id=linked_task_id
+                herdr,
+                env,
+                mapped,
+                commit.sha,
+                record_id=record_id,
+                shape=shape,
+                task_id=linked_task_id,
+                sha_marker=commit.marker,
             )
             release_active_lease(herdr, env)
             raise WaitTimeout(
@@ -1469,7 +1590,14 @@ def reply_caller(options: Options, env: Mapping[str, str]) -> int:
         raise HerdrError(f"herdr agent prompt {target} failed: {detail}")
 
     record_sender_status(
-        herdr, env, mapped, sha, record_id=record_id, shape=shape, task_id=linked_task_id
+        herdr,
+        env,
+        mapped,
+        commit.sha,
+        record_id=record_id,
+        shape=shape,
+        task_id=linked_task_id,
+        sha_marker=commit.marker,
     )
     release_active_lease(herdr, env)
     _ = decode_response(done.stdout)
