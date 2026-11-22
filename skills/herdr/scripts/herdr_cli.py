@@ -11,6 +11,10 @@ The argument families that several parsers repeat live here too (`SHARED_ARGUMEN
 `add_shared_argument`), so a flag declared in more than one `build_parser()` cannot drift
 in its dest, action, type, or default. Each caller still supplies its own measured `help`
 sentence, which is why the help text is not part of the shared table.
+
+The typed response layer (`PaneInfo`, `TabInfo`, `AgentInfo`, `WorkspaceInfo`, and the verb
+wrappers that return them) admits daemon JSON through one validating parser per shape, so a
+caller reads attributes instead of re-deriving field names and types from string maps.
 """
 
 from __future__ import annotations
@@ -18,6 +22,7 @@ from __future__ import annotations
 import argparse
 import errno
 import json
+import math
 import os
 import re
 import shlex
@@ -393,6 +398,671 @@ def entry_optional_text(entry: Mapping[str, object], key: str) -> str | None:
     """Read a nullable string field from one list entry; absence is None."""
     value = entry.get(key)
     return value if isinstance(value, str) and value else None
+
+
+# ── typed response wrappers ────────────────────────────────────────────────────────
+#
+# Callers used to re-derive every daemon field from raw string maps, so a renamed or retyped
+# field failed deep inside a caller. Each wrapper owns the verb, the request flags, the response
+# path, and one validating parser per shape. A parse failure names the field, the response
+# location, and an excerpt of what arrived instead.
+
+
+@dataclass(frozen=True)
+class AgentSession:
+    """`AgentSessionInfo`: the session reference a pane or agent reports for resume."""
+
+    source: str
+    agent: str
+    kind: str
+    value: str
+
+
+@dataclass(frozen=True)
+class PaneScrollInfo:
+    """`PaneScrollInfo`: the pane's scrollback position, in rows."""
+
+    offset_from_bottom: int
+    max_offset_from_bottom: int
+    viewport_rows: int
+
+
+@dataclass(frozen=True)
+class PaneRect:
+    """`PaneLayoutRect`: one pane's rectangle in cells."""
+
+    x: int
+    y: int
+    width: int
+    height: int
+
+
+@dataclass(frozen=True)
+class PaneInfo:
+    """`PaneInfo`: one pane's identity, focus, agent, and terminal state."""
+
+    pane_id: str
+    terminal_id: str
+    workspace_id: str
+    tab_id: str
+    focused: bool
+    agent_status: str
+    revision: int
+    agent: str | None
+    agent_session: AgentSession | None
+    cwd: str | None
+    display_agent: str | None
+    foreground_cwd: str | None
+    label: str | None
+    restore_error: str | None
+    scroll: PaneScrollInfo | None
+    state_labels: Mapping[str, str]
+    terminal_title: str | None
+    terminal_title_stripped: str | None
+    title: str | None
+    tokens: Mapping[str, str]
+
+
+@dataclass(frozen=True)
+class PaneLayoutPane:
+    """`PaneLayoutPane`: one pane in a tab layout."""
+
+    pane_id: str
+    focused: bool
+    rect: PaneRect
+
+
+@dataclass(frozen=True)
+class PaneLayout:
+    """`PaneLayoutSnapshot`: the panes of one tab and their rectangles."""
+
+    workspace_id: str
+    tab_id: str
+    focused_pane_id: str
+    panes: tuple[PaneLayoutPane, ...]
+
+
+@dataclass(frozen=True)
+class TabInfo:
+    """`TabInfo`: one tab's identity, focus, pane count, and agent status."""
+
+    tab_id: str
+    workspace_id: str
+    number: int
+    label: str
+    focused: bool
+    pane_count: int
+    agent_status: str
+
+
+@dataclass(frozen=True)
+class CreatedTab:
+    """The tab and root pane one `tab create` response reports."""
+
+    tab: TabInfo
+    root_pane: PaneInfo
+
+
+@dataclass(frozen=True)
+class AgentInfo:
+    """`AgentInfo`: the agent in one pane, and its session state."""
+
+    terminal_id: str
+    agent_status: str
+    workspace_id: str
+    tab_id: str
+    pane_id: str
+    focused: bool
+    revision: int
+    agent: str | None
+    agent_session: AgentSession | None
+    completion_seq: int | None
+    cwd: str | None
+    display_agent: str | None
+    foreground_cwd: str | None
+    interactive_ready: bool | None
+    launch_pending: bool | None
+    name: str | None
+    screen_detection_skipped: bool | None
+    state_change_seq: int | None
+    state_labels: Mapping[str, str]
+    terminal_title: str | None
+    terminal_title_stripped: str | None
+    title: str | None
+    tokens: Mapping[str, str]
+
+
+@dataclass(frozen=True)
+class WorkspaceWorktreeInfo:
+    """`WorkspaceWorktreeInfo`: the worktree a workspace is bound to."""
+
+    repo_key: str
+    repo_name: str
+    repo_root: str
+    checkout_path: str
+    is_linked_worktree: bool
+
+
+@dataclass(frozen=True)
+class WorkspaceInfo:
+    """`WorkspaceInfo`: one workspace's identity, counts, and active tab."""
+
+    workspace_id: str
+    number: int
+    label: str
+    focused: bool
+    pane_count: int
+    tab_count: int
+    active_tab_id: str
+    agent_status: str
+    tokens: Mapping[str, str]
+    worktree: WorkspaceWorktreeInfo | None
+
+
+@dataclass(frozen=True)
+class PaneRead:
+    """`PaneReadResult`: the snapshot text a read or match returned."""
+
+    pane_id: str
+    workspace_id: str
+    tab_id: str
+    source: str
+    format: str
+    text: str
+    revision: int
+    truncated: bool
+
+
+@dataclass(frozen=True)
+class PaneOutputMatch:
+    """`output_matched`: the read whose text matched, plus the matched line when reported."""
+
+    pane_id: str
+    revision: int
+    matched_line: str | None
+    read: PaneRead
+
+
+class NestedParser[T](Protocol):
+    """A parser for one nested response object, called with its own `where` context."""
+
+    def __call__(self, entry: Mapping[str, object], *, where: str) -> T: ...
+
+
+def _excerpt(entry: Mapping[str, object]) -> str:
+    """One line of the offending entry, truncated, so an error names what arrived."""
+    return repr(dict(entry))[:120]
+
+
+def _field_error(entry: Mapping[str, object], key: str, *, where: str, want: str) -> HerdrError:
+    return HerdrError(f"{where} has no usable {key!r} ({want}): {_excerpt(entry)}")
+
+
+def _required_text(entry: Mapping[str, object], key: str, *, where: str) -> str:
+    value = entry.get(key)
+    if not isinstance(value, str) or not value:
+        raise _field_error(entry, key, where=where, want="a non-empty string")
+    return value
+
+
+def _required_int(entry: Mapping[str, object], key: str, *, where: str) -> int:
+    value = entry.get(key)
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise _field_error(entry, key, where=where, want="an integer")
+    return value
+
+
+def _required_bool(entry: Mapping[str, object], key: str, *, where: str) -> bool:
+    value = entry.get(key)
+    if not isinstance(value, bool):
+        raise _field_error(entry, key, where=where, want="a boolean")
+    return value
+
+
+def _optional_int(entry: Mapping[str, object], key: str, *, where: str) -> int | None:
+    value = entry.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise _field_error(entry, key, where=where, want="an integer or null")
+    return value
+
+
+def _optional_bool(entry: Mapping[str, object], key: str, *, where: str) -> bool | None:
+    value = entry.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, bool):
+        raise _field_error(entry, key, where=where, want="a boolean or null")
+    return value
+
+
+def _string_map(entry: Mapping[str, object], key: str, *, where: str) -> Mapping[str, str]:
+    value = entry.get(key)
+    if value is None:
+        return MappingProxyType({})
+    if not isinstance(value, Mapping):
+        raise _field_error(entry, key, where=where, want="an object of strings")
+    found: dict[str, str] = {}
+    for item_key, item_value in value.items():
+        if not isinstance(item_key, str) or not isinstance(item_value, str):
+            raise _field_error(entry, key, where=where, want="an object of strings")
+        found[item_key] = item_value
+    return MappingProxyType(found)
+
+
+def _optional_nested[T](
+    entry: Mapping[str, object],
+    key: str,
+    *,
+    where: str,
+    parse: NestedParser[T],
+) -> T | None:
+    """Parse an optional nested object; absence is `None`, a wrong type is refused."""
+    value = entry.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, Mapping):
+        raise _field_error(entry, key, where=where, want="an object")
+    return parse(value, where=f"{where}.{key}")
+
+
+def _nested_list[T](value: object, *, where: str, parse: NestedParser[T]) -> tuple[T, ...]:
+    """Parse a required array of objects; a non-object entry names its index."""
+    if not isinstance(value, list):
+        raise HerdrError(f"{where} is not a list: {value!r}"[:200])
+    found: list[T] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, Mapping):
+            raise HerdrError(f"{where}[{index}] is not an object: {item!r}")
+        found.append(parse(item, where=f"{where}[{index}]"))
+    return tuple(found)
+
+
+def _response_object(raw: str, *path: str) -> Mapping[str, object]:
+    """Read a required response object, or explain which path was missing."""
+    value = payload_field(raw, *path)
+    if not isinstance(value, Mapping):
+        raise HerdrError(f"herdr response {'.'.join(path)} is not an object: {raw.strip()[:200]}")
+    return value
+
+
+def _agent_session(entry: Mapping[str, object], *, where: str) -> AgentSession:
+    return AgentSession(
+        source=_required_text(entry, "source", where=where),
+        agent=_required_text(entry, "agent", where=where),
+        kind=_required_text(entry, "kind", where=where),
+        value=_required_text(entry, "value", where=where),
+    )
+
+
+def _pane_scroll(entry: Mapping[str, object], *, where: str) -> PaneScrollInfo:
+    return PaneScrollInfo(
+        offset_from_bottom=_required_int(entry, "offset_from_bottom", where=where),
+        max_offset_from_bottom=_required_int(entry, "max_offset_from_bottom", where=where),
+        viewport_rows=_required_int(entry, "viewport_rows", where=where),
+    )
+
+
+def _pane_rect(entry: Mapping[str, object], *, where: str) -> PaneRect:
+    return PaneRect(
+        x=_required_int(entry, "x", where=where),
+        y=_required_int(entry, "y", where=where),
+        width=_required_int(entry, "width", where=where),
+        height=_required_int(entry, "height", where=where),
+    )
+
+
+def _pane_info(entry: Mapping[str, object], *, where: str) -> PaneInfo:
+    """Admit one `PaneInfo`; every required field is checked, optionals degrade."""
+    return PaneInfo(
+        pane_id=_required_text(entry, "pane_id", where=where),
+        terminal_id=_required_text(entry, "terminal_id", where=where),
+        workspace_id=_required_text(entry, "workspace_id", where=where),
+        tab_id=_required_text(entry, "tab_id", where=where),
+        focused=_required_bool(entry, "focused", where=where),
+        agent_status=_required_text(entry, "agent_status", where=where),
+        revision=_required_int(entry, "revision", where=where),
+        agent=entry_optional_text(entry, "agent"),
+        agent_session=_optional_nested(entry, "agent_session", where=where, parse=_agent_session),
+        cwd=entry_optional_text(entry, "cwd"),
+        display_agent=entry_optional_text(entry, "display_agent"),
+        foreground_cwd=entry_optional_text(entry, "foreground_cwd"),
+        label=entry_optional_text(entry, "label"),
+        restore_error=entry_optional_text(entry, "restore_error"),
+        scroll=_optional_nested(entry, "scroll", where=where, parse=_pane_scroll),
+        state_labels=_string_map(entry, "state_labels", where=where),
+        terminal_title=entry_optional_text(entry, "terminal_title"),
+        terminal_title_stripped=entry_optional_text(entry, "terminal_title_stripped"),
+        title=entry_optional_text(entry, "title"),
+        tokens=_string_map(entry, "tokens", where=where),
+    )
+
+
+def _required_nested[T](
+    entry: Mapping[str, object],
+    key: str,
+    *,
+    where: str,
+    parse: NestedParser[T],
+) -> T:
+    """Parse a required nested object; a missing or non-object value is refused."""
+    value = entry.get(key)
+    if not isinstance(value, Mapping):
+        raise _field_error(entry, key, where=where, want="an object")
+    return parse(value, where=f"{where}.{key}")
+
+
+def _pane_layout_pane(entry: Mapping[str, object], *, where: str) -> PaneLayoutPane:
+    return PaneLayoutPane(
+        pane_id=_required_text(entry, "pane_id", where=where),
+        focused=_required_bool(entry, "focused", where=where),
+        rect=_required_nested(entry, "rect", where=where, parse=_pane_rect),
+    )
+
+
+def _pane_layout(entry: Mapping[str, object], *, where: str) -> PaneLayout:
+    return PaneLayout(
+        workspace_id=_required_text(entry, "workspace_id", where=where),
+        tab_id=_required_text(entry, "tab_id", where=where),
+        focused_pane_id=_required_text(entry, "focused_pane_id", where=where),
+        panes=_nested_list(entry.get("panes"), where=f"{where}.panes", parse=_pane_layout_pane),
+    )
+
+
+def _tab_info(entry: Mapping[str, object], *, where: str) -> TabInfo:
+    return TabInfo(
+        tab_id=_required_text(entry, "tab_id", where=where),
+        workspace_id=_required_text(entry, "workspace_id", where=where),
+        number=_required_int(entry, "number", where=where),
+        label=_required_text(entry, "label", where=where),
+        focused=_required_bool(entry, "focused", where=where),
+        pane_count=_required_int(entry, "pane_count", where=where),
+        agent_status=_required_text(entry, "agent_status", where=where),
+    )
+
+
+def _agent_info(entry: Mapping[str, object], *, where: str) -> AgentInfo:
+    return AgentInfo(
+        terminal_id=_required_text(entry, "terminal_id", where=where),
+        agent_status=_required_text(entry, "agent_status", where=where),
+        workspace_id=_required_text(entry, "workspace_id", where=where),
+        tab_id=_required_text(entry, "tab_id", where=where),
+        pane_id=_required_text(entry, "pane_id", where=where),
+        focused=_required_bool(entry, "focused", where=where),
+        revision=_required_int(entry, "revision", where=where),
+        agent=entry_optional_text(entry, "agent"),
+        agent_session=_optional_nested(entry, "agent_session", where=where, parse=_agent_session),
+        completion_seq=_optional_int(entry, "completion_seq", where=where),
+        cwd=entry_optional_text(entry, "cwd"),
+        display_agent=entry_optional_text(entry, "display_agent"),
+        foreground_cwd=entry_optional_text(entry, "foreground_cwd"),
+        interactive_ready=_optional_bool(entry, "interactive_ready", where=where),
+        launch_pending=_optional_bool(entry, "launch_pending", where=where),
+        name=entry_optional_text(entry, "name"),
+        screen_detection_skipped=_optional_bool(entry, "screen_detection_skipped", where=where),
+        state_change_seq=_optional_int(entry, "state_change_seq", where=where),
+        state_labels=_string_map(entry, "state_labels", where=where),
+        terminal_title=entry_optional_text(entry, "terminal_title"),
+        terminal_title_stripped=entry_optional_text(entry, "terminal_title_stripped"),
+        title=entry_optional_text(entry, "title"),
+        tokens=_string_map(entry, "tokens", where=where),
+    )
+
+
+def _workspace_worktree(entry: Mapping[str, object], *, where: str) -> WorkspaceWorktreeInfo:
+    return WorkspaceWorktreeInfo(
+        repo_key=_required_text(entry, "repo_key", where=where),
+        repo_name=_required_text(entry, "repo_name", where=where),
+        repo_root=_required_text(entry, "repo_root", where=where),
+        checkout_path=_required_text(entry, "checkout_path", where=where),
+        is_linked_worktree=_required_bool(entry, "is_linked_worktree", where=where),
+    )
+
+
+# Parser for the model, exercised by tests; no wrapper in this module returns it yet (#371).
+def _workspace_info(  # pyright: ignore[reportUnusedFunction]
+    entry: Mapping[str, object], *, where: str
+) -> WorkspaceInfo:
+    return WorkspaceInfo(
+        workspace_id=_required_text(entry, "workspace_id", where=where),
+        number=_required_int(entry, "number", where=where),
+        label=_required_text(entry, "label", where=where),
+        focused=_required_bool(entry, "focused", where=where),
+        pane_count=_required_int(entry, "pane_count", where=where),
+        tab_count=_required_int(entry, "tab_count", where=where),
+        active_tab_id=_required_text(entry, "active_tab_id", where=where),
+        agent_status=_required_text(entry, "agent_status", where=where),
+        tokens=_string_map(entry, "tokens", where=where),
+        worktree=_optional_nested(entry, "worktree", where=where, parse=_workspace_worktree),
+    )
+
+
+def _pane_read(entry: Mapping[str, object], *, where: str) -> PaneRead:
+    return PaneRead(
+        pane_id=_required_text(entry, "pane_id", where=where),
+        workspace_id=_required_text(entry, "workspace_id", where=where),
+        tab_id=_required_text(entry, "tab_id", where=where),
+        source=_required_text(entry, "source", where=where),
+        format=_required_text(entry, "format", where=where),
+        text=_required_text(entry, "text", where=where),
+        revision=_required_int(entry, "revision", where=where),
+        truncated=_required_bool(entry, "truncated", where=where),
+    )
+
+
+def _focus_flags(focus: bool | None) -> list[str]:
+    """`--focus` or `--no-focus` only when the caller chose; herdr keeps its own default."""
+    if focus is None:
+        return []
+    return ["--focus"] if focus else ["--no-focus"]
+
+
+def create_tab(
+    herdr: str,
+    env: Mapping[str, str],
+    *,
+    workspace_id: str | None = None,
+    label: str | None = None,
+    cwd: str | None = None,
+    env_vars: Sequence[str] = (),
+    focus: bool | None = None,
+) -> CreatedTab:
+    """`herdr tab create`: one call; read `.result.tab` and `.result.root_pane`.
+
+    The creation response carries both objects, so the root pane is never re-listed with
+    `pane list`. A response missing either path raises `HerdrError` naming it; the caller
+    decides whether that is recoverable.
+    """
+    argv = [herdr, "tab", "create"]
+    if workspace_id is not None:
+        argv += ["--workspace", workspace_id]
+    if cwd is not None:
+        argv += ["--cwd", cwd]
+    if label is not None:
+        argv += ["--label", label]
+    for item in env_vars:
+        argv += ["--env", item]
+    argv += _focus_flags(focus)
+    raw = run_herdr_checked(argv, env)
+    return CreatedTab(
+        tab=_tab_info(_response_object(raw, "result", "tab"), where="tab create result.tab"),
+        root_pane=_pane_info(
+            _response_object(raw, "result", "root_pane"),
+            where="tab create result.root_pane",
+        ),
+    )
+
+
+def split_pane(
+    herdr: str,
+    env: Mapping[str, str],
+    *,
+    pane_id: str | None = None,
+    direction: str | None = None,
+    ratio: float | None = None,
+    cwd: str | None = None,
+    env_vars: Sequence[str] = (),
+    focus: bool | None = None,
+) -> PaneInfo:
+    """`herdr pane split`: read the new pane from `.result.pane`.
+
+    An omitted `pane_id` leaves the target to herdr (the calling pane when it can resolve
+    one, else the focused pane). `--ratio` rides only when set, and a non-finite ratio is
+    refused before any call.
+    """
+    if ratio is not None and not math.isfinite(ratio):
+        raise UsageError(f"pane split: --ratio {ratio} is not finite")
+    argv = [herdr, "pane", "split"]
+    if pane_id is not None:
+        argv.append(pane_id)
+    if direction is not None:
+        argv += ["--direction", direction]
+    if ratio is not None:
+        argv += ["--ratio", str(ratio)]
+    if cwd is not None:
+        argv += ["--cwd", cwd]
+    for item in env_vars:
+        argv += ["--env", item]
+    argv += _focus_flags(focus)
+    raw = run_herdr_checked(argv, env)
+    return _pane_info(_response_object(raw, "result", "pane"), where="pane split result.pane")
+
+
+def get_pane_layout(herdr: str, env: Mapping[str, str], pane_id: str) -> PaneLayout:
+    """`herdr pane layout --pane`: read `.result.layout`, the panes and their rectangles."""
+    raw = run_herdr_checked([herdr, "pane", "layout", "--pane", pane_id], env)
+    return _pane_layout(
+        _response_object(raw, "result", "layout"), where="pane layout result.layout"
+    )
+
+
+# Every C0 code point and DEL. `pane run` appends Enter, so one of these can end the typed
+# line and let the remainder run as a second command of its own.
+COMMAND_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def run_in_pane_safe(herdr: str, env: Mapping[str, str], pane_id: str, command: str) -> None:
+    """`herdr pane run`: typed shell text, refused unless it is one clean command line.
+
+    herdr appends Enter, so `command` is shell text executed by the pane's shell, not quoted
+    input. Rejection, not quoting, is the guard: a newline, carriage return, NUL, or any other
+    C0/DEL control character could end the line and run a second command, so it raises
+    `UsageError` (exit status 2) before any argv is built or herdr is called. An empty or
+    whitespace-only command is refused for the same reason. The whole command rides one argv
+    element, so spaces and shell metacharacters reach the shell intact.
+    """
+    if not command.strip():
+        raise UsageError("pane command is empty; refusing to send a bare Enter")
+    found = COMMAND_CONTROL_CHARS.search(command)
+    if found is not None:
+        raise UsageError(
+            f"pane command contains a control character (U+{ord(found.group()):04X}); "
+            "herdr appends Enter, so it would run a second command"
+        )
+    _ = run_herdr_checked([herdr, "pane", "run", pane_id, command], env)
+
+
+def get_agent(herdr: str, env: Mapping[str, str], target: str) -> AgentInfo:
+    """`herdr agent get <target>`: read `.result.agent`."""
+    raw = run_herdr_checked([herdr, "agent", "get", target], env)
+    return _agent_info(_response_object(raw, "result", "agent"), where="agent get result.agent")
+
+
+def list_agents(herdr: str, env: Mapping[str, str]) -> tuple[AgentInfo, ...]:
+    """`herdr agent list`: read every `.result.agents` entry; an index names a bad one."""
+    raw = run_herdr_checked([herdr, "agent", "list"], env)
+    return tuple(
+        _agent_info(item, where=f"agent list result.agents[{index}]")
+        for index, item in enumerate(entries(raw, "result", "agents"))
+    )
+
+
+def prompt_agent(
+    herdr: str,
+    env: Mapping[str, str],
+    target: str,
+    payload: str,
+    *,
+    wait: bool = False,
+    until: Sequence[str] = (),
+    timeout_ms: int | None = None,
+) -> AgentInfo:
+    """`herdr agent prompt <target> <payload>`: read `.result.agent`.
+
+    `--wait`, each `--until`, and `--timeout` are sent only when set. The CLI rejects
+    `--until`/`--timeout` without `--wait`, so that combination is a `UsageError` here,
+    before any call.
+    """
+    if not wait and (until or timeout_ms is not None):
+        raise UsageError("agent prompt: --until and --timeout require wait=True")
+    argv = [herdr, "agent", "prompt", target, payload]
+    if wait:
+        argv.append("--wait")
+    for status in until:
+        argv += ["--until", status]
+    if timeout_ms is not None:
+        argv += ["--timeout", str(timeout_ms)]
+    raw = run_herdr_checked(argv, env)
+    return _agent_info(_response_object(raw, "result", "agent"), where="agent prompt result.agent")
+
+
+def rename_pane(herdr: str, env: Mapping[str, str], pane_id: str, label: str) -> None:
+    """`herdr pane rename <pane_id> <label>`: nothing is parsed.
+
+    The schema pins no typed success result for this verb, so success is a zero exit and
+    there is no return value to invent.
+    """
+    _ = run_herdr_checked([herdr, "pane", "rename", pane_id, label], env)
+
+
+def rename_agent(herdr: str, env: Mapping[str, str], pane_id: str, name: str) -> None:
+    """`herdr agent rename <pane_id> <name>`: nothing is parsed.
+
+    The CLI target is the agent's pane id in v0.9.5, and the schema pins no typed success
+    result, so success is a zero exit and there is no return value to invent.
+    """
+    _ = run_herdr_checked([herdr, "agent", "rename", pane_id, name], env)
+
+
+def wait_pane_output(
+    herdr: str,
+    env: Mapping[str, str],
+    pane_id: str,
+    pattern: str,
+    *,
+    regex: bool = False,
+    source: str | None = None,
+    lines: int | None = None,
+    timeout_ms: int | None = None,
+    raw_output: bool = False,
+) -> PaneOutputMatch:
+    """`herdr pane wait-output <pane_id>`: read `.result` as `output_matched`.
+
+    `pattern` is a literal substring with `--match`, or a Rust regex with `regex=True`.
+    The snapshot flags and timeout are sent only when set. `.result.read` carries the matched
+    snapshot text; `.result.matched_line` is optional.
+    """
+    argv = [herdr, "pane", "wait-output", pane_id, "--regex" if regex else "--match", pattern]
+    if source is not None:
+        argv += ["--source", source]
+    if lines is not None:
+        argv += ["--lines", str(lines)]
+    if timeout_ms is not None:
+        argv += ["--timeout", str(timeout_ms)]
+    if raw_output:
+        argv.append("--raw")
+    raw = run_herdr_checked(argv, env)
+    result = _response_object(raw, "result")
+    return PaneOutputMatch(
+        pane_id=_required_text(result, "pane_id", where="pane wait-output result"),
+        revision=_required_int(result, "revision", where="pane wait-output result"),
+        matched_line=entry_optional_text(result, "matched_line"),
+        read=_pane_read(
+            _response_object(raw, "result", "read"),
+            where="pane wait-output result.read",
+        ),
+    )
 
 
 def current_pane_id(herdr: str, env: Mapping[str, str]) -> str:
