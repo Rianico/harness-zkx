@@ -114,6 +114,59 @@ if args[:2] == ["tab", "list"]:
     print(json.dumps(payload))
     raise SystemExit(0)
 
+if args[:2] == ["tab", "create"]:
+    if state.get("tab_create_error"):
+        print(json.dumps({"error": state["tab_create_error"], "id": "cli:tab:create"}), file=sys.stderr)
+        raise SystemExit(1)
+    workspace_id = (
+        args[args.index("--workspace") + 1]
+        if "--workspace" in args
+        else state.get("current", "w9:p1").split(":")[0]
+    )
+    tabs = state.get("tabs", [])
+    panes = state.get("panes", [])
+    number = 1 + sum(1 for tab in tabs if tab.get("workspace_id") == workspace_id)
+    ordinal = 0
+    for pane in panes:
+        pane_ref = str(pane.get("pane_id", ""))
+        if not pane_ref.startswith(workspace_id + ":"):
+            continue
+        digits = pane_ref.rsplit(":", 1)[-1].removeprefix("p")
+        if digits.isdigit():
+            ordinal = max(ordinal, int(digits))
+    # Defaults follow DEFAULT_STATE: first tab w9:t1, first pane w9:p1, and an
+    # unlabelled tab is labelled with its number.
+    tab_id = f"{workspace_id}:t{number}"
+    pane_id = f"{workspace_id}:p{ordinal + 1}"
+    label = args[args.index("--label") + 1] if "--label" in args else str(number)
+    focused = "--no-focus" not in args
+    cwd = args[args.index("--cwd") + 1] if "--cwd" in args else None
+    tab = {
+        "tab_id": tab_id,
+        "workspace_id": workspace_id,
+        "number": number,
+        "label": label,
+        "focused": focused,
+        "pane_count": 1,
+        "agent_status": "unknown",
+    }
+    root_pane = {
+        "pane_id": pane_id,
+        "terminal_id": f"{workspace_id}:term{ordinal + 1}",
+        "workspace_id": workspace_id,
+        "tab_id": tab_id,
+        "focused": focused,
+        "agent_status": "unknown",
+        "revision": 1,
+        "cwd": cwd,
+    }
+    state["tabs"] = [*tabs, tab]
+    state["panes"] = [*panes, root_pane]
+    Path(os.environ["STUB_HERDR_STATE"]).write_text(json.dumps(state))
+    payload = {"id": "cli:tab:create", "result": {"tab": tab, "root_pane": root_pane, "type": "tab_created"}}
+    print(json.dumps(payload))
+    raise SystemExit(0)
+
 if args[:2] == ["tab", "rename"]:
     if state.get("tab_rename_error"):
         print(json.dumps({"error": state["tab_rename_error"], "id": "cli:tab:rename"}), file=sys.stderr)

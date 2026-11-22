@@ -4,12 +4,12 @@ description: >-
   Herdr terminal-multiplexer driver for panes, tabs, workspaces, and sibling agents. Waits on test or server output. Use when driving Herdr panes; needs HERDR_ENV=1. Not for background terminals or delegation.
 metadata:
   author: herdrdev
-  version: '0.9.0'
+  version: '0.9.5'
 ---
 
 # Herdr
 
-Vendored from `herdrdev/herdr@v0.9.0`. Run `herdr --skill` to print the installed binary's copy.
+Vendored from `herdrdev/herdr@v0.9.5`. Run `herdr --skill` to print the installed binary's copy; that copy carries no version line, so run `herdr --version` to name the installed binary's version.
 
 Herdr organizes terminals into workspaces, tabs, and panes, recognizes coding agents, and exposes the session through the `herdr` CLI.
 
@@ -80,7 +80,7 @@ uv run "$SKILL_DIR/scripts/herdr_overview.py" --current       # only the calling
 uv run "$SKILL_DIR/scripts/herdr_overview.py" --format table  # force a format
 ```
 
-Piped output defaults to YAML (`# Format: YAML (pass --json for JSON)`). Pass `--json` for script parsing. Read created entities from creation responses instead of re-listing: `workspace create` returns `.result.workspace`, `tab create` returns `.result.tab`, and `pane split` returns `.result.pane`.
+Piped output defaults to YAML (`# Format: YAML (pass --json for JSON)`). Pass `--json` for script parsing. Read created entities from creation responses instead of re-listing: `workspace create` returns `.result.workspace`, `.result.tab`, and `.result.root_pane`; `tab create` returns `.result.tab` and `.result.root_pane`; `pane split` returns `.result.pane`.
 
 ## Learn the current CLI
 
