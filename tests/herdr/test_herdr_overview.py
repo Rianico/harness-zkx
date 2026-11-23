@@ -80,10 +80,80 @@ def json_tabs(*entries: dict[str, object]) -> str:
     return json.dumps({"result": {"tabs": list(entries)}})
 
 
+def agent_info(
+    pane_id: str,
+    *,
+    name: str | None = None,
+    tokens: Mapping[str, str] | None = None,
+) -> herdr_cli.AgentInfo:
+    """One `AgentInfo`: the required identity fields plus the optionals this view reads."""
+    return herdr_cli.AgentInfo(
+        terminal_id=f"term-{pane_id}",
+        agent_status="idle",
+        workspace_id="w9",
+        tab_id="w9:t1",
+        pane_id=pane_id,
+        focused=False,
+        revision=1,
+        agent="pi",
+        agent_session=None,
+        completion_seq=None,
+        cwd=None,
+        display_agent=None,
+        foreground_cwd=None,
+        interactive_ready=None,
+        launch_pending=None,
+        name=name,
+        screen_detection_skipped=None,
+        state_change_seq=None,
+        state_labels={},
+        terminal_title=None,
+        terminal_title_stripped=None,
+        title=None,
+        tokens={} if tokens is None else tokens,
+    )
+
+
+def workspace_info(workspace_id: str, *, label: str, number: int) -> herdr_cli.WorkspaceInfo:
+    """One `WorkspaceInfo`, with the counts and active tab this view never reads."""
+    return herdr_cli.WorkspaceInfo(
+        workspace_id=workspace_id,
+        number=number,
+        label=label,
+        focused=False,
+        pane_count=0,
+        tab_count=0,
+        active_tab_id="w9:t1",
+        agent_status="idle",
+        tokens={},
+        worktree=None,
+    )
+
+
+# `tests/herdr/stub.py`'s default agent row is still minimal and that file belongs to another
+# lane, so the identity fields the typed `agent list` admission requires come from here.
+SESSION_STATE = {
+    **DEFAULT_STATE,
+    "agents": [
+        {
+            "terminal_id": "w9:term1",
+            "agent_status": "working",
+            "workspace_id": "w9",
+            "tab_id": "w9:t1",
+            "pane_id": "w9:p1",
+            "focused": True,
+            "revision": 1,
+            "agent": "pi",
+            "name": "reviewer",
+        }
+    ],
+}
+
+
 def two_tab_state() -> dict[str, object]:
     """A session with two task groups in one workspace, one pane each."""
     return {
-        **DEFAULT_STATE,
+        **SESSION_STATE,
         "tabs": [
             {"tab_id": "w9:t1", "workspace_id": "w9", "label": "harness"},
             {"tab_id": "w9:t2", "workspace_id": "w9", "label": "scratch"},
@@ -150,39 +220,30 @@ def test_parse_panes_requires_pane_identity() -> None:
         _ = herdr_overview.parse_panes(json_panes({"pane_id": "w9:p1"}), {})
 
 
-def test_parse_agent_names_skips_unnamed_agents() -> None:
-    raw = json.dumps(
-        {
-            "result": {
-                "agents": [
-                    {"pane_id": "w9:p1", "name": "reviewer"},
-                    {"pane_id": "w9:p2", "name": None},
-                    {"pane_id": None, "name": "orphan"},
-                ]
-            }
-        }
+def test_agent_names_skips_unnamed_agents() -> None:
+    agents = (agent_info("w9:p1", name="reviewer"), agent_info("w9:p2"))
+    assert herdr_overview.agent_names(agents) == {"w9:p1": "reviewer"}
+
+
+def test_agent_tokens_skips_agents_without_tokens() -> None:
+    agents = (
+        agent_info("w9:p1", tokens={"summary": "⏳ 1 subagent (developer)"}),
+        agent_info("w9:p2"),
     )
-    assert herdr_overview.parse_agent_names(raw) == {"w9:p1": "reviewer"}
+    assert herdr_overview.agent_tokens(agents) == {
+        "w9:p1": {"summary": "⏳ 1 subagent (developer)"}
+    }
 
 
-def test_parse_workspaces_reads_label_and_number() -> None:
-    raw = json.dumps(
-        {
-            "result": {
-                "workspaces": [
-                    {"workspace_id": "w9", "label": "harness", "number": 1},
-                    {"workspace_id": "wB"},
-                ]
-            }
-        }
+def test_workspace_index_keys_label_and_number() -> None:
+    workspaces = (
+        workspace_info("w9", label="harness", number=1),
+        workspace_info("wB", label="scratch", number=2),
     )
-    assert herdr_overview.parse_workspaces(raw) == {"w9": ("harness", 1), "wB": (None, None)}
-
-
-def test_parse_workspaces_requires_the_workspace_id() -> None:
-    raw = json.dumps({"result": {"workspaces": [{"label": "nameless"}]}})
-    with pytest.raises(herdr_cli.HerdrError, match="workspace_id"):
-        _ = herdr_overview.parse_workspaces(raw)
+    assert herdr_overview.workspace_index(workspaces) == {
+        "w9": ("harness", 1),
+        "wB": ("scratch", 2),
+    }
 
 
 def test_parse_tabs_reads_labels_keyed_by_tab_id() -> None:
@@ -635,7 +696,7 @@ def test_render_yaml_includes_tokens_mapping() -> None:
 
 
 def test_reads_the_pane_agent_workspace_and_tab_lists(stub: StubHarness) -> None:
-    _ = stub.run(env=PANE_ENV)
+    _ = stub.run(env=PANE_ENV, state=SESSION_STATE)
     assert [call[1:3] for call in stub.calls()] == [
         ["pane", "list"],
         ["agent", "list"],
@@ -645,7 +706,7 @@ def test_reads_the_pane_agent_workspace_and_tab_lists(stub: StubHarness) -> None
 
 
 def test_markdown_is_the_default_when_stdout_is_not_a_terminal(stub: StubHarness) -> None:
-    done = stub.run(env=PANE_ENV)
+    done = stub.run(env=PANE_ENV, state=SESSION_STATE)
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
 
     assert "## Workspace: harness (w9) *" in done.stdout
@@ -656,7 +717,7 @@ def test_markdown_is_the_default_when_stdout_is_not_a_terminal(stub: StubHarness
 
 
 def test_format_yaml_renders_nested_task_groups(stub: StubHarness) -> None:
-    done = stub.run("--format", "yaml", env=PANE_ENV)
+    done = stub.run("--format", "yaml", env=PANE_ENV, state=SESSION_STATE)
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
 
     parsed = yaml.safe_load(done.stdout)
@@ -673,7 +734,7 @@ def test_format_yaml_renders_nested_task_groups(stub: StubHarness) -> None:
 
 
 def test_format_json_renders_nested_task_groups(stub: StubHarness) -> None:
-    done = stub.run("--format", "json", env=PANE_ENV)
+    done = stub.run("--format", "json", env=PANE_ENV, state=SESSION_STATE)
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     data = json.loads(done.stdout)
     (workspace,) = data["workspaces"]
@@ -684,8 +745,8 @@ def test_format_json_renders_nested_task_groups(stub: StubHarness) -> None:
 
 
 def test_format_rich_and_table_render_rich_text(stub: StubHarness) -> None:
-    rich_done = stub.run("--format", "rich", env=PANE_ENV)
-    table_done = stub.run("--format", "table", env=PANE_ENV)
+    rich_done = stub.run("--format", "rich", env=PANE_ENV, state=SESSION_STATE)
+    table_done = stub.run("--format", "table", env=PANE_ENV, state=SESSION_STATE)
 
     for done in (rich_done, table_done):
         assert done.returncode == herdr_cli.EXIT_OK, done.stderr
@@ -702,7 +763,7 @@ def test_format_rich_and_table_render_rich_text(stub: StubHarness) -> None:
 def test_scope_flags_narrow_the_stub_session(
     stub: StubHarness, flag: str, expected: list[str]
 ) -> None:
-    done = stub.run(flag, "--format", "json", env=PANE_ENV)
+    done = stub.run(flag, "--format", "json", env=PANE_ENV, state=SESSION_STATE)
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     parsed = json.loads(done.stdout)
     assert [
@@ -745,7 +806,7 @@ def test_bare_tab_still_scopes_to_the_calling_tab(stub: StubHarness) -> None:
 
 
 def test_unknown_tab_filter_is_a_usage_error_with_a_listing(stub: StubHarness) -> None:
-    done = stub.run("--tab", "nope", env=PANE_ENV)
+    done = stub.run("--tab", "nope", env=PANE_ENV, state=SESSION_STATE)
     assert done.returncode == herdr_cli.EXIT_USAGE
     assert "nope" in done.stderr
     assert "harness (w9:t1)" in done.stderr
@@ -773,7 +834,7 @@ def test_refuses_without_herdr_env(stub: StubHarness) -> None:
 
 
 def test_a_malformed_pane_list_is_reported(stub: StubHarness) -> None:
-    done = stub.run(env=PANE_ENV, state={**DEFAULT_STATE, "panes": None})
+    done = stub.run(env=PANE_ENV, state={**SESSION_STATE, "panes": None})
     assert done.returncode == herdr_cli.EXIT_HERDR
     assert "is not a list" in done.stderr
     assert "Traceback" not in done.stderr

@@ -24,6 +24,8 @@ Do not run bare `herdr` for discovery; it launches or attaches the TUI. Do not p
 
 Most control commands return JSON. Read identifiers and state from those responses instead of predicting them.
 
+Creation responses name what they created, in one call. `workspace create` returns `.result.workspace`, `.result.tab`, and `.result.root_pane`; `tab create` returns `.result.tab` and `.result.root_pane`; `pane split` returns `.result.pane`. Re-listing to discover the new id is unnecessary.
+
 ## Agent lifecycle states
 
 `idle` and `done` both mean the agent is ready for input — unless the record is weakly recognized. A record reporting `idle`/`done` with revision 0 and no `agent_session` path (seen on agy panes whose status bar still reads WORKING, or while awaiting background subagents) proves nothing; hold the barrier and confirm via the pane. Weakly-recognized agents never advance revision past 0 and cannot be observed to completion via `herdr-wait` or `herdr-prompt --wait`. For `agy` and revision-0 agents, **Dispatch-&-Yield is REQUIRED, not advisory** (`herdr_dispatch.py` or `herdr_prompt.py --no-wait` + yield turn + `herdr_reply.py` completion callback). The CLI/API uses the server's seen state to distinguish them; explicit focus commands mark the target seen, while reads do not. Each TUI client tracks viewed completions independently, so its Done badge can differ from the CLI or another client's badge. `blocked` means Herdr recognized an approval or question UI. `unknown` means an agent is present but Herdr cannot classify it confidently; it does not prove completion.

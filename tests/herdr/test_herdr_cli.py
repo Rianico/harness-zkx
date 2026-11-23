@@ -14,6 +14,8 @@ import herdr_reply
 import pytest
 import yaml
 
+from tests.herdr.stub import SCRIPTS_DIR, StubHarness
+
 
 def test_error_code_reads_envelope() -> None:
     stderr = '{"error":{"code":"agent_blocked","message":"blocked"},"id":"cli:agent:prompt"}'
@@ -510,3 +512,945 @@ def test_current_workspace_id_derives_from_pane_id_split(
 
     monkeypatch.setattr(herdr_cli, "run_herdr_checked", fake_run)
     assert herdr_cli.current_workspace_id("/bin/herdr", {}) == "w99"
+
+
+# ── fail closed: the target is verified as an agent before any send (#369) ─────────
+#
+# `verify_target_not_bare_shell` asks the daemon what a target is running so prose is never
+# injected into a shell. Two defects made that gate optional (#369): an unreadable daemon
+# counted as "not a shell" (fail-open), and `--no-caller-context` skipped the check along
+# with the envelope lookups. These pin both closed. The three outcomes are distinct:
+# could not verify ⇒ `HerdrError` (exit 1, no send); verified shell ⇒ `BareShellRefusal`
+# (exit 2, no send); verified agent ⇒ the send happens, with or without the UX flags.
+
+PROMPT_SCRIPT = SCRIPTS_DIR / "herdr_prompt.py"
+SHELL_TARGET = "w9:p2"  # DEFAULT_STATE: a pane with no live agent
+AGENT_TARGET = "reviewer"  # DEFAULT_STATE: the live agent on w9:p1
+INVENTORY_CALLS: tuple[list[str], ...] = (["pane", "list"], ["agent", "list"])
+
+
+@pytest.fixture
+def stub(stub_factory: Callable[[Path], StubHarness]) -> StubHarness:
+    """The shared stub `herdr`, driven through `herdr-prompt` as in the prompt suite."""
+    return stub_factory(PROMPT_SCRIPT)
+
+
+def prompt_payload(tmp_path: Path, text: str = "hi") -> Path:
+    path = tmp_path / "payload.md"
+    _ = path.write_text(text, encoding="utf-8")
+    return path
+
+
+def inventory_failure(mode: str, argv: Sequence[str]) -> subprocess.CompletedProcess[str]:
+    """One unverifiable daemon answer: dead process, garbage, silence, or a missing field."""
+    if mode == "error":
+        return subprocess.CompletedProcess(list(argv), 1, "", '{"error":"daemon unreachable"}')
+    if mode == "garbage":
+        return subprocess.CompletedProcess(list(argv), 0, "not json at all", "")
+    if mode == "empty":
+        return subprocess.CompletedProcess(list(argv), 0, "", "")
+    return subprocess.CompletedProcess(list(argv), 0, json.dumps({"result": {}}), "")
+
+
+@pytest.fixture
+def failing_daemon(monkeypatch: pytest.MonkeyPatch, stub: StubHarness) -> Callable[[str], None]:
+    """Fail only the inventory reads; any other argv still reaches the stub and is logged."""
+
+    def install(mode: str) -> None:
+        real = herdr_cli.run_herdr
+
+        def fake(argv: Sequence[str], env: Mapping[str, str]) -> subprocess.CompletedProcess[str]:
+            if list(argv)[1:3] in INVENTORY_CALLS:
+                return inventory_failure(mode, argv)
+            return real(argv, env)
+
+        monkeypatch.setattr(herdr_cli, "run_herdr", fake)
+
+    return install
+
+
+DAEMON_FAILURES = [
+    pytest.param("error", id="exit-1"),
+    pytest.param("garbage", id="non-json"),
+    pytest.param("empty", id="empty-output"),
+    pytest.param("missing-field", id="missing-field"),
+]
+FLAG_VARIANTS = [
+    pytest.param((), id="envelope"),
+    pytest.param(("--no-caller-context",), id="no-caller-context"),
+]
+
+
+@pytest.mark.parametrize("mode", DAEMON_FAILURES)
+@pytest.mark.parametrize("flags", FLAG_VARIANTS)
+def test_an_unverifiable_target_refuses_the_send(
+    stub: StubHarness,
+    tmp_path: Path,
+    failing_daemon: Callable[[str], None],
+    mode: str,
+    flags: tuple[str, ...],
+) -> None:
+    """A daemon that cannot answer is not evidence of an agent: refuse, send nothing."""
+    failing_daemon(mode)
+
+    done = stub.run(AGENT_TARGET, "--file", str(prompt_payload(tmp_path)), *flags)
+
+    assert done.returncode == herdr_cli.EXIT_HERDR
+    assert "could not verify" in done.stderr
+    assert AGENT_TARGET in done.stderr
+    assert "herdr agent list" in done.stderr  # the remedy, not just the symptom
+    assert stub.prompts() == []
+
+
+@pytest.mark.parametrize("mode", DAEMON_FAILURES)
+def test_a_dry_run_still_verifies_and_refuses_an_unverifiable_target(
+    stub: StubHarness,
+    tmp_path: Path,
+    failing_daemon: Callable[[str], None],
+    mode: str,
+) -> None:
+    """`--dry-run` sends nothing, but it must not skip the check either."""
+    failing_daemon(mode)
+
+    done = stub.run(
+        AGENT_TARGET,
+        "--file",
+        str(prompt_payload(tmp_path)),
+        "--dry-run",
+        "--no-caller-context",
+    )
+
+    assert done.returncode == herdr_cli.EXIT_HERDR
+    assert "could not verify" in done.stderr
+    assert stub.prompts() == []
+
+
+@pytest.mark.parametrize("flags", FLAG_VARIANTS)
+def test_a_bare_shell_target_is_refused(
+    stub: StubHarness, tmp_path: Path, flags: tuple[str, ...]
+) -> None:
+    done = stub.run(SHELL_TARGET, "--file", str(prompt_payload(tmp_path)), *flags)
+
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "no live agent" in done.stderr
+    assert "Refusing injection" in done.stderr
+    assert "could not verify" not in done.stderr
+    assert stub.prompts() == []
+
+
+def test_a_dry_run_reports_a_bare_shell_target_instead_of_sending(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """A dry run cannot inject, so the shell verdict is a note, not a refusal (#369 C)."""
+    done = stub.run(
+        SHELL_TARGET,
+        "--file",
+        str(prompt_payload(tmp_path)),
+        "--dry-run",
+        "--no-caller-context",
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert f"note: target {SHELL_TARGET!r} is a bare shell" in done.stderr
+    assert f"refused with exit {herdr_cli.EXIT_USAGE}" in done.stderr
+    assert stub.prompts() == []
+
+
+@pytest.mark.parametrize("flags", FLAG_VARIANTS)
+def test_a_verified_agent_target_proceeds(
+    stub: StubHarness, tmp_path: Path, flags: tuple[str, ...]
+) -> None:
+    done = stub.run(AGENT_TARGET, "--file", str(prompt_payload(tmp_path)), "--no-wait", *flags)
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (call,) = stub.prompts()
+    assert call[3] == AGENT_TARGET
+
+
+def test_a_verified_agent_target_still_dry_runs_without_sending(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    done = stub.run(
+        AGENT_TARGET,
+        "--file",
+        str(prompt_payload(tmp_path)),
+        "--dry-run",
+        "--no-caller-context",
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert stub.prompts() == []
+
+
+def test_verify_raises_herdr_error_when_the_inventory_is_unreadable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def explode(_argv: Sequence[str], _env: Mapping[str, str]) -> str:
+        raise herdr_cli.HerdrError("herdr pane list failed: exit status 1")
+
+    monkeypatch.setattr(herdr_cli, "run_herdr_checked", explode)
+
+    with pytest.raises(herdr_cli.HerdrError, match="could not verify target 'w9:p1'"):
+        herdr_cli.verify_target_not_bare_shell("/bin/herdr", "w9:p1", {})
+
+
+def test_verify_raises_the_bare_shell_refusal_for_a_shell_pane(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stub_snapshot(
+        monkeypatch,
+        [{"pane_id": "w9:p2", "agent": None, "agent_status": "unknown"}],
+        [],
+    )
+
+    def failing_run(
+        argv: Sequence[str], _env: Mapping[str, str]
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(list(argv), 1, "", "")
+
+    monkeypatch.setattr(herdr_cli, "run_herdr", failing_run)
+
+    with pytest.raises(herdr_cli.BareShellRefusal, match="no live agent"):
+        herdr_cli.verify_target_not_bare_shell("/bin/herdr", "w9:p2", {})
+
+
+def test_verify_accepts_a_live_agent_target(monkeypatch: pytest.MonkeyPatch) -> None:
+    stub_snapshot(
+        monkeypatch,
+        [{"pane_id": "w9:p1", "agent": "pi", "agent_status": "idle"}],
+        [{"pane_id": "w9:p1", "name": "reviewer"}],
+    )
+
+    herdr_cli.verify_target_not_bare_shell("/bin/herdr", "reviewer", {})
+
+
+# ── typed response wrappers (#370) ─────────────────────────────────────────────────
+#
+# Every wrapper owns one verb: the argv it sends, the response path it reads, and the shape
+# it admits. The payloads below carry every field herdr 0.9.5 declares, so a parser that
+# drops a field or accepts the wrong type fails here instead of in a caller.
+
+
+def stub_response(monkeypatch: pytest.MonkeyPatch, payload: str) -> list[list[str]]:
+    """Answer every herdr call with `payload` and return the argv log."""
+    calls: list[list[str]] = []
+
+    def fake(argv: Sequence[str], _env: Mapping[str, str]) -> str:
+        calls.append(list(argv))
+        return payload
+
+    monkeypatch.setattr(herdr_cli, "run_herdr_checked", fake)
+    return calls
+
+
+def live_pane(pane_id: str = "w9:p1") -> dict[str, object]:
+    """One `PaneInfo`: every required field plus the optional fields v0.9.5 sends."""
+    return {
+        "pane_id": pane_id,
+        "terminal_id": f"term-{pane_id}",
+        "workspace_id": "w9",
+        "tab_id": "w9:t1",
+        "focused": True,
+        "agent_status": "idle",
+        "revision": 11,
+        "agent": "pi",
+        "agent_session": {
+            "source": "native",
+            "agent": "pi",
+            "kind": "id",
+            "value": "session-1",
+        },
+        "cwd": "/tmp/work",
+        "display_agent": "pi",
+        "foreground_cwd": "/tmp/work",
+        "label": "impl",
+        "restore_error": None,
+        "scroll": {
+            "offset_from_bottom": 0,
+            "max_offset_from_bottom": 240,
+            "viewport_rows": 30,
+        },
+        "state_labels": {"ticket": "#370"},
+        "terminal_title": "pi",
+        "terminal_title_stripped": "pi",
+        "title": "impl",
+        "tokens": {"ticket": "#370"},
+    }
+
+
+def live_tab() -> dict[str, object]:
+    """One `TabInfo`: every required field."""
+    return {
+        "tab_id": "w9:t2",
+        "workspace_id": "w9",
+        "number": 2,
+        "label": "impl",
+        "focused": True,
+        "pane_count": 1,
+        "agent_status": "idle",
+    }
+
+
+def live_agent() -> dict[str, object]:
+    """One `AgentInfo`: every required field plus the optional fields v0.9.5 sends."""
+    return {
+        "terminal_id": "term-w9:p1",
+        "agent_status": "idle",
+        "workspace_id": "w9",
+        "tab_id": "w9:t1",
+        "pane_id": "w9:p1",
+        "focused": True,
+        "revision": 7,
+        "agent": "pi",
+        "agent_session": {
+            "source": "native",
+            "agent": "pi",
+            "kind": "id",
+            "value": "session-1",
+        },
+        "completion_seq": 3,
+        "cwd": "/tmp/work",
+        "display_agent": "pi",
+        "foreground_cwd": "/tmp/work",
+        "interactive_ready": True,
+        "launch_pending": False,
+        "name": "impl",
+        "screen_detection_skipped": False,
+        "state_change_seq": 2,
+        "state_labels": {"ticket": "#370"},
+        "terminal_title": "pi",
+        "terminal_title_stripped": "pi",
+        "title": "impl",
+        "tokens": {"ticket": "#370"},
+    }
+
+
+def live_workspace() -> dict[str, object]:
+    """One `WorkspaceInfo`: every required field plus the optional fields v0.9.5 sends."""
+    return {
+        "workspace_id": "w9",
+        "number": 1,
+        "label": "main",
+        "focused": True,
+        "pane_count": 2,
+        "tab_count": 1,
+        "active_tab_id": "w9:t1",
+        "agent_status": "idle",
+        "tokens": {"ticket": "#370"},
+        "worktree": {
+            "repo_key": "harness",
+            "repo_name": "harness",
+            "repo_root": "/tmp/harness",
+            "checkout_path": "/tmp/harness",
+            "is_linked_worktree": False,
+        },
+    }
+
+
+def live_workspace_listing() -> dict[str, object]:
+    """One `workspace list` entry: only the fields herdr 0.9.5 requires."""
+    return {
+        "workspace_id": "w9",
+        "number": 1,
+        "label": "main",
+        "focused": True,
+        "pane_count": 2,
+        "tab_count": 1,
+        "active_tab_id": "w9:t1",
+        "agent_status": "idle",
+    }
+
+
+def live_layout() -> dict[str, object]:
+    """One `PaneLayoutSnapshot`: every required field of the layout and its panes."""
+    return {
+        "workspace_id": "w9",
+        "tab_id": "w9:t1",
+        "zoomed": False,
+        "area": {"x": 0, "y": 0, "width": 160, "height": 48},
+        "focused_pane_id": "w9:p1",
+        "panes": [
+            {
+                "pane_id": "w9:p1",
+                "focused": True,
+                "rect": {"x": 0, "y": 0, "width": 80, "height": 24},
+            }
+        ],
+        "splits": [],
+    }
+
+
+def live_read() -> dict[str, object]:
+    """One `PaneReadResult`: every required field."""
+    return {
+        "pane_id": "w9:p1",
+        "workspace_id": "w9",
+        "tab_id": "w9:t1",
+        "source": "recent",
+        "format": "text",
+        "text": "READY\n",
+        "revision": 12,
+        "truncated": False,
+    }
+
+
+def live_match() -> dict[str, object]:
+    """One `output_matched` result: the read and the matched line."""
+    return {
+        "pane_id": "w9:p1",
+        "revision": 12,
+        "matched_line": "READY",
+        "read": live_read(),
+    }
+
+
+def test_create_tab_reads_tab_and_root_pane_from_one_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = json.dumps(
+        {"result": {"type": "tab_created", "tab": live_tab(), "root_pane": live_pane("w9:p2")}}
+    )
+    calls = stub_response(monkeypatch, payload)
+
+    created = herdr_cli.create_tab(
+        "/bin/herdr",
+        {},
+        workspace_id="w9",
+        label="impl",
+        cwd="/tmp/work",
+        env_vars=["A=1"],
+        focus=False,
+    )
+
+    assert calls == [
+        [
+            "/bin/herdr",
+            "tab",
+            "create",
+            "--workspace",
+            "w9",
+            "--cwd",
+            "/tmp/work",
+            "--label",
+            "impl",
+            "--env",
+            "A=1",
+            "--no-focus",
+        ]
+    ]
+    assert created.tab.tab_id == "w9:t2"
+    assert created.tab.number == 2
+    assert created.root_pane.pane_id == "w9:p2"
+    assert created.root_pane.agent_session is not None
+    assert created.root_pane.agent_session.value == "session-1"
+    assert created.root_pane.scroll is not None
+    assert created.root_pane.scroll.viewport_rows == 30
+
+
+def test_create_tab_names_a_missing_root_pane(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = json.dumps({"result": {"type": "tab_created", "tab": live_tab()}})
+    calls = stub_response(monkeypatch, payload)
+
+    with pytest.raises(herdr_cli.HerdrError, match="root_pane"):
+        _ = herdr_cli.create_tab("/bin/herdr", {})
+    assert len(calls) == 1
+
+
+def test_split_pane_reads_result_pane_and_sends_the_expected_tokens(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = json.dumps({"result": {"type": "pane_info", "pane": live_pane("w9:p3")}})
+    calls = stub_response(monkeypatch, payload)
+
+    pane = herdr_cli.split_pane(
+        "/bin/herdr",
+        {},
+        pane_id="w9:p1",
+        direction="right",
+        cwd="/tmp/work",
+        env_vars=["A=1"],
+        focus=True,
+    )
+
+    assert calls == [
+        [
+            "/bin/herdr",
+            "pane",
+            "split",
+            "--pane",
+            "w9:p1",
+            "--direction",
+            "right",
+            "--cwd",
+            "/tmp/work",
+            "--env",
+            "A=1",
+            "--focus",
+        ]
+    ]
+    assert pane.pane_id == "w9:p3"
+    assert pane.state_labels == {"ticket": "#370"}
+
+
+def test_split_pane_sends_ratio_between_direction_and_cwd(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = json.dumps({"result": {"type": "pane_info", "pane": live_pane("w9:p3")}})
+    calls = stub_response(monkeypatch, payload)
+
+    _ = herdr_cli.split_pane(
+        "/bin/herdr",
+        {},
+        pane_id="w9:p1",
+        direction="right",
+        ratio=0.3,
+        cwd="/tmp/work",
+    )
+
+    assert calls == [
+        [
+            "/bin/herdr",
+            "pane",
+            "split",
+            "--pane",
+            "w9:p1",
+            "--direction",
+            "right",
+            "--ratio",
+            "0.3",
+            "--cwd",
+            "/tmp/work",
+        ]
+    ]
+
+
+def test_split_pane_omits_ratio_when_not_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = json.dumps({"result": {"type": "pane_info", "pane": live_pane("w9:p3")}})
+    calls = stub_response(monkeypatch, payload)
+
+    _ = herdr_cli.split_pane("/bin/herdr", {}, pane_id="w9:p1", direction="down")
+
+    assert calls == [["/bin/herdr", "pane", "split", "--pane", "w9:p1", "--direction", "down"]]
+    assert "--ratio" not in calls[0]
+
+
+def test_split_pane_formats_ratio_like_the_lane_plan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = json.dumps({"result": {"type": "pane_info", "pane": live_pane("w9:p3")}})
+    calls = stub_response(monkeypatch, payload)
+
+    _ = herdr_cli.split_pane("/bin/herdr", {}, pane_id="w9:p1", ratio=0.1234567)
+
+    assert calls == [["/bin/herdr", "pane", "split", "--pane", "w9:p1", "--ratio", "0.123457"]]
+
+
+@pytest.mark.parametrize("ratio", [float("nan"), float("inf")])
+def test_split_pane_refuses_a_non_finite_ratio_before_any_call(
+    monkeypatch: pytest.MonkeyPatch,
+    ratio: float,
+) -> None:
+    payload = json.dumps({"result": {"type": "pane_info", "pane": live_pane("w9:p3")}})
+    calls = stub_response(monkeypatch, payload)
+
+    with pytest.raises(herdr_cli.UsageError, match=f"ratio {ratio} is not finite"):
+        _ = herdr_cli.split_pane("/bin/herdr", {}, ratio=ratio)
+
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("focused", "yes"), ("revision", "3"), ("pane_id", None), ("state_labels", ["#370"])],
+)
+def test_pane_info_rejects_a_wrong_typed_required_field(
+    monkeypatch: pytest.MonkeyPatch, field: str, value: object
+) -> None:
+    pane = live_pane()
+    pane[field] = value
+    payload = json.dumps({"result": {"type": "pane_info", "pane": pane}})
+    _ = stub_response(monkeypatch, payload)
+
+    with pytest.raises(herdr_cli.HerdrError, match=f"no usable '{field}'"):
+        _ = herdr_cli.split_pane("/bin/herdr", {})
+
+
+def test_pane_info_names_a_missing_nested_agent_session_field() -> None:
+    pane = live_pane()
+    pane["agent_session"] = {"source": "native", "agent": "pi", "value": "session-1"}
+
+    with pytest.raises(herdr_cli.HerdrError, match=r"agent_session has no usable 'kind'"):
+        _ = herdr_cli._pane_info(pane, where="pane")
+
+
+def test_get_pane_layout_parses_panes_and_rectangles(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = json.dumps({"result": {"type": "pane_layout", "layout": live_layout()}})
+    calls = stub_response(monkeypatch, payload)
+
+    layout = herdr_cli.get_pane_layout("/bin/herdr", {}, "w9:p1")
+
+    assert calls == [["/bin/herdr", "pane", "layout", "--pane", "w9:p1"]]
+    assert layout.workspace_id == "w9"
+    assert layout.focused_pane_id == "w9:p1"
+    assert layout.panes == (
+        herdr_cli.PaneLayoutPane(
+            pane_id="w9:p1",
+            focused=True,
+            rect=herdr_cli.PaneRect(x=0, y=0, width=80, height=24),
+        ),
+    )
+
+
+def test_get_pane_layout_names_a_wrong_typed_rect_field(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    layout = live_layout()
+    layout["panes"] = [{"pane_id": "w9:p1", "focused": True, "rect": {"x": 0, "y": 0}}]
+    payload = json.dumps({"result": {"type": "pane_layout", "layout": layout}})
+    _ = stub_response(monkeypatch, payload)
+
+    with pytest.raises(herdr_cli.HerdrError, match=r"no usable 'width'"):
+        _ = herdr_cli.get_pane_layout("/bin/herdr", {}, "w9:p1")
+
+
+def test_get_agent_reads_result_agent(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = json.dumps({"result": {"type": "agent_info", "agent": live_agent()}})
+    calls = stub_response(monkeypatch, payload)
+
+    agent = herdr_cli.get_agent("/bin/herdr", {}, "impl")
+
+    assert calls == [["/bin/herdr", "agent", "get", "impl"]]
+    assert agent.name == "impl"
+    assert agent.completion_seq == 3
+    assert agent.state_change_seq == 2
+
+
+def test_get_agent_names_a_missing_required_field(monkeypatch: pytest.MonkeyPatch) -> None:
+    broken = live_agent()
+    del broken["revision"]
+    payload = json.dumps({"result": {"type": "agent_info", "agent": broken}})
+    _ = stub_response(monkeypatch, payload)
+
+    with pytest.raises(herdr_cli.HerdrError, match=r"result\.agent has no usable 'revision'"):
+        _ = herdr_cli.get_agent("/bin/herdr", {}, "impl")
+
+
+def test_get_agent_reads_an_absent_state_labels_key_as_an_empty_map(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    agent = live_agent()
+    del agent["state_labels"]
+    del agent["tokens"]
+    _ = stub_response(monkeypatch, json.dumps({"result": {"type": "agent_info", "agent": agent}}))
+
+    found = herdr_cli.get_agent("/bin/herdr", {}, "impl")
+
+    assert found.state_labels == {}
+    assert found.tokens == {}
+
+
+def test_get_agent_reads_a_null_state_labels_key_as_an_empty_map(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    agent = live_agent()
+    agent["state_labels"] = None
+    agent["tokens"] = None
+    _ = stub_response(monkeypatch, json.dumps({"result": {"type": "agent_info", "agent": agent}}))
+
+    found = herdr_cli.get_agent("/bin/herdr", {}, "impl")
+
+    assert found.state_labels == {}
+    assert found.tokens == {}
+
+
+def test_get_agent_names_a_non_object_state_labels(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    agent = live_agent()
+    agent["state_labels"] = ["#370"]
+    _ = stub_response(monkeypatch, json.dumps({"result": {"type": "agent_info", "agent": agent}}))
+
+    with pytest.raises(herdr_cli.HerdrError, match=r"no usable 'state_labels'"):
+        _ = herdr_cli.get_agent("/bin/herdr", {}, "impl")
+
+
+def test_get_agent_names_a_non_string_token_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    agent = live_agent()
+    agent["tokens"] = {"ticket": 7}
+    _ = stub_response(monkeypatch, json.dumps({"result": {"type": "agent_info", "agent": agent}}))
+
+    with pytest.raises(herdr_cli.HerdrError, match=r"no usable 'tokens'"):
+        _ = herdr_cli.get_agent("/bin/herdr", {}, "impl")
+
+
+def test_list_agents_reads_every_entry(monkeypatch: pytest.MonkeyPatch) -> None:
+    second = live_agent()
+    second["pane_id"] = "w9:p2"
+    payload = json.dumps({"result": {"type": "agent_list", "agents": [live_agent(), second]}})
+    calls = stub_response(monkeypatch, payload)
+
+    agents = herdr_cli.list_agents("/bin/herdr", {})
+
+    assert calls == [["/bin/herdr", "agent", "list"]]
+    assert [agent.pane_id for agent in agents] == ["w9:p1", "w9:p2"]
+
+
+def test_list_agents_names_the_offending_entry(monkeypatch: pytest.MonkeyPatch) -> None:
+    broken = live_agent()
+    broken["terminal_id"] = None
+    payload = json.dumps({"result": {"type": "agent_list", "agents": [live_agent(), broken]}})
+    _ = stub_response(monkeypatch, payload)
+
+    with pytest.raises(herdr_cli.HerdrError, match=r"agents\[1\] has no usable 'terminal_id'"):
+        _ = herdr_cli.list_agents("/bin/herdr", {})
+
+
+def test_list_workspaces_reads_every_entry(monkeypatch: pytest.MonkeyPatch) -> None:
+    second = live_workspace_listing()
+    second["workspace_id"] = "w1P"
+    second["number"] = 2
+    payload = json.dumps(
+        {"result": {"type": "workspace_list", "workspaces": [live_workspace_listing(), second]}}
+    )
+    calls = stub_response(monkeypatch, payload)
+
+    workspaces = herdr_cli.list_workspaces("/bin/herdr", {})
+
+    assert calls == [["/bin/herdr", "workspace", "list"]]
+    assert [workspace.workspace_id for workspace in workspaces] == ["w9", "w1P"]
+    assert workspaces[0].active_tab_id == "w9:t1"
+    assert workspaces[0].pane_count == 2
+    assert workspaces[0].tokens == {}
+    assert workspaces[0].worktree is None
+
+
+def test_list_workspaces_names_the_offending_entry(monkeypatch: pytest.MonkeyPatch) -> None:
+    broken = live_workspace_listing()
+    del broken["active_tab_id"]
+    payload = json.dumps(
+        {"result": {"type": "workspace_list", "workspaces": [live_workspace_listing(), broken]}}
+    )
+    _ = stub_response(monkeypatch, payload)
+
+    with pytest.raises(
+        herdr_cli.HerdrError, match=r"workspaces\[1\] has no usable 'active_tab_id'"
+    ):
+        _ = herdr_cli.list_workspaces("/bin/herdr", {})
+
+
+def test_prompt_agent_sends_wait_flags_only_when_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = json.dumps({"result": {"type": "agent_prompted", "agent": live_agent()}})
+    calls = stub_response(monkeypatch, payload)
+
+    agent = herdr_cli.prompt_agent(
+        "/bin/herdr",
+        {},
+        "impl",
+        "status?",
+        wait=True,
+        until=("idle", "blocked"),
+        timeout_ms=120000,
+    )
+
+    assert calls == [
+        [
+            "/bin/herdr",
+            "agent",
+            "prompt",
+            "impl",
+            "status?",
+            "--wait",
+            "--until",
+            "idle",
+            "--until",
+            "blocked",
+            "--timeout",
+            "120000",
+        ]
+    ]
+    assert agent.pane_id == "w9:p1"
+
+
+def test_prompt_agent_omits_wait_flags_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = json.dumps({"result": {"type": "agent_prompted", "agent": live_agent()}})
+    calls = stub_response(monkeypatch, payload)
+
+    _ = herdr_cli.prompt_agent("/bin/herdr", {}, "impl", "hi")
+
+    assert calls == [["/bin/herdr", "agent", "prompt", "impl", "hi"]]
+
+
+def test_prompt_agent_refuses_until_without_wait(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = stub_response(monkeypatch, "{}")
+
+    with pytest.raises(herdr_cli.UsageError, match="require wait"):
+        _ = herdr_cli.prompt_agent("/bin/herdr", {}, "impl", "hi", until=("idle",))
+    assert calls == []
+
+
+def test_prompt_agent_names_a_missing_agent(monkeypatch: pytest.MonkeyPatch) -> None:
+    _ = stub_response(monkeypatch, json.dumps({"result": {"type": "agent_prompted"}}))
+
+    with pytest.raises(herdr_cli.HerdrError, match=r"result\.agent"):
+        _ = herdr_cli.prompt_agent("/bin/herdr", {}, "impl", "hi")
+
+
+def test_rename_pane_sends_the_label_and_returns_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = stub_response(monkeypatch, json.dumps({"result": {"type": "ok"}}))
+
+    assert herdr_cli.rename_pane("/bin/herdr", {}, "w9:p1", "impl") is None
+    assert calls == [["/bin/herdr", "pane", "rename", "w9:p1", "impl"]]
+
+
+def test_rename_agent_sends_the_name_and_returns_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = stub_response(monkeypatch, json.dumps({"result": {"type": "ok"}}))
+
+    assert herdr_cli.rename_agent("/bin/herdr", {}, "w9:p1", "impl") is None
+    assert calls == [["/bin/herdr", "agent", "rename", "w9:p1", "impl"]]
+
+
+def test_wait_pane_output_reads_the_output_matched_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = json.dumps({"result": {"type": "output_matched", **live_match()}})
+    calls = stub_response(monkeypatch, payload)
+
+    match = herdr_cli.wait_pane_output("/bin/herdr", {}, "w9:p1", "READY", timeout_ms=5000)
+
+    assert calls == [
+        ["/bin/herdr", "pane", "wait-output", "w9:p1", "--match", "READY", "--timeout", "5000"]
+    ]
+    assert match.matched_line == "READY"
+    assert match.read.text == "READY\n"
+    assert match.read.truncated is False
+
+
+def test_wait_pane_output_uses_regex_and_snapshot_flags(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = json.dumps({"result": {"type": "output_matched", **live_match()}})
+    calls = stub_response(monkeypatch, payload)
+
+    _ = herdr_cli.wait_pane_output(
+        "/bin/herdr",
+        {},
+        "w9:p1",
+        "READY|DONE",
+        regex=True,
+        source="visible",
+        lines=40,
+        raw_output=True,
+    )
+
+    assert calls == [
+        [
+            "/bin/herdr",
+            "pane",
+            "wait-output",
+            "w9:p1",
+            "--regex",
+            "READY|DONE",
+            "--source",
+            "visible",
+            "--lines",
+            "40",
+            "--raw",
+        ]
+    ]
+
+
+def test_wait_pane_output_names_a_missing_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = json.dumps({"result": {"type": "output_matched", "pane_id": "w9:p1", "revision": 12}})
+    _ = stub_response(monkeypatch, payload)
+
+    with pytest.raises(herdr_cli.HerdrError, match=r"result\.read"):
+        _ = herdr_cli.wait_pane_output("/bin/herdr", {}, "w9:p1", "READY")
+
+
+def test_wait_pane_output_admits_an_empty_snapshot_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    match = live_match()
+    match["read"] = {**live_read(), "text": ""}
+    _ = stub_response(monkeypatch, json.dumps({"result": {"type": "output_matched", **match}}))
+
+    found = herdr_cli.wait_pane_output("/bin/herdr", {}, "w9:p1", "READY")
+
+    assert found.read.text == ""
+
+
+def test_wait_pane_output_names_a_missing_snapshot_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    read = live_read()
+    del read["text"]
+    payload = json.dumps({"result": {"type": "output_matched", **live_match(), "read": read}})
+    _ = stub_response(monkeypatch, payload)
+
+    with pytest.raises(herdr_cli.HerdrError, match=r"result\.read has no usable 'text'"):
+        _ = herdr_cli.wait_pane_output("/bin/herdr", {}, "w9:p1", "READY")
+
+
+def test_run_in_pane_safe_sends_the_command_as_one_argv_element(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = stub_response(monkeypatch, json.dumps({"result": {"type": "ok"}}))
+
+    herdr_cli.run_in_pane_safe("/bin/herdr", {}, "w9:p1", "printf 'a b' && echo $HOME | cat")
+
+    assert calls == [["/bin/herdr", "pane", "run", "w9:p1", "printf 'a b' && echo $HOME | cat"]]
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        pytest.param("echo one\necho two", id="newline"),
+        pytest.param("echo one\recho two", id="carriage-return"),
+        pytest.param("echo one\x00two", id="nul"),
+        pytest.param("echo one\x1becho two", id="escape"),
+    ],
+)
+def test_run_in_pane_safe_refuses_control_characters_before_any_call(
+    monkeypatch: pytest.MonkeyPatch, command: str
+) -> None:
+    calls = stub_response(monkeypatch, json.dumps({"result": {"type": "ok"}}))
+
+    with pytest.raises(herdr_cli.UsageError, match="control character"):
+        herdr_cli.run_in_pane_safe("/bin/herdr", {}, "w9:p1", command)
+    assert calls == []
+
+
+@pytest.mark.parametrize("command", ["", "   ", "\t\n"])
+def test_run_in_pane_safe_refuses_an_empty_command(
+    monkeypatch: pytest.MonkeyPatch, command: str
+) -> None:
+    calls = stub_response(monkeypatch, json.dumps({"result": {"type": "ok"}}))
+
+    with pytest.raises(herdr_cli.UsageError, match="empty"):
+        herdr_cli.run_in_pane_safe("/bin/herdr", {}, "w9:p1", command)
+    assert calls == []
+
+
+def test_workspace_info_parses_the_required_fields() -> None:
+    info = herdr_cli._workspace_info(live_workspace(), where="workspace")
+
+    assert info.active_tab_id == "w9:t1"
+    assert info.tab_count == 1
+    assert info.worktree is not None
+    assert info.worktree.repo_name == "harness"
+
+
+def test_workspace_info_names_a_missing_required_field() -> None:
+    workspace = live_workspace()
+    del workspace["active_tab_id"]
+
+    with pytest.raises(herdr_cli.HerdrError, match=r"no usable 'active_tab_id'"):
+        _ = herdr_cli._workspace_info(workspace, where="workspace")

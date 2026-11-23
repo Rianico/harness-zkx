@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import fcntl
 import json
-from collections.abc import Mapping
+import multiprocessing
+import os
+import threading
+import time
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import herdr_lease
 import pytest
@@ -703,3 +708,292 @@ def test_write_state_uses_the_shared_atomic_writer(
 
     assert calls
     assert calls[0][1] == {"active_leases": {"callee": {}}}
+
+
+# ── #369: one writer at a time — the tasks store is a shared live database ────────────
+#
+# `.lane/tasks.yaml` is a whole-file read-modify-write: load the mapping, mutate one row,
+# `os.replace` the whole document back. Two writers that overlap lose one of the two
+# mutations silently, and a lost lease reads as a free worker. Every case below fails on
+# the pre-#369 writer, which took no lock: `threading` alone cannot prove it (an `flock`
+# belongs to the open file description, so threads in one process share the failure
+# mode differently), hence real child processes. Those children are SPAWNED, never forked:
+# a fork of this already multi-threaded pytest process would copy `herdr_lease`'s own
+# `_path_guards` mutexes and per-thread lock depths into a child that can never release
+# them — the hazard Python 3.14 warns about — so every child gets a fresh interpreter and
+# the store file is the only thing shared.
+
+PROCESSES = 8
+LEASES_PER_WORKER = 5
+EVENTS_PER_WORKER = 8
+START_TIMEOUT = 30.0
+
+
+class _Signal(Protocol):
+    """The `multiprocessing.Event` surface the worker processes synchronize on."""
+
+    def set(self) -> None: ...
+
+    def wait(self, timeout: float | None = None) -> bool: ...
+
+
+def _lock_file(base: Path) -> Path:
+    """The advisory lock this store takes: the resolved tasks file plus a `.lock` suffix."""
+    return herdr_lease.resolve_tasks_file(base_dir=base).with_name("tasks.yaml.lock")
+
+
+def _lock_is_free(lock_path: Path) -> bool:
+    """Whether the exclusive lock can be taken right now, without blocking on it."""
+    descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return False
+        return True
+    finally:
+        os.close(descriptor)
+
+
+def _start_all(target: Callable[..., None], args_list: Sequence[tuple[object, ...]]) -> None:
+    """Start one spawned process per argument tuple, release them together, demand clean exits.
+
+    `spawn` pickles `target` by module and qualified name, so every target here is a
+    module-level function taking plain `str`/`int` arguments plus `Event`s the parent drew
+    from this same context.
+    """
+    context = multiprocessing.get_context("spawn")
+    start = context.Event()
+    processes = [context.Process(target=target, args=(*args, start)) for args in args_list]
+    for process in processes:
+        process.start()
+    start.set()
+    for process in processes:
+        process.join(timeout=START_TIMEOUT)
+    for process in processes:
+        if process.is_alive():
+            process.terminate()
+            process.join(timeout=5)
+    assert [process.exitcode for process in processes] == [0] * len(processes)
+
+
+def _acquire_many(base: str, worker: int, start: _Signal) -> None:
+    """Take `LEASES_PER_WORKER` distinct leases, one read-modify-write of the whole file each."""
+    store = Path(base)
+    _ = start.wait(timeout=START_TIMEOUT)
+    for shard in range(LEASES_PER_WORKER):
+        _ = herdr_lease.acquire_lease(
+            f"worker-{worker}-{shard}", f"{worker}-{shard}.md", "orchestrator", base_dir=store
+        )
+
+
+def _record_many(base: str, task_id: str, worker: int, start: _Signal) -> None:
+    """Append `EVENTS_PER_WORKER` events to one shared task from this process."""
+    store = Path(base)
+    _ = start.wait(timeout=START_TIMEOUT)
+    for shard in range(EVENTS_PER_WORKER):
+        _ = herdr_lease.record_event(
+            task_id,
+            herdr_lease.STATE_WORKING,
+            note=f"w{worker}-{shard}",
+            actor=f"worker-{worker}",
+            base_dir=store,
+        )
+
+
+def test_eight_processes_keep_every_lease_they_acquire(tmp_path: Path) -> None:
+    """`PROCESSES x LEASES_PER_WORKER` concurrent acquires leave every distinct key behind.
+
+    Pin -> mutant: drop the lock from `acquire_lease` and the last writer wins the whole
+    mapping, so most of the `PROCESSES * LEASES_PER_WORKER` leases vanish — a lost lease
+    reads to the dispatcher as a free worker, which is the #369 collision.
+    """
+    _start_all(_acquire_many, [(str(tmp_path), worker) for worker in range(PROCESSES)])
+
+    leases = herdr_lease.list_active_leases(base_dir=tmp_path)
+    expected = {
+        f"worker-{worker}-{shard}"
+        for worker in range(PROCESSES)
+        for shard in range(LEASES_PER_WORKER)
+    }
+    assert {lease["target"] for lease in leases} == expected
+    assert len(leases) == PROCESSES * LEASES_PER_WORKER
+    stored = yaml.safe_load((tmp_path / ".lane" / "tasks.yaml").read_text(encoding="utf-8"))
+    assert set(stored["active_leases"]) == expected
+
+
+def test_eight_processes_append_every_event_to_one_task(tmp_path: Path) -> None:
+    """`PROCESSES x EVENTS_PER_WORKER` concurrent appends keep every event and every `seq`.
+
+    The trajectory is the append that loses updates most visibly: two writers that loaded
+    the same list both write `seq: 2`, so a lost update duplicates a sequence number as
+    well as dropping a note.
+    """
+    task_id = "#369#lost-update"
+    _ = herdr_lease.acquire_lease(
+        "worker", "369.md", "orchestrator", base_dir=tmp_path, ticket_id="#369", task_id=task_id
+    )
+
+    _start_all(
+        _record_many,
+        [(str(tmp_path), task_id, worker) for worker in range(PROCESSES)],
+    )
+
+    task = herdr_lease.get_task(task_id, base_dir=tmp_path)
+    assert task is not None
+    trajectory = task["trajectory"]
+    assert [event["seq"] for event in trajectory] == list(
+        range(1, PROCESSES * EVENTS_PER_WORKER + 2)
+    )
+    assert {event["note"] for event in trajectory[1:]} == {
+        f"w{worker}-{shard}" for worker in range(PROCESSES) for shard in range(EVENTS_PER_WORKER)
+    }
+    assert herdr_lease.status_of(task) == herdr_lease.STATE_WORKING
+
+
+def _raise_inside_the_lock(
+    base: str,
+    held: _Signal,
+    raise_now: _Signal,
+    reacquired: _Signal,
+    done: _Signal,
+    finish: _Signal,
+) -> None:
+    """Take the lock, raise inside the block, then take it again in this same process."""
+    store = Path(base)
+    try:
+        with herdr_lease.locked_tasks_state(base_dir=store):
+            held.set()
+            _ = raise_now.wait(timeout=START_TIMEOUT)
+            raise RuntimeError("the block raised while holding the lock")
+    except RuntimeError:
+        # Swallowed on purpose: the raise IS the event under test, and the lock must survive it.
+        pass
+    with herdr_lease.locked_tasks_state(base_dir=store):
+        reacquired.set()
+    done.set()
+    _ = finish.wait(timeout=START_TIMEOUT)
+
+
+def test_the_lock_is_released_when_the_block_raises(tmp_path: Path) -> None:
+    """An exception inside the `with` block releases the lock, so the next writer proceeds.
+
+    Pin -> mutant: a lock taken without a `finally` (or a depth counter that is not
+    decremented on the error path) leaves the file locked after the raise, and every
+    later writer of this store blocks forever.
+    """
+    context = multiprocessing.get_context("spawn")
+    held, raise_now, reacquired, done, finish = (context.Event() for _ in range(5))
+    child = context.Process(
+        target=_raise_inside_the_lock,
+        args=(str(tmp_path), held, raise_now, reacquired, done, finish),
+    )
+    child.start()
+    lock_path = _lock_file(tmp_path)
+    try:
+        assert held.wait(timeout=START_TIMEOUT), "the child never took the lock"
+        assert not _lock_is_free(lock_path), "the lock was free while another process held it"
+        raise_now.set()
+        assert reacquired.wait(timeout=START_TIMEOUT), (
+            "the lock stayed taken after the exception unwound the with block"
+        )
+        assert done.wait(timeout=START_TIMEOUT)
+        assert _lock_is_free(lock_path), "the lock stayed taken after the with block exited"
+    finally:
+        finish.set()
+        child.join(timeout=START_TIMEOUT)
+        if child.is_alive():
+            child.terminate()
+            child.join(timeout=5)
+    assert child.exitcode == 0
+
+
+def _hold_the_lock(base: str, held: _Signal, finish: _Signal) -> None:
+    """Hold the writer lock until the parent says the reads are done."""
+    with herdr_lease.locked_tasks_state(base_dir=Path(base)):
+        held.set()
+        _ = finish.wait(timeout=START_TIMEOUT)
+
+
+def test_readers_do_not_block_behind_a_writer_lock(tmp_path: Path) -> None:
+    """`get_lease` and `list_active_leases` complete while another process holds the lock.
+
+    Reads are lock-free by design: they are pure snapshots of an atomically replaced file,
+    so a held writer must never make the dispatcher wait. Pin -> mutant: take the lock on a
+    read path and this reader never returns.
+    """
+    lease = herdr_lease.acquire_lease("callee", "369.md", "orchestrator", base_dir=tmp_path)
+
+    context = multiprocessing.get_context("spawn")
+    held, finish = context.Event(), context.Event()
+    holder = context.Process(target=_hold_the_lock, args=(str(tmp_path), held, finish))
+    holder.start()
+    results: list[tuple[dict[str, Any] | None, int]] = []
+
+    def read_while_written() -> None:
+        found = herdr_lease.get_lease("callee", base_dir=tmp_path)
+        results.append((found, len(herdr_lease.list_active_leases(base_dir=tmp_path))))
+
+    reader = threading.Thread(target=read_while_written, daemon=True)
+    started = time.monotonic()
+    try:
+        assert held.wait(timeout=START_TIMEOUT), "the holder never took the lock"
+        # The bound measures the read, not the child's boot: spawn imports this module before
+        # the holder can take the lock, and counting that would time interpreter startup.
+        started = time.monotonic()
+        reader.start()
+        reader.join(timeout=2.0)
+    finally:
+        elapsed = time.monotonic() - started
+        finish.set()
+        holder.join(timeout=START_TIMEOUT)
+        if holder.is_alive():
+            holder.terminate()
+            holder.join(timeout=5)
+
+    assert not reader.is_alive(), "a reader blocked behind the writer's lock"
+    assert elapsed < 1.0, f"the read took {elapsed:.3f}s behind a held lock"
+    assert results == [(lease, 1)]
+    assert holder.exitcode == 0
+
+
+def test_the_lock_is_reentrant_for_nested_writes(tmp_path: Path) -> None:
+    """A nested `locked_tasks_state` and a nested write in one thread do not self-deadlock.
+
+    `transition` holds the lock to resolve its target and then calls `record_event`, which
+    locks the same store again. An `flock` is held per open file description, so a second
+    descriptor would block on itself: the depth guard is what makes the nesting work.
+    """
+    task_id = "#369#nested"
+    _ = herdr_lease.acquire_lease(
+        "worker", "369.md", "orchestrator", base_dir=tmp_path, ticket_id="#369", task_id=task_id
+    )
+    tasks_file = herdr_lease.resolve_tasks_file(base_dir=tmp_path)
+    seen: list[Path] = []
+    moved: list[dict[str, Any]] = []
+
+    def nested_work() -> None:
+        with herdr_lease.locked_tasks_state(base_dir=tmp_path) as held:
+            seen.append(held)
+            with herdr_lease.locked_tasks_state(base_dir=tmp_path) as held_again:
+                seen.append(held_again)
+            moved.append(
+                herdr_lease.transition(task_id, herdr_lease.STATE_WORKING, base_dir=tmp_path)
+            )
+
+    worker = threading.Thread(target=nested_work, daemon=True)
+    worker.start()
+    worker.join(timeout=5.0)
+
+    assert not worker.is_alive(), "nested locked_tasks_state self-deadlocked"
+    assert seen == [tasks_file, tasks_file]
+    assert [task["status"] for task in moved] == [herdr_lease.STATE_WORKING]
+    assert herdr_lease.get_task(task_id, base_dir=tmp_path) == moved[0]
+
+
+def test_the_lock_file_sits_beside_the_tasks_file(tmp_path: Path) -> None:
+    """The lock is `<base>/.lane/tasks.yaml.lock`, the write target plus a `.lock` suffix."""
+    with herdr_lease.locked_tasks_state(base_dir=tmp_path) as tasks_file:
+        assert tasks_file == tmp_path / ".lane" / "tasks.yaml"
+        assert (tmp_path / ".lane" / "tasks.yaml.lock").is_file()
+        assert not tasks_file.exists(), "taking the lock must not create the store itself"

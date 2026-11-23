@@ -1606,7 +1606,8 @@ def test_auto_start_starts_agent_on_shell_pane_and_delivers_reply(stub: StubHarn
             "--append-system-prompt",
             str(invariant),
             "--approve",
-            "--exclude-tools=subagents_enable",
+            "--exclude-tools",
+            "subagents_enable",
         ]
     ]
     assert invariant.read_text() == herdr_bootstrap.render_invariant("lens-orchestrator")
@@ -1754,7 +1755,8 @@ def test_auto_start_revive_injects_the_invariant_file_for_an_inline_kind(
         "--append-system-prompt",
         path,
         "--approve",
-        "--exclude-tools=subagents_enable",
+        "--exclude-tools",
+        "subagents_enable",
     ]
     invariant = Path(path)
     assert invariant == (lane / ".lane" / "invariants" / "lens-orchestrator.md").resolve()
@@ -2116,7 +2118,9 @@ RECOVERY = {
 }
 
 
-def test_reply_records_completion_event_with_sha(stub: StubHarness, tmp_path: Path) -> None:
+def test_reply_records_the_completion_event_without_an_unverified_sha(
+    stub: StubHarness, tmp_path: Path
+) -> None:
     import herdr_lease
 
     task_id = "#183-tasks-yaml-and-preflight#full-stack"
@@ -2130,7 +2134,9 @@ def test_reply_records_completion_event_with_sha(stub: StubHarness, tmp_path: Pa
     )
     # A bare `COMPLETED` carries no evidence and is recorded incomplete, so it no longer
     # advances the task (#231). Keep the same payload first line and add an evidence section,
-    # so this case still pins the completed-event path with its sha.
+    # so this case still pins the completed-event path. #369 m5: this lane anchor is not a
+    # repository, so git cannot prove `deadbeef` names a commit; an unproven token is never
+    # recorded as a sha, and the note carries the marker instead.
     done = stub.run(
         "orchestrator",
         "COMPLETED deadbeef\n\n## Evidence\n- 660 passed",
@@ -2144,11 +2150,11 @@ def test_reply_records_completion_event_with_sha(stub: StubHarness, tmp_path: Pa
     assert task["status"] == herdr_lease.STATE_COMPLETED
     completed = [event for event in task["trajectory"] if event["event"] == "completed"]
     assert len(completed) == 1
-    assert completed[-1]["sha"] == "deadbeef"
     assert completed[-1]["to_status"] == herdr_lease.STATE_COMPLETED
-    # The trajectory note is metadata only (#231 F3): the mapped token and the validated sha,
-    # never the raw status line. `deadbeef` is a hex token, so it is the recorded sha.
-    assert completed[-1]["note"] == "completed deadbeef"
+    # The trajectory note is metadata only (#231 F3): the mapped token plus the status line's
+    # commit claim, never the raw status line.
+    assert "sha" not in completed[-1]
+    assert completed[-1]["note"] == "completed unverified=deadbeef"
     assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
 
 
@@ -2178,6 +2184,48 @@ def test_reply_maps_blocked_and_rejected_statuses(
     # trajectory event keeps the token the payload spoke.
     assert task["status"] == herdr_lease.normalize_status(expected)
     assert task["trajectory"][-1]["event"] == expected
+    assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
+
+
+def test_a_blocked_prompt_exits_three_and_touches_no_task_state(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """`agent_blocked` is exit 3: a human must answer, so no event is recorded and no lease moves."""
+    task_id = lease_in_anchor(tmp_path)
+
+    done = stub.run(
+        "orchestrator",
+        "COMPLETED\n\n## Evidence\n- 1 passed\n",
+        env={"HERDR_LANE_DIR": str(tmp_path)},
+        state={**DEFAULT_STATE, "prompt_error": "agent_blocked"},
+    )
+
+    assert done.returncode == herdr_cli.EXIT_BLOCKED, (done.stdout, done.stderr)
+    assert "orchestrator" in done.stderr
+    assert len(stub.prompts()) == 1
+    assert completed_events(tmp_path, task_id) == []
+    assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is not None
+
+
+def test_a_timed_out_wait_exits_four_after_recording_and_releasing(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """`timeout` is exit 4: the prompt was delivered, so the verdict is recorded and the lease released."""
+    task_id = lease_in_anchor(tmp_path)
+
+    done = stub.run(
+        "orchestrator",
+        "COMPLETED\n\n## Evidence\n- 1 passed\n",
+        "--wait",
+        "--timeout",
+        "15000",
+        env={"HERDR_LANE_DIR": str(tmp_path)},
+        state={**DEFAULT_STATE, "prompt_error": "timeout"},
+    )
+
+    assert done.returncode == herdr_reply.EXIT_WAIT_TIMEOUT, (done.stdout, done.stderr)
+    assert "wait timed out" in done.stderr
+    assert len(completed_events(tmp_path, task_id)) == 1
     assert herdr_lease.get_lease("reviewer", base_dir=tmp_path) is None
 
 
@@ -2250,7 +2298,8 @@ def test_reply_auto_start_revives_and_delivers_with_recovery(
             "--append-system-prompt",
             str(invariant),
             "--approve",
-            "--exclude-tools=subagents_enable",
+            "--exclude-tools",
+            "subagents_enable",
         ]
     ]
     assert invariant.read_text() == herdr_bootstrap.render_invariant("lens-orchestrator")
@@ -2271,6 +2320,58 @@ def test_reply_without_recovery_keeps_existing_shell_diagnostic(
     assert done.returncode == herdr_cli.EXIT_USAGE
     assert "no live agent" in done.stderr
     assert "has exited" not in done.stderr
+    assert stub.prompts() == []
+
+
+def test_a_bare_shell_caller_refusal_is_typed_and_exits_two(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Without `--auto-start` a bare-shell caller is refused, typed so a remedy can hook it.
+
+    The exception type is the contract `herdr_dispatch`'s auto-start hook keys on; the message
+    stays `format_shell_pane_diagnostic`'s, and the exit status stays 2.
+    """
+    state = _shell_target_state()
+
+    done = stub.run("lens-orchestrator", "COMPLETED", env={"PWD": str(tmp_path)}, state=state)
+
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "matches pane wM:p1N" in done.stderr
+    assert "no live agent is running in this pane" in done.stderr
+    assert stub.prompts() == []
+
+    stub.write_state(state)
+    options = herdr_reply.Options(target="lens-orchestrator", message="COMPLETED", settle=0)
+    with pytest.raises(herdr_cli.BareShellRefusal) as refusal:
+        _ = herdr_reply.reply_caller(options, stub.base_env())
+    assert isinstance(refusal.value, herdr_cli.BareShellRefusal)
+    assert str(refusal.value) in done.stderr
+
+
+def test_the_recovery_hint_returns_two_before_the_shell_diagnostic(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """A stored recovery block is the whole answer: exit 2 with the hint, never the shell prose."""
+    _ = herdr_lease.acquire_lease(
+        "reviewer",
+        "183_tasks_yaml_and_preflight_impl.md",
+        "orchestrator",
+        base_dir=tmp_path,
+        ticket_id="#183",
+        task_id="#183#recovery-returns",
+        caller_recovery=RECOVERY,
+    )
+
+    done = stub.run(
+        "lens-orchestrator",
+        "COMPLETED",
+        env={"PWD": str(tmp_path)},
+        state=_shell_target_state(),
+    )
+
+    assert done.returncode == herdr_cli.EXIT_USAGE
+    assert "Suggested recovery" in done.stderr
+    assert "no live agent" not in done.stderr
     assert stub.prompts() == []
 
 
@@ -2656,7 +2757,9 @@ def test_reply_persists_a_record_a_later_reader_resolves(
     # instead of copying paths (#231 F3).
     assert record["evidence"] == "evidence"
     assert record["status"] == "completed"
-    assert record["sha"] == "abc1234"
+    # #369 m5: the row records the status line's token only when git proved it names a commit;
+    # `abc1234` is unverified here (no repository at the store anchor), so it is never a sha.
+    assert record["sha"] is None
     assert "status_line" not in record
     assert record["digest"] == digest
     assert record["payload"] == f".lane/replies/{record['id']}.md"
@@ -2839,7 +2942,8 @@ def test_complete_completed_reply_records_the_completed_event(
     assert task["status"] == herdr_lease.STATE_COMPLETED
     completed = [event for event in task["trajectory"] if event["event"] == "completed"]
     assert len(completed) == 1
-    assert completed[-1]["sha"] == "deadbeef"
+    # #369 m5: no repository at this anchor, so the token is unverified, never a recorded sha.
+    assert "sha" not in completed[-1]
     assert "shape=incomplete" not in done.stderr, done.stderr
 
 
@@ -4361,3 +4465,268 @@ def test_a_redispatch_without_task_group_keeps_the_recorded_slug_on_the_row(
 
     renames = [call[1:] for call in replier.calls()[calls_before:] if call[2] == "rename"]
     assert ["tab", "rename", "w9:t1", "harness"] in renames, renames
+
+
+# ── #369 m5: the status line's commit claim is verified before task history records it ──
+
+# A review-record id and a well-formed but absent commit: both are claim-shaped (7-40 lowercase
+# hex), and neither names a commit. The review id is the friction class the measurement found
+# shape-indistinguishable from an abbreviation, so refusing it is the deliberate choice.
+REVIEW_ID_TOKEN = "0c81f04c"
+ABSENT_COMMIT_TOKEN = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+
+
+def status_commit_repo(root: Path) -> tuple[Path, str]:
+    """A lane anchor that is also a repository with one commit; returns (repo, full HEAD sha).
+
+    The status-line guard resolves against the lane anchor, so the anchor must be a work tree for
+    the probe to answer at all. A non-repository anchor is the unverifiable case, tested separately.
+    """
+    repo, _short = sha_guard_repo(root, "status-commit-repo")
+    head = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert head.returncode == 0, head.stderr
+    return repo, head.stdout.strip()
+
+
+def completed_payload(token: str) -> str:
+    """A COMPLETED payload whose status line names `token` and that cites evidence."""
+    return f"COMPLETED {token}\n\n## Evidence\n- 1 passed\n"
+
+
+def lease_in_anchor(anchor: Path) -> str:
+    """The sender's open task in `anchor`; returns its task id."""
+    task_id = "#369#m5"
+    _ = herdr_lease.acquire_lease(
+        "reviewer",
+        "369.md",
+        "orchestrator",
+        base_dir=anchor,
+        ticket_id="#369",
+        task_id=task_id,
+    )
+    return task_id
+
+
+def completed_events(anchor: Path, task_id: str) -> list[dict[str, Any]]:
+    """The task's recorded completion events — task history, as a reader reads it."""
+    task = herdr_lease.get_task(task_id, base_dir=anchor)
+    assert task is not None
+    return [event for event in task["trajectory"] if event["event"] == "completed"]
+
+
+def test_a_status_line_naming_no_commit_is_refused_before_any_record(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """A review id in the status line is refused: it names a commit it is not.
+
+    The refusal happens before the store is touched, so nothing is recorded and the sender's lease
+    survives for the corrected reply. The message names the token and the documented waiver.
+    """
+    repo, _head = status_commit_repo(tmp_path)
+    task_id = lease_in_anchor(repo)
+
+    done = stub.run(
+        "orchestrator",
+        completed_payload(REVIEW_ID_TOKEN),
+        env={"HERDR_LANE_DIR": str(repo)},
+        cwd=repo,
+    )
+
+    assert done.returncode == herdr_cli.EXIT_USAGE, (done.stdout, done.stderr)
+    assert REVIEW_ID_TOKEN in done.stderr
+    assert herdr_reply.ALLOW_UNRESOLVABLE_SHA in done.stderr
+    assert stub.prompts() == []
+    assert herdr_lease.list_replies(base_dir=repo) == []
+    assert completed_events(repo, task_id) == []
+    assert herdr_lease.get_lease("reviewer", base_dir=repo) is not None
+
+
+def test_a_status_line_token_is_recorded_as_waived_only_through_the_documented_waiver(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """The review id is refused bare and accepted once waived by name, recorded as waived.
+
+    A waived token is not a commit: the completion event carries no `sha`, and its note says the
+    token was waived. Both directions in one pin, so neither a dropped guard nor a silent bypass
+    can pass.
+    """
+    repo, _head = status_commit_repo(tmp_path)
+    task_id = lease_in_anchor(repo)
+
+    refused = stub.run(
+        "orchestrator",
+        completed_payload(REVIEW_ID_TOKEN),
+        env={"HERDR_LANE_DIR": str(repo)},
+        cwd=repo,
+    )
+    assert refused.returncode == herdr_cli.EXIT_USAGE, (refused.stdout, refused.stderr)
+    assert stub.prompts() == []
+
+    waived = stub.run(
+        "orchestrator",
+        completed_payload(REVIEW_ID_TOKEN),
+        herdr_reply.ALLOW_UNRESOLVABLE_SHA,
+        REVIEW_ID_TOKEN,
+        env={"HERDR_LANE_DIR": str(repo)},
+        cwd=repo,
+    )
+
+    assert waived.returncode == herdr_cli.EXIT_OK, waived.stderr
+    assert "waived" in waived.stderr
+    assert REVIEW_ID_TOKEN in waived.stderr
+    assert len(stub.prompts()) == 1
+
+    events = completed_events(repo, task_id)
+    assert len(events) == 1
+    assert "sha" not in events[0], "a waived token is never recorded as a commit"
+    assert events[0]["note"] == f"completed waived={REVIEW_ID_TOKEN}"
+
+
+def test_a_status_line_naming_head_is_accepted_and_recorded(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """The verified direction: a real commit on the status line is delivered and recorded."""
+    repo, head = status_commit_repo(tmp_path)
+    task_id = lease_in_anchor(repo)
+
+    done = stub.run(
+        "orchestrator",
+        completed_payload(head),
+        env={"HERDR_LANE_DIR": str(repo)},
+        cwd=repo,
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "skipped" not in done.stderr
+    (call,) = stub.prompts()
+    assert call[4].endswith(completed_payload(head))
+
+    events = completed_events(repo, task_id)
+    assert len(events) == 1
+    assert events[0]["sha"] == head
+    assert events[0]["note"] == f"completed {head}"
+
+    record = herdr_lease.list_replies(base_dir=repo)[-1]
+    assert record["sha"] == head
+
+
+def test_a_status_line_naming_a_well_formed_absent_commit_is_refused(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """Well-formed is not the question: 40 hex that names no commit is refused like any other."""
+    repo, _head = status_commit_repo(tmp_path)
+    task_id = lease_in_anchor(repo)
+
+    done = stub.run(
+        "orchestrator",
+        completed_payload(ABSENT_COMMIT_TOKEN),
+        env={"HERDR_LANE_DIR": str(repo)},
+        cwd=repo,
+    )
+
+    assert done.returncode == herdr_cli.EXIT_USAGE, (done.stdout, done.stderr)
+    assert ABSENT_COMMIT_TOKEN in done.stderr
+    assert herdr_reply.ALLOW_UNRESOLVABLE_SHA in done.stderr
+    assert stub.prompts() == []
+    assert herdr_lease.list_replies(base_dir=repo) == []
+    assert completed_events(repo, task_id) == []
+
+
+def test_a_blocked_status_line_reason_is_never_read_as_a_commit(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """BLOCKED keeps working: its reason text is prose, checked by nothing and refused by nothing.
+
+    The status line's sha position exists only for COMPLETED, so a BLOCKED reason that happens to
+    carry a hex token is left alone even inside a repository where the probe can answer.
+    """
+    repo, _head = status_commit_repo(tmp_path)
+    task_id = lease_in_anchor(repo)
+
+    done = stub.run(
+        "orchestrator",
+        f"BLOCKED awaiting the reviewer's {REVIEW_ID_TOKEN} verdict\n\n## Evidence\n- blocked\n",
+        env={"HERDR_LANE_DIR": str(repo)},
+        cwd=repo,
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, (done.stdout, done.stderr)
+    assert "names no commit" not in done.stderr
+    assert len(stub.prompts()) == 1
+    task = herdr_lease.get_task(task_id, base_dir=repo)
+    assert task is not None
+    assert task["status"] == herdr_lease.STATE_INPUT_REQUIRED
+    assert completed_events(repo, task_id) == []
+
+
+def test_an_unverifiable_status_line_token_is_never_recorded_as_a_commit(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """The unverifiable branch, pinned: admit loudly, and never claim the token is a commit.
+
+    Outside every work tree git has proven nothing, so the reply is delivered with a skip line
+    naming the token (the same voice as the backticked-SHA guard) and task history records the
+    claim as unverified rather than as a `sha`. Tightening this to fail-closed breaks this pin by
+    name instead of passing silently.
+    """
+    nongit = tmp_path / "nongit"
+    nongit.mkdir()
+    task_id = lease_in_anchor(nongit)
+
+    done = stub.run(
+        "orchestrator",
+        completed_payload("deadbeef"),
+        env={"HERDR_LANE_DIR": str(nongit), "PWD": str(nongit)},
+        cwd=nongit,
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert "SHA guard skipped" in done.stderr
+    assert "deadbeef" in done.stderr
+    assert len(stub.prompts()) == 1
+
+    events = completed_events(nongit, task_id)
+    assert len(events) == 1
+    assert "sha" not in events[0], "an unverified token is never recorded as a commit"
+    assert events[0]["note"] == "completed unverified=deadbeef"
+
+
+def test_an_unresolvable_lane_anchor_is_unverifiable_and_never_probes_the_cwd(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`cwd=None` means the probe cannot answer, so the token is unverified and `Path.cwd()` is never read.
+
+    The lane anchor is the only directory a status-line claim may be checked against. Handing the
+    guard the process's own working directory gave one payload two verdicts, one per invocation
+    directory; an unanswerable probe reports the token unchecked instead.
+    """
+
+    probed: list[Path] = []
+    ambient_cwd = Path.cwd
+
+    def recording_cwd() -> Path:
+        probed.append(ambient_cwd())
+        return ambient_cwd()
+
+    monkeypatch.setattr(Path, "cwd", recording_cwd)
+    commit = herdr_reply.verify_status_line_commit(
+        "completed",
+        "deadbeef",
+        payload_path="reply.md",
+        cwd=None,
+        env={},
+        waived=(),
+    )
+
+    assert commit.sha is None
+    assert probed == [], "an unresolvable lane anchor never falls back to the ambient cwd"
+    assert commit.marker == "unverified=deadbeef"
+    stderr = capsys.readouterr().err
+    assert "SHA guard skipped" in stderr
+    assert "reply.md" in stderr
+    assert "deadbeef" in stderr

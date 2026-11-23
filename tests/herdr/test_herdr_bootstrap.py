@@ -5,6 +5,7 @@ import io
 import json
 import os
 import re
+import shlex
 import stat
 import subprocess
 import sys
@@ -48,6 +49,11 @@ def cwd_state(cwd: Path, pane: str = "w9:p1") -> dict[str, object]:
 def invariant_file(tmp_path: Path, agent: str) -> Path:
     """The per-agent lane-local snippet file the inline kinds are pointed at."""
     return (tmp_path / ".lane" / "invariants" / f"{agent}.md").resolve()
+
+
+def _flags_config(value: str) -> str:
+    """One kind table whose only interesting field is `trust_flags: <value>`."""
+    return f"pi:\n  trust_flags: {value}\n  invariant: file\n"
 
 
 # ── unit: the invariant snippet and the idempotent append ───────────────────────────
@@ -348,7 +354,8 @@ def test_cli_kind_delivers_the_snippet_through_a_lane_file(
         "--append-system-prompt",
         path,
         "--approve",
-        "--exclude-tools=subagents_enable",
+        "--exclude-tools",
+        "subagents_enable",
     ]
     assert not (tmp_path / "AGENTS.md").exists()
     assert f"role-invariant={path}" in done.stdout
@@ -530,7 +537,8 @@ def test_dry_run_cli_kind_prints_the_invariant_file_path(stub: StubHarness, tmp_
         "--append-system-prompt",
         plan["role_invariant"],
         "--approve",
-        "--exclude-tools=subagents_enable",
+        "--exclude-tools",
+        "subagents_enable",
     ]
     assert plan["cwd_ensure"] == str(tmp_path)
     assert stub.calls() == []
@@ -653,6 +661,41 @@ def test_claude_start_carries_its_own_trust_flag(stub: StubHarness, tmp_path: Pa
     assert not (tmp_path / "AGENTS.md").exists()
 
 
+def test_pi_start_passes_a_flag_and_its_value_as_separate_tokens(
+    stub: StubHarness, tmp_path: Path
+) -> None:
+    """RED on base: kinds.yaml spelled one `--exclude-tools=subagents_enable` token.
+
+    pi built-ins take space-separated values only; the `=` form fails with
+    `Error: Unknown option: --exclude-tools` (#368). kinds.yaml lists three tokens and the argv
+    hands them over as three separate argv elements, never one re-collapsed string.
+    """
+    done = stub.run(
+        "--kind",
+        "pi",
+        "--pane",
+        "w9:p1",
+        "--role",
+        "tm",
+        "--cwd",
+        str(tmp_path),
+        state=cwd_state(tmp_path),
+    )
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    (start,) = starts(stub)
+    split = start.index("--")
+    path = flag_value(start[split + 1 :], "--append-system-prompt")
+    assert start[split + 1 :] == [
+        "--append-system-prompt",
+        path,
+        "--approve",
+        "--exclude-tools",
+        "subagents_enable",
+    ]
+    assert "--exclude-tools=subagents_enable" not in start
+
+
 @pytest.mark.parametrize(
     ("kind", "flag"),
     [
@@ -745,7 +788,8 @@ def test_inline_kind_puts_the_invariant_path_and_model_after_the_separator(
         "--model",
         model,
         "--approve",
-        "--exclude-tools=subagents_enable",
+        "--exclude-tools",
+        "subagents_enable",
     ]
     assert stub.calls() == []
 
@@ -905,6 +949,49 @@ def test_cwd_cd_failure_refuses_before_start(stub: StubHarness, tmp_path: Path) 
     assert starts(stub) == []
 
 
+# A `--cwd` reaches the pane as one typed `cd <path>` line, so a control character would end that
+# line and let the remainder run as a second command (#369). Refused before any herdr call.
+UNSAFE_CWDS = (
+    "/tmp/x\nrm -rf /",
+    "/tmp/x\n",
+    "/tmp/x\r",
+    "/tmp/x\rm -rf /",
+    "/tmp/x\x00y",
+    "/tmp/x\x07y",
+)
+
+
+@pytest.mark.parametrize("target", UNSAFE_CWDS)
+def test_cwd_with_a_control_character_is_refused_before_any_herdr_call(
+    stub: StubHarness, target: str
+) -> None:
+    """RED on base: the newline rode into `pane run` as a second command on the pane's shell."""
+    done = stub.run("--kind", "pi", "--pane", "w9:p1", "--role", "tm", "--cwd", target)
+
+    assert done.returncode == herdr_cli.EXIT_USAGE, (
+        f"exit={done.returncode} stdout={done.stdout!r} stderr={done.stderr!r}"
+    )
+    offender = next(ch for ch in target if herdr_bootstrap.CONTROL_CHARS.search(ch))
+    assert "control character" in done.stderr
+    assert f"U+{ord(offender):04X}" in done.stderr
+    assert stub.calls() == []
+    assert pane_runs(stub) == []
+    assert starts(stub) == []
+    assert pane_renames(stub) == []
+
+
+def test_cwd_with_a_space_still_converges(stub: StubHarness, tmp_path: Path) -> None:
+    """The refusal is narrow: a space is legal in a path and rides shell-quoted."""
+    lane = tmp_path / "lane with space"
+    lane.mkdir()
+
+    done = stub.run("--kind", "codex", "--pane", "w9:p1", "--role", "tm", "--cwd", str(lane))
+
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert pane_runs(stub)[0][3:] == ["w9:p1", f"cd {shlex.quote(str(lane))}"]
+    assert starts(stub)[0][3] == "tm"
+
+
 # ── unit: kinds.yaml parsing and loading ───────────────────────────────────────────
 
 
@@ -913,7 +1000,7 @@ def test_kinds_config_loads_the_verified_kinds() -> None:
     table = herdr_bootstrap.parse_kinds_config(config.read_text())
 
     assert table["pi"] == herdr_bootstrap.KindEntry(
-        ("--approve", "--exclude-tools=subagents_enable"), True, "--append-system-prompt"
+        ("--approve", "--exclude-tools", "subagents_enable"), True, "--append-system-prompt"
     )
     assert table["claude"] == herdr_bootstrap.KindEntry(
         ("--dangerously-skip-permissions",), True, "--append-system-prompt-file"
@@ -949,6 +1036,47 @@ def test_load_kind_entry_falls_back_for_unknown_kinds() -> None:
 def test_kinds_config_rejects_bad_shapes(text: str) -> None:
     with pytest.raises(ValueError):
         herdr_bootstrap.parse_kinds_config(text)
+
+
+# Trust flags are one argv token each, so a flag may be followed by its own separate value(s)
+# instead of a single `--flag=value` token. The rules stay fail-closed: every item quoted,
+# non-empty, free of whitespace and control characters, and the sequence starts with a flag.
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ('["--approve"]', ("--approve",)),
+        (
+            '["--approve", "--exclude-tools", "subagents_enable"]',
+            ("--approve", "--exclude-tools", "subagents_enable"),
+        ),
+        ("['--a', 'b']", ("--a", "b")),
+        ("[]", ()),
+    ],
+)
+def test_kinds_config_stores_a_flag_and_its_separate_values(
+    value: str, expected: tuple[str, ...]
+) -> None:
+    table = herdr_bootstrap.parse_kinds_config(_flags_config(value))
+
+    assert table["pi"].trust_flags == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "match"),
+    [
+        ("[--approve]", "must be quoted"),
+        ('["--approve", subagents_enable]', "must be quoted"),
+        ('["--approve", ""]', "must not be empty"),
+        ('["", "--approve"]', "must not be empty"),
+        ('["--approve", "sub agents"]', "one argv token"),
+        ('["--approve", "sub\tagents"]', "one argv token"),
+        ('["--approve", "sub\x07agents"]', "one argv token"),
+        ('["approve", "--exclude-tools"]', "must start with '-'"),
+    ],
+)
+def test_kinds_config_refuses_bad_trust_flag_tokens(value: str, match: str) -> None:
+    with pytest.raises(ValueError, match=re.escape(match)):
+        herdr_bootstrap.parse_kinds_config(_flags_config(value))
 
 
 # ── unit: `lifecycle_bridge` is a bare script name, not free text (#241) ────────────
@@ -1722,14 +1850,25 @@ def test_worktree_root_whitespace_does_not_break_tracked_detection(
 
     `rev-parse --show-toplevel` prints the root plus its own newline, so a name that already ends
     in one arrives as `name\\n\\n`; stripping every newline hid the real separator and broke
-    `relative_to`. Trailing space, trailing CR, tab and leading space must keep working.
+    `relative_to`. Trailing space, trailing CR, tab and leading space must keep working. A root
+    carrying a control character cannot ride `--cwd` (that path is refused before any herdr call,
+    #369), so the target dir comes from `PWD` — the same resolution, one step later.
     """
     repo = tmp_path / dirname
     init_repo(repo)
     _ = (repo / "AGENTS.md").write_text("# named root\n")
     commit_path(repo, "AGENTS.md")
 
-    done = stub.run(*bootstrap_args(repo, "--dry-run"))
+    done = stub.run(
+        "--kind",
+        "codex",
+        "--pane",
+        "w9:p1",
+        "--role",
+        "impl-1",
+        "--dry-run",
+        env={"PWD": str(repo)},
+    )
 
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
     assert json.loads(done.stdout)["agents_md_tracked"] is True

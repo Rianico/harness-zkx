@@ -52,10 +52,12 @@ the tracked state could not be determined, so a missing git never silently withh
 invariant.
 
 Deliberate quirks (implemented minimally, documented here): trust flags come only from
-``kinds.yaml`` and ride after ``--`` as native agent args — bootstrap never invents flags, and an
-unverified kind carries none; an unknown kind falls back to the universal ``AGENTS.md`` append
-rather than failing, so a new kind is bootstrapped by default. When ``--cwd`` names a worktree,
-bootstrap refuses a missing directory, a path that is not a registered linked worktree, and the
+``kinds.yaml`` and ride after ``--`` as separate native agent argv tokens, one per list item, so
+a flag may be followed by its own value — bootstrap never invents flags or joins tokens into one
+shell string, and an unverified kind carries none; an unknown kind falls back to the universal
+``AGENTS.md`` append rather than failing, so a new kind is bootstrapped by default. When ``--cwd``
+names a worktree, bootstrap refuses a path carrying a control character before any herdr call,
+then refuses a missing directory, a path that is not a registered linked worktree, and the
 main checkout once the repository already has linked worktrees; the pane cwd must already agree
 with the requested path before that check runs.
 bootstrap cds the pane there and refuses to start when the pane does not converge.
@@ -151,6 +153,10 @@ END_MARKER = "<!-- /herdr-bootstrap:role-invariant -->"
 KINDS_CONFIG = Path(__file__).resolve().parent.parent / "references" / "kinds.yaml"
 
 _CWD_POLL_S = 0.25
+# A `--cwd` is typed into the pane as one `cd <path>` line, and every agent arg must survive
+# herdr's shell encoding, so a control character (a newline above all) would end that line and
+# let the remainder run as a second command. DEL rides in the same non-printing class.
+CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 # The flag the tracked-target refusal names: the caller opts in to a deliberately dirty tree.
 TRACKED_OVERRIDE_FLAG = "--allow-tracked-invariant"
 
@@ -204,7 +210,14 @@ def settle_fresh_pane(seconds: float) -> None:
 
 
 def _parse_flow_flags(value: str, lineno: int) -> tuple[str, ...]:
-    """Parse `["--approve", ...]`; only the quoted bracket flow list is accepted."""
+    """Parse `["--approve", "--exclude-tools", "subagents_enable"]`.
+
+    Only the quoted bracket flow list is accepted. Each quoted item is one agent argv token, so
+    a flag may be followed by its own separate value(s) instead of one `--flag=value` token —
+    the real CLIs disagree on which form they take (`pi` built-ins take space-separated values
+    only). Tokens are non-empty and free of whitespace and control characters, and the list
+    starts with a `-`-prefixed flag; after that, a `-`-prefixed item is just the next flag.
+    """
     body = value.strip()
     if not (body.startswith("[") and body.endswith("]")):
         raise ValueError(f"line {lineno}: trust_flags must be a [...] flow list")
@@ -213,13 +226,20 @@ def _parse_flow_flags(value: str, lineno: int) -> tuple[str, ...]:
         return ()
     flags: list[str] = []
     for item in inner.split(","):
-        flag = item.strip()
-        if len(flag) < 2 or flag[0] not in "'\"" or not flag.endswith(flag[0]):
+        quoted = item.strip()
+        if len(quoted) < 2 or quoted[0] not in "'\"" or not quoted.endswith(quoted[0]):
             raise ValueError(f"line {lineno}: trust_flags items must be quoted")
-        text = flag[1:-1]
-        if not text.startswith("-"):
-            raise ValueError(f"line {lineno}: trust flag {text!r} must start with '-'")
-        flags.append(text)
+        token = quoted[1:-1]
+        if not token:
+            raise ValueError(f"line {lineno}: trust_flags items must not be empty")
+        if CONTROL_CHARS.search(token) or any(ch.isspace() for ch in token):
+            raise ValueError(
+                f"line {lineno}: trust flag {token!r} must be one argv token "
+                "(no whitespace or control characters)"
+            )
+        if not flags and not token.startswith("-"):
+            raise ValueError(f"line {lineno}: trust flag {token!r} must start with '-'")
+        flags.append(token)
     return tuple(flags)
 
 
@@ -846,6 +866,21 @@ def ensure_linked_worktree(
         )
 
 
+def validate_pane_cwd(target: str) -> None:
+    """Refuse a `--cwd` that cannot ride one typed pane line, before any herdr call.
+
+    `ensure_pane_cwd` types `cd <path>` into the pane shell, so a control character — a newline
+    above all — would end that command line and let the remainder run on its own. Raised as a
+    usage error (exit 2) like the missing-directory and unregistered-worktree refusals.
+    """
+    found = CONTROL_CHARS.search(target)
+    if found is not None:
+        raise UsageError(
+            f"--cwd {target!r} contains a control character "
+            f"(U+{ord(found.group()):04X}); a pane cd would run a second command"
+        )
+
+
 def ensure_pane_cwd(
     herdr: str, pane_id: str, target: str, env: Mapping[str, str], *, timeout_s: float
 ) -> None:
@@ -853,7 +888,9 @@ def ensure_pane_cwd(
 
     The agent inherits the pane's cwd at start, so skipping this silently runs a worktree
     orchestration in the wrong tree. `pane run` types the cd plus Enter in one call; the
-    follow-up `pane list` reads prove the shell actually landed before `agent start`.
+    follow-up `pane list` reads prove the shell actually landed before `agent start`. The target
+    is validated by `validate_pane_cwd` before this call, so `shlex.quote` only has to handle
+    spaces and shell metacharacters here.
     """
     if pane_cwd_matches(pane_cwd(herdr, pane_id, env), target):
         return
@@ -973,6 +1010,8 @@ def build_start_argv(
 def bootstrap(options: Options, env: Mapping[str, str]) -> int:
     if options.settle < 0:
         raise UsageError(f"--settle {options.settle} must not be negative")
+    if options.cwd:
+        validate_pane_cwd(options.cwd)
     require_herdr_env(env)
     herdr = find_herdr(env)
     name = resolve_name(options)

@@ -87,17 +87,17 @@ Six commands, in order. Ids are read from responses, never predicted. The lane h
 WORKSPACE_ID="${HERDR_WORKSPACE_ID:-$(herdr pane current --current | jq -r .result.pane.workspace_id)}"
 
 # Orchestrator tab: one pane.
-herdr tab create --workspace "$WORKSPACE_ID" --label <prefix> --cwd <orch-worktree> --focus    # read .result.tab
+herdr tab create --workspace "$WORKSPACE_ID" --label <prefix> --cwd <orch-worktree> --focus    # read .result.tab and .result.root_pane.pane_id
 herdr-bootstrap --pane <orch-pane> --kind agy --role orch --task-group <prefix> --cwd <orch-worktree>
 
 # Crew tab: TM left, Implementer right.
-herdr tab create --workspace "$WORKSPACE_ID" --label <prefix>-crew --cwd <tm-worktree>        # read .result.tab
+herdr tab create --workspace "$WORKSPACE_ID" --label <prefix>-crew --cwd <tm-worktree>        # read .result.tab and .result.root_pane.pane_id
 herdr-pane horizontal --pane <tm-pane> --cwd <impl-worktree>       # prints the new pane id
 herdr-bootstrap --pane <tm-pane> --kind pi --role tm --task-group <prefix> --cwd <tm-worktree>
 herdr-bootstrap --pane <impl-pane> --kind pi --role impl --task-group <prefix> --cwd <impl-worktree>
 ```
 
-`herdr tab create` names the tab in its response (`.result.tab`); the tab's first pane id is not named there, so read it from `herdr pane list` for that tab. `herdr-pane horizontal` maps to `herdr pane split --direction right` and prints the pane it created — a lane that wants a stacked crew uses `vertical` instead.
+`herdr tab create` names the tab (`.result.tab`) and the tab's first pane (`.result.root_pane.pane_id`) in the same response, so no `herdr pane list` read is needed. `herdr-pane horizontal` maps to `herdr pane split --direction right` and prints the pane it created — a lane that wants a stacked crew uses `vertical` instead.
 
 > [!IMPORTANT] Workspace Affinity
 > Always pass `--workspace "$HERDR_WORKSPACE_ID"` (or `--workspace "$WORKSPACE_ID"`) when creating tabs. Omitting `--workspace` falls back to the daemon's active or focused workspace, which can spawn tabs and panes into an unrelated workspace.
