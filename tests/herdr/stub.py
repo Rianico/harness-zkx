@@ -38,14 +38,44 @@ if args[:2] == ["pane", "current"]:
 
 if args[:2] == ["pane", "layout"]:
     pane_id = args[args.index("--pane") + 1]
-    print(json.dumps({"result": {"layout": {"panes": [{"pane_id": pane_id, "rect": state["rect"]}]}}}))
+    rect = state.get("rect", {"width": 100, "height": 40})
+    layout = {
+        "workspace_id": "w9",
+        "tab_id": "w9:t1",
+        "focused_pane_id": pane_id,
+        "panes": [
+            {
+                "pane_id": pane_id,
+                "focused": True,
+                "rect": {
+                    "x": rect.get("x", 0),
+                    "y": rect.get("y", 0),
+                    "width": rect["width"],
+                    "height": rect["height"],
+                },
+            }
+        ],
+    }
+    print(json.dumps({"result": {"layout": layout}}))
     raise SystemExit(0)
 
 if args[:2] == ["pane", "split"]:
     if state.get("split_error"):
         print(json.dumps({"error": state["split_error"]}), file=sys.stderr)
         raise SystemExit(1)
-    pane = state.get("split_pane", {"pane_id": "w9:pNEW", "tab_id": "w9:t1", "cwd": "/tmp"})
+    pane = state.get(
+        "split_pane",
+        {
+            "pane_id": "w9:pNEW",
+            "terminal_id": "w9:termNEW",
+            "workspace_id": "w9",
+            "tab_id": "w9:t1",
+            "focused": False,
+            "agent_status": "unknown",
+            "revision": 1,
+            "cwd": "/tmp",
+        },
+    )
     print(json.dumps({"result": {"pane": pane}}))
     raise SystemExit(0)
 
@@ -81,6 +111,59 @@ if args[:2] == ["workspace", "list"]:
 
 if args[:2] == ["tab", "list"]:
     payload = {"id": "cli:tab:list", "result": {"tabs": state.get("tabs", []), "type": "tab_list"}}
+    print(json.dumps(payload))
+    raise SystemExit(0)
+
+if args[:2] == ["tab", "create"]:
+    if state.get("tab_create_error"):
+        print(json.dumps({"error": state["tab_create_error"], "id": "cli:tab:create"}), file=sys.stderr)
+        raise SystemExit(1)
+    workspace_id = (
+        args[args.index("--workspace") + 1]
+        if "--workspace" in args
+        else state.get("current", "w9:p1").split(":")[0]
+    )
+    tabs = state.get("tabs", [])
+    panes = state.get("panes", [])
+    number = 1 + sum(1 for tab in tabs if tab.get("workspace_id") == workspace_id)
+    ordinal = 0
+    for pane in panes:
+        pane_ref = str(pane.get("pane_id", ""))
+        if not pane_ref.startswith(workspace_id + ":"):
+            continue
+        digits = pane_ref.rsplit(":", 1)[-1].removeprefix("p")
+        if digits.isdigit():
+            ordinal = max(ordinal, int(digits))
+    # Defaults follow DEFAULT_STATE: first tab w9:t1, first pane w9:p1, and an
+    # unlabelled tab is labelled with its number.
+    tab_id = f"{workspace_id}:t{number}"
+    pane_id = f"{workspace_id}:p{ordinal + 1}"
+    label = args[args.index("--label") + 1] if "--label" in args else str(number)
+    focused = "--no-focus" not in args
+    cwd = args[args.index("--cwd") + 1] if "--cwd" in args else None
+    tab = {
+        "tab_id": tab_id,
+        "workspace_id": workspace_id,
+        "number": number,
+        "label": label,
+        "focused": focused,
+        "pane_count": 1,
+        "agent_status": "unknown",
+    }
+    root_pane = {
+        "pane_id": pane_id,
+        "terminal_id": f"{workspace_id}:term{ordinal + 1}",
+        "workspace_id": workspace_id,
+        "tab_id": tab_id,
+        "focused": focused,
+        "agent_status": "unknown",
+        "revision": 1,
+        "cwd": cwd,
+    }
+    state["tabs"] = [*tabs, tab]
+    state["panes"] = [*panes, root_pane]
+    Path(os.environ["STUB_HERDR_STATE"]).write_text(json.dumps(state))
+    payload = {"id": "cli:tab:create", "result": {"tab": tab, "root_pane": root_pane, "type": "tab_created"}}
     print(json.dumps(payload))
     raise SystemExit(0)
 
@@ -255,13 +338,39 @@ raise SystemExit(1)
 DEFAULT_STATE = {
     "current": "w9:p1",
     "rect": {"width": 100, "height": 40},
-    "workspaces": [{"workspace_id": "w9", "label": "harness", "number": 1}],
+    "workspaces": [
+        {
+            "workspace_id": "w9",
+            "label": "harness",
+            "number": 1,
+            "focused": True,
+            "pane_count": 2,
+            "tab_count": 1,
+            "active_tab_id": "w9:t1",
+            "agent_status": "working",
+        }
+    ],
     "tabs": [{"tab_id": "w9:t1", "workspace_id": "w9", "label": "harness"}],
-    "agents": [{"pane_id": "w9:p1", "name": "reviewer", "agent": "pi", "agent_status": "working"}],
+    "agents": [
+        {
+            "pane_id": "w9:p1",
+            "tab_id": "w9:t1",
+            "terminal_id": "w9:term1",
+            "focused": True,
+            "revision": 1,
+            "workspace_id": "w9",
+            "agent": "pi",
+            "agent_status": "working",
+            "name": "reviewer",
+        }
+    ],
     "panes": [
         {
             "pane_id": "w9:p1",
             "tab_id": "w9:t1",
+            "terminal_id": "w9:term1",
+            "focused": True,
+            "revision": 1,
             "workspace_id": "w9",
             "agent": "pi",
             "agent_status": "working",
@@ -270,6 +379,9 @@ DEFAULT_STATE = {
         {
             "pane_id": "w9:p2",
             "tab_id": "w9:t1",
+            "terminal_id": "w9:term2",
+            "focused": False,
+            "revision": 2,
             "workspace_id": "w9",
             "agent": None,
             "agent_status": "unknown",

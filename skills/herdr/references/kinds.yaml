@@ -7,15 +7,18 @@
 #   invents flags. Verified against the real CLIs
 #   (`<agent> --help`); unverified kinds MUST stay empty.
 # invariant: how the ROLE INVARIANT reaches the agent.
-#   inline — the agent binary takes the snippet file through the kind's invariant_flag.
-#     pi reads file contents through --append-system-prompt (verified: text or file
-#     contents); claude reads a path ONLY through --append-system-prompt-file (verified:
-#     the text flag takes the value as literal prompt text, so a path passed there boots
-#     the agent with the path string as its system prompt, #240).
-#   file — marker-wrapped append to AGENTS.md in the target dir (cline prefers .clinerules).
-# invariant_flag: the one flag taking the snippet file path; required for inline kinds,
-#   forbidden for file kinds. qodercli stays file: its --append-system-prompt takes text
-#   only, and the multi-line snippet cannot ride an agent arg, so no flag works there.
+#   inline — the agent binary takes the snippet file through the kind's
+#     invariant_flag. pi reads file contents through --append-system-prompt
+#     (verified: text or file contents); claude reads a path ONLY through
+#     --append-system-prompt-file (verified: the text flag takes the value as
+#     literal prompt text, so a path passed there boots the agent with the
+#     path string as its system prompt, #240).
+#   file — marker-wrapped append to AGENTS.md in the target dir (cline
+#     prefers .clinerules).
+# invariant_flag: the one flag taking the snippet file path; required for
+#   inline kinds, forbidden for file kinds. qodercli stays file: its
+#   --append-system-prompt takes text only, and the multi-line snippet cannot
+#   ride an agent arg, so no flag works there.
 # revision_moves: whether this kind's revision is a usable
 #   acceptance signal. The prompt handshake confirms a
 #   `--no-wait` delivery when the status turns `working` OR
@@ -34,10 +37,13 @@
 #   Set: agy (herdr-agy-bridge).
 # Kinds absent here fall back to `file`, no trust flags, and
 # revision_moves true (forward-compatible, never blocked).
-# `--exclude-tools=subagents_enable` keeps pi's `subagent` tool eager from the first turn
-# (pi-subagents toolActivation). One token: kinds.yaml trust flags must start with '-'.
+# `--approve --exclude-tools subagents_enable` keeps pi's `subagent`
+# tool eager from the first turn (pi-subagents toolActivation). Each quoted
+# item is one agent argv token: a flag may be followed by its own value as a
+# separate item, never `--flag=value`. A kind whose CLI takes the joined form
+# spells one token (`claude`, `qodercli`).
 pi:
-  trust_flags: ["--approve", "--exclude-tools=subagents_enable"]
+  trust_flags: ["--approve", "--exclude-tools", "subagents_enable"]
   invariant: inline
   invariant_flag: --append-system-prompt
 claude:

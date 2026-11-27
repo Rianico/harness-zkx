@@ -9,7 +9,7 @@ import os
 import shlex
 import shutil
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 import herdr_cli
@@ -55,16 +55,6 @@ def test_normalize_direction_maps_aliases(token: str, expected: str) -> None:
 def test_normalize_direction_rejects_unknown() -> None:
     with pytest.raises(herdr_pane.UsageError, match="unknown direction"):
         herdr_pane.normalize_direction("diagonal")
-
-
-def test_payload_field_reports_non_json() -> None:
-    with pytest.raises(herdr_pane.HerdrError, match="non-JSON"):
-        herdr_pane.payload_field("not json", "result")
-
-
-def test_payload_field_reports_missing_key() -> None:
-    with pytest.raises(herdr_pane.HerdrError, match="missing result.pane"):
-        herdr_pane.payload_field('{"result": {}}', "result", "pane")
 
 
 def test_build_split_argv_rejects_bad_ratio() -> None:
@@ -227,6 +217,47 @@ def test_json_prints_raw_response(stub: StubHarness) -> None:
     assert json.loads(done.stdout)["result"]["pane"]["pane_id"] == "w9:pNEW"
 
 
+def test_json_prints_the_daemon_bytes_unparsed(stub: StubHarness) -> None:
+    """`--json` keeps the daemon's own bytes, so a field the typed model drops still arrives."""
+    daemon_pane = {
+        "pane_id": "w9:pJSON",
+        "terminal_id": "w9:termJSON",
+        "workspace_id": "w9",
+        "tab_id": "w9:t1",
+        "focused": False,
+        "agent_status": "unknown",
+        "revision": 1,
+        "daemon_only_field": "kept",
+    }
+    done = stub.run("vertical", "--json", state={**DEFAULT_STATE, "split_pane": daemon_pane})
+    assert done.returncode == herdr_cli.EXIT_OK, done.stderr
+    assert json.loads(done.stdout)["result"]["pane"] == daemon_pane
+
+
+def test_dry_run_plan_equals_the_argv_the_typed_split_sends(
+    stub: StubHarness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The local plan and `herdr_cli.split_pane` cannot drift apart."""
+    options = ("horizontal", "--cwd", str(stub.tmp_path), "--ratio", "0.3", "--focus")
+    plan = stub.run(*options, "--dry-run")
+    assert plan.returncode == herdr_cli.EXIT_OK, plan.stderr
+    planned = shlex.split(plan.stdout.strip())
+
+    sent: list[list[str]] = []
+    original = herdr_cli.run_herdr_checked
+
+    def record(argv: Sequence[str], env: Mapping[str, str]) -> str:
+        sent.append(list(argv))
+        return original(argv, env)
+
+    monkeypatch.setattr(herdr_cli, "run_herdr_checked", record)
+    ran = stub.run(*options)
+    assert ran.returncode == herdr_cli.EXIT_OK, ran.stderr
+
+    (split_call,) = [argv for argv in sent if argv[1:3] == ["pane", "split"]]
+    assert split_call == planned
+
+
 def test_dry_run_prints_command_without_splitting(stub: StubHarness) -> None:
     done = stub.run("horizontal", "--dry-run")
     assert done.returncode == herdr_cli.EXIT_OK, done.stderr
@@ -309,7 +340,7 @@ def test_herdr_split_failure_is_reported(stub: StubHarness) -> None:
 def test_unusable_split_response_is_reported(stub: StubHarness) -> None:
     done = stub.run("vertical", state={**DEFAULT_STATE, "split_pane": {"tab_id": "w9:t1"}})
     assert done.returncode == herdr_cli.EXIT_HERDR
-    assert "result.pane.pane_id" in done.stderr
+    assert "pane split result.pane has no usable 'pane_id'" in done.stderr
 
 
 # ── launch-line completion sentinel (#230) ──────────────────────────────────────────
