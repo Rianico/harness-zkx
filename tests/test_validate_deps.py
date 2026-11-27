@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+import http.client
+import http.server
+import importlib.util
 import json
+import os
 import subprocess
 import sys
+import threading
 from pathlib import Path
+from typing import override
+
+import pytest
 
 from tests.in_process import run_script_in_process
 
@@ -969,3 +977,426 @@ def test_refs_json_emits_findings(tmp_path: Path) -> None:
         }
     ]
     assert payload["warnings"] == []
+
+
+def _load_validate_deps_module():
+    spec = importlib.util.spec_from_file_location("validate_deps_mod", SCRIPT_PATH)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_refs_check_urls_uses_lychee_when_available(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """refs --check-urls passes expected flags/config to lychee and emits no install warning."""
+    write_package_file(
+        tmp_path,
+        "alpha/SKILL.md",
+        reference_skill(
+            "alpha",
+            "See [ok](https://docs.example.org/ok) and [broken](https://docs.example.org/missing).\n",
+        ),
+    )
+    lychee_toml = tmp_path / "lychee.toml"
+    _ = lychee_toml.write_text("no_progress = true\n", encoding="utf-8")
+    args_log = tmp_path / "lychee_args.txt"
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    lychee_stub = bin_dir / "lychee"
+    skill_file = (tmp_path / "skills" / "alpha" / "SKILL.md").resolve()
+    _ = lychee_stub.write_text(
+        "#!/bin/sh\n"
+        f'printf "%s\\n" "$@" > "{args_log}"\n'
+        "cat <<EOF\n"
+        "{\n"
+        '  "total": 2,\n'
+        '  "excludes": 0,\n'
+        '  "error_map": {\n'
+        f'    "{skill_file}": [\n'
+        "      {\n"
+        '        "url": "https://docs.example.org/missing",\n'
+        '        "status": {"text": "404 Not Found"},\n'
+        '        "span": {"line": 7, "column": 42}\n'
+        "      }\n"
+        "    ]\n"
+        "  },\n"
+        '  "timeout_map": {}\n'
+        "}\n"
+        "EOF\n"
+        "exit 2\n",
+        encoding="utf-8",
+    )
+    lychee_stub.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}")
+
+    result = run_validate_deps("--project-root", str(tmp_path), "refs", "--check-urls", "--json")
+
+    assert result.returncode == 1
+    assert "lychee" not in result.stderr
+    recorded_args = args_log.read_text(encoding="utf-8").splitlines()
+    assert "--format" in recorded_args
+    assert recorded_args[recorded_args.index("--format") + 1] == "json"
+    assert "--config" in recorded_args
+    assert recorded_args[recorded_args.index("--config") + 1] == str(lychee_toml.resolve())
+    assert "--exclude" in recorded_args
+    assert recorded_args[recorded_args.index("--exclude") + 1] == "^file://"
+    scheme_values = [
+        recorded_args[i + 1] for i, arg in enumerate(recorded_args) if arg == "--scheme"
+    ]
+    assert scheme_values == ["http", "https"]
+    assert "--offline" not in recorded_args
+    assert str(skill_file) in recorded_args
+
+    payload = json.loads(result.stdout)
+    assert payload["url_engine"] == "lychee"
+    assert payload["checked"] == 2
+    assert payload["failures"] == [
+        {
+            "file": "skills/alpha/SKILL.md",
+            "line": 7,
+            "kind": "url",
+            "target": "https://docs.example.org/missing",
+        }
+    ]
+
+    offline_result = run_validate_deps(
+        "--project-root", str(tmp_path), "refs", "--check-urls", "--offline", "--json"
+    )
+    assert offline_result.returncode == 1
+    offline_args = args_log.read_text(encoding="utf-8").splitlines()
+    assert "--offline" in offline_args
+
+
+def test_refs_check_urls_falls_back_to_python_with_install_warning(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Without lychee, refs --check-urls warns to stderr and runs the Python fallback."""
+    mod = _load_validate_deps_module()
+
+    class _Handler(http.server.BaseHTTPRequestHandler):
+        def do_HEAD(self) -> None:
+            if self.path == "/ok":
+                self.send_response(200)
+            elif self.path == "/head-405":
+                self.send_response(405)
+            else:
+                self.send_response(404)
+            self.end_headers()
+
+        def do_GET(self) -> None:
+            if self.path in ("/ok", "/head-405"):
+                self.send_response(200)
+            else:
+                self.send_response(404)
+            self.end_headers()
+
+        @override
+        def log_message(self, format: str, *args: object) -> None:
+            return
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        port = server.server_address[1]
+        assert mod._probe_url(f"http://127.0.0.1:{port}/ok") is None
+        assert mod._probe_url(f"http://127.0.0.1:{port}/head-405") is None
+        assert mod._probe_url(f"http://127.0.0.1:{port}/missing") == "HTTP 404"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    write_package_file(
+        tmp_path,
+        "alpha/SKILL.md",
+        reference_skill(
+            "alpha",
+            "See [ok](https://valid.test/doc) and [bad](https://broken.test/doc).\n",
+        ),
+    )
+
+    def _no_lychee(_name: str) -> None:
+        return None
+
+    def _fake_probe(url: str, timeout: float = 10.0) -> str | None:
+        _ = timeout
+        return "HTTP 404" if "broken.test" in url else None
+
+    monkeypatch.setattr(mod.shutil, "which", _no_lychee)
+    monkeypatch.setattr(mod, "_probe_url", _fake_probe)
+
+    failed = mod.refs_check(tmp_path, json_output=True, check_urls=True)
+    captured = capsys.readouterr()
+
+    assert failed is True
+    assert "lychee" in captured.err
+    assert "brew install lychee" in captured.err
+    payload = json.loads(captured.out)
+    assert payload["url_engine"] == "python-fallback"
+    assert payload["checked"] == 2
+    assert payload["failures"] == [
+        {
+            "file": "skills/alpha/SKILL.md",
+            "line": 7,
+            "kind": "url",
+            "target": "https://broken.test/doc",
+        }
+    ]
+
+
+def test_refs_check_urls_skips_localhost_and_example_urls(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Fallback URL extraction skips localhost, example.com, and template URLs."""
+    mod = _load_validate_deps_module()
+    write_package_file(
+        tmp_path,
+        "alpha/SKILL.md",
+        reference_skill(
+            "alpha",
+            "Local http://localhost:3000 and https://example.com/docs and https://host.test/<id>.\n",
+        ),
+    )
+    probed: list[str] = []
+
+    def _no_lychee(_name: str) -> None:
+        return None
+
+    def _record_probe(url: str, timeout: float = 10.0) -> str | None:
+        _ = timeout
+        probed.append(url)
+        return None
+
+    monkeypatch.setattr(mod.shutil, "which", _no_lychee)
+    monkeypatch.setattr(mod, "_probe_url", _record_probe)
+
+    failed = mod.refs_check(tmp_path, json_output=True, check_urls=True)
+    captured = capsys.readouterr()
+
+    assert failed is False
+    assert probed == []
+    payload = json.loads(captured.out)
+    assert payload["checked"] == 0
+    assert payload["url_engine"] == "python-fallback"
+
+
+def test_refs_check_urls_offline_fallback_warns_and_passes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--check-urls --offline without lychee warns to stderr and skips network probes."""
+    write_package_file(
+        tmp_path,
+        "alpha/SKILL.md",
+        reference_skill("alpha", "External https://valid.test/docs.\n"),
+    )
+    empty_bin = tmp_path / "empty-bin"
+    empty_bin.mkdir()
+    monkeypatch.setenv("PATH", str(empty_bin))
+
+    result = run_validate_deps(
+        "--project-root", str(tmp_path), "refs", "--check-urls", "--offline", "--json"
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "brew install lychee" in result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["url_engine"] == "python-fallback"
+    assert payload["failures"] == []
+
+
+def test_refs_resolves_subskill_name(tmp_path: Path) -> None:
+    """refs <subskill> scopes directly to a subskill resolved from skills/."""
+    write_package_file(tmp_path, "parent/SKILL.md", reference_skill("parent", "Parent.\n"))
+    write_package_file(
+        tmp_path,
+        "parent/subskills/child/SKILL.md",
+        reference_skill("child", "Read [ref](references/ok.md).\n"),
+    )
+    write_package_file(tmp_path, "parent/subskills/child/references/ok.md", "# OK\n")
+    write_package_file(
+        tmp_path,
+        "parent/subskills/broken/SKILL.md",
+        reference_skill("broken", "Read [missing](references/missing.md).\n"),
+    )
+
+    result = run_validate_deps("--project-root", str(tmp_path), "refs", "child")
+
+    assert result.returncode == 0, result.stdout
+    assert "Reference check: 1 checked, 0 failed, 0 warnings." in result.stdout
+
+
+def test_refs_check_urls_lychee_timeout_map_and_error_cases(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """lychee handles timeout_map entries, unexpected exit codes with empty JSON, and bad JSON."""
+    write_package_file(
+        tmp_path,
+        "alpha/SKILL.md",
+        reference_skill("alpha", "See [slow](https://slow.test/doc).\n"),
+    )
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    lychee_stub = bin_dir / "lychee"
+    skill_file = (tmp_path / "skills" / "alpha" / "SKILL.md").resolve()
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}")
+
+    # 1. timeout_map entry
+    _ = lychee_stub.write_text(
+        "#!/bin/sh\n"
+        "cat <<EOF\n"
+        "{\n"
+        '  "total": 1,\n'
+        '  "excludes": 0,\n'
+        '  "error_map": {},\n'
+        '  "timeout_map": {\n'
+        f'    "{skill_file}": [\n'
+        "      {\n"
+        '        "url": "https://slow.test/doc",\n'
+        '        "status": {"text": "Timed out"},\n'
+        '        "span": {"line": 7, "column": 12}\n'
+        "      }\n"
+        "    ]\n"
+        "  }\n"
+        "}\n"
+        "EOF\n"
+        "exit 2\n",
+        encoding="utf-8",
+    )
+    lychee_stub.chmod(0o755)
+    timeout_result = run_validate_deps(
+        "--project-root", str(tmp_path), "refs", "--check-urls", "--json"
+    )
+    assert timeout_result.returncode == 1
+    timeout_payload = json.loads(timeout_result.stdout)
+    assert timeout_payload["failures"] == [
+        {
+            "file": "skills/alpha/SKILL.md",
+            "line": 7,
+            "kind": "url",
+            "target": "https://slow.test/doc",
+        }
+    ]
+
+    # 2. Non-zero unexpected exit (returncode=1) with empty JSON
+    _ = lychee_stub.write_text(
+        '#!/bin/sh\necho "{}"\necho "config parse error" >&2\nexit 1\n',
+        encoding="utf-8",
+    )
+    unexpected_result = run_validate_deps(
+        "--project-root", str(tmp_path), "refs", "--check-urls", "--json"
+    )
+    assert unexpected_result.returncode == 1
+    unexpected_payload = json.loads(unexpected_result.stdout)
+    assert unexpected_payload["failures"] == [
+        {
+            "file": "lychee",
+            "line": 0,
+            "kind": "url",
+            "target": "lychee",
+        }
+    ]
+
+    # 3. Malformed JSON output
+    _ = lychee_stub.write_text(
+        '#!/bin/sh\necho "not-json"\necho "fatal crash" >&2\nexit 1\n',
+        encoding="utf-8",
+    )
+    bad_json_result = run_validate_deps(
+        "--project-root", str(tmp_path), "refs", "--check-urls", "--json"
+    )
+    assert bad_json_result.returncode == 1
+    bad_json_payload = json.loads(bad_json_result.stdout)
+    assert bad_json_payload["failures"] == [
+        {
+            "file": "lychee",
+            "line": 0,
+            "kind": "url",
+            "target": "lychee",
+        }
+    ]
+
+
+def test_probe_url_catches_http_exception_and_malformed_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_probe_url catches dropped HTTP responses (HTTPException) and malformed URLs."""
+    mod = _load_validate_deps_module()
+
+    def _raise_remote_disconnected(*_args: object, **_kwargs: object) -> object:
+        raise http.client.RemoteDisconnected("Remote end closed connection without response")
+
+    monkeypatch.setattr(mod.urllib.request, "urlopen", _raise_remote_disconnected)
+    err = mod._probe_url("https://dropped.test/doc", timeout=2.0)
+    assert isinstance(err, str)
+    assert err.startswith("Request error:")
+
+    bad_url_err = mod._probe_url("not-a-url", timeout=1.0)
+    assert isinstance(bad_url_err, str)
+    assert bad_url_err.startswith("Request error:")
+
+
+def test_refs_check_urls_skips_private_link_local_and_ipv6_loopback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """_is_excluded_url and Python fallback skip private, link-local, and [::1] URLs."""
+    mod = _load_validate_deps_module()
+    assert mod._is_excluded_url("http://192.168.1.10/admin") is True
+    assert mod._is_excluded_url("http://169.254.169.254/latest/meta-data") is True
+    assert mod._is_excluded_url("http://[::1]:8080/health") is True
+    assert mod._is_excluded_url("http://sub.localhost/test") is True
+    assert mod._is_excluded_url("https://docs.python.org/3/") is False
+
+    write_package_file(
+        tmp_path,
+        "alpha/SKILL.md",
+        reference_skill(
+            "alpha",
+            "Private http://192.168.1.10/admin, metadata http://169.254.169.254/latest/meta-data, "
+            "and IPv6 http://[::1]:8080/health.\n",
+        ),
+    )
+    probed: list[str] = []
+
+    def _no_lychee(_name: str) -> None:
+        return None
+
+    def _record_probe(url: str, timeout: float = 10.0) -> str | None:
+        _ = timeout
+        probed.append(url)
+        return None
+
+    monkeypatch.setattr(mod.shutil, "which", _no_lychee)
+    monkeypatch.setattr(mod, "_probe_url", _record_probe)
+
+    failed = mod.refs_check(tmp_path, json_output=True, check_urls=True)
+    captured = capsys.readouterr()
+
+    assert failed is False
+    assert probed == []
+    payload = json.loads(captured.out)
+    assert payload["checked"] == 0
+    assert payload["url_engine"] == "python-fallback"
+
+
+def test_refs_refuses_path_traversal_outside_skills(tmp_path: Path) -> None:
+    """_resolve_ref_base and `refs ../docs` refuse traversal outside skills/."""
+    mod = _load_validate_deps_module()
+    write_package_file(tmp_path, "alpha/SKILL.md", reference_skill("alpha", "Alpha.\n"))
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    _ = (docs_dir / "guide.md").write_text("# Guide\n", encoding="utf-8")
+
+    assert mod._resolve_ref_base(tmp_path, "../docs") is None
+
+    result = run_validate_deps("--project-root", str(tmp_path), "refs", "../docs")
+    assert result.returncode == 1
+    assert "not found" in result.stderr

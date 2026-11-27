@@ -1,7 +1,7 @@
 ---
 name: toolchain-wiki
 description: >-
-  Toolchain wiki router for Oxlint/Oxfmt, Basedpyright, Worktrunk (wt), Jinja, LSP 3.17, and Tauri 2.0. Use when fixing lint errors, configuring typecheckers, managing git worktrees with wt, troubleshooting LSP servers, or developing Tauri desktop and mobile apps.
+  Toolchain wiki router for Oxlint/Oxfmt, Basedpyright, Worktrunk, Jinja, LSP 3.17, Tauri 2.0, and AeroSpace. Use when fixing lint or type errors, managing git worktrees, templating with Jinja, debugging LSP, building Tauri apps, or configuring AeroSpace.
 metadata:
   manage:
     - oxlint
@@ -11,12 +11,13 @@ metadata:
     - jinja
     - lsp
     - tauri
+    - aerospace
   depends-on: [docs-scraper, scaffold]
 ---
 
 # Toolchain Wiki
 
-Orchestration router for the native toolchain-wiki that minimizes agent feedback latency. A single-runtime stack (`pnpm v12`, `TS 7`, `Vite 8`, `Basedpyright`, `Worktrunk`, `Jinja 3.1`, `Tauri 2.0`) shares one spine. The spine is: **declared runtime → deterministic artifacts → verification gate**.
+Orchestration router for the native toolchain-wiki that minimizes agent feedback latency. A single-runtime stack (`pnpm v12`, `TS 7`, `Vite 8`, `Basedpyright`, `Worktrunk`, `Jinja 3.1`, `Tauri 2.0`, `AeroSpace`) shares one spine. The spine is: **declared runtime → deterministic artifacts → verification gate**.
 
 This skill owns **sequencing only** — no bytes. Each subskill owns its bytes inside `$SKILL_DIR/subskills/<name>/`.
 
@@ -33,6 +34,7 @@ Read the subskill that matches the task. Use `Read` (not `Skill` tool — subski
 | `jinja` | `$SKILL_DIR/subskills/jinja/SKILL.md` | Jinja 3.1 templates, `Environment`/loader config, filters/tests, autoescaping, extensions, sandbox — [jinja](subskills/jinja/SKILL.md) |
 | `lsp` | `$SKILL_DIR/subskills/lsp/SKILL.md` | LSP 3.17 server/client lifecycle, diagnostics pull/push, progress streaming, daemon process handling — [lsp](subskills/lsp/SKILL.md) |
 | `tauri` | `$SKILL_DIR/subskills/tauri/SKILL.md` | Tauri 2.0 architecture, IPC commands, state, Rust traits (Manager, Emitter, Listener), capabilities ACL, and plugins — [tauri](subskills/tauri/SKILL.md) |
+| `aerospace` | `$SKILL_DIR/subskills/aerospace/SKILL.md` | macOS tiling window manager: TOML config, tree layouts, bindings, callbacks, CLI, socket IPC — [aerospace](subskills/aerospace/SKILL.md) |
 
 Omitted domain loads only the spine above.
 
@@ -43,6 +45,7 @@ Omitted domain loads only the spine above.
 - **Templating:** `jinja2` ≥3.1 (Python) — one `Environment` per app, `select_autoescape()` for markup, loader-backed templates, sandbox for untrusted input. Gate: `Environment().parse(src)` + a render smoke test. See `$SKILL_DIR/subskills/jinja/SKILL.md`.
 - **LSP lifecycle:** sequence `initialize` → `initialized` → `shutdown` → `exit` → transport stop. Shutdown precedes exit, and both precede transport teardown. Keep daemons isolated per workspace, and stream progress with `$/progress` begin/report/end. See `$SKILL_DIR/subskills/lsp/SKILL.md`.
 - **Tauri desktop & mobile:** Tauri 2.0 (`tauri::Builder`, `tauri.conf.json`) with Rust backend (`Manager`, `Emitter`, `Listener`), webview frontend, and capabilities ACL. Gate: `pnpm tauri info && cargo check --manifest-path src-tauri/Cargo.toml && pnpm run typecheck`. See `$SKILL_DIR/subskills/tauri/SKILL.md`.
+- **Window management (macOS):** AeroSpace (`~/.aerospace.toml`) — i3-like tree tiling, virtual workspaces, binding modes, `on-window-detected` callbacks, CLI, and Unix socket IPC. Gate: `aerospace reload-config --dry-run --no-gui && aerospace list-workspaces --all`. See `$SKILL_DIR/subskills/aerospace/SKILL.md`.
 - **Performance goal:** native Rust/Go tooling — `oxlint` 50–100× ESLint, `oxfmt` 30× Prettier, `tsc v7` parallel, `basedpyright` tsgo, `wt hash_port` deterministic.
 
 ## Deterministic Gates
@@ -55,6 +58,7 @@ Tool owns bytes. Model proofreads intent.
 - `wt switch --create <branch> && wt merge` — worktree gate (see `worktrunk`)
 - LSP gate — assert shutdown before exit, no orphaned server process after teardown, and a closed `$/progress` stream (see `lsp`)
 - `pnpm tauri info && cargo check --manifest-path src-tauri/Cargo.toml && pnpm run typecheck` — Tauri gate (see `tauri`)
+- `aerospace config --config-path && aerospace reload-config --dry-run --no-gui` — AeroSpace config gate (see `aerospace`)
 
 ## Trade-offs
 
@@ -70,3 +74,4 @@ Tool owns bytes. Model proofreads intent.
 - `jinja` is canonical via `toolchain-wiki/subskills/jinja/` — Jinja 3.1 language + API, raw snapshot in `references/jinja-raw/`.
 - `lsp` is canonical via `toolchain-wiki/subskills/lsp/` — LSP 3.17 protocol patterns, daemon lifecycle, diagnostics pull/push, and spec excerpts in `references/`.
 - `tauri` is canonical via `toolchain-wiki/subskills/tauri/` — Tauri 2.0 architecture, IPC commands, Rust traits, capabilities ACL, and plugins.
+- `aerospace` is canonical via `toolchain-wiki/subskills/aerospace/` — AeroSpace macOS tiling window manager config, tree layouts, CLI, callbacks, socket protocol, and integrations.

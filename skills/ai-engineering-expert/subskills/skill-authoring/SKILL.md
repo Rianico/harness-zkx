@@ -176,6 +176,8 @@ Run these gates when their condition holds:
 # After a dependency, move, rename, or link change. Validates depends-on and references.
 uv run $SKILL_DIR/scripts/validate-deps.py check
 uv run $SKILL_DIR/scripts/validate-deps.py refs <name>
+# Verify external HTTP/HTTPS URLs via lychee or Python fallback.
+uv run $SKILL_DIR/scripts/validate-deps.py refs <name> --check-urls
 
 # Only when targeted tests exist
 uv run pytest tests/ai-engineering-expert tests/test_validate_deps.py

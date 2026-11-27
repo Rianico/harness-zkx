@@ -35,6 +35,7 @@ def test_toolchain_covers_all_canonical_tools(sd) -> None:
         "oxfmt",
         "basedpyright",
         "rtk",
+        "lychee",
     }
     assert expected == set(tools)
     for tool in tools.values():

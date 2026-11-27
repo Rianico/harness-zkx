@@ -1,0 +1,31 @@
+# Lychee configuration for validating Markdown links and reference URLs.
+# See: https://lychee.cli.rs/
+
+no_progress = true
+cache = false
+max_retries = 2
+timeout = 15
+include_fragments = "anchor-only"
+exclude_all_private = true
+
+exclude_path = [
+    "-raw(/|$)",
+    "(^|/)results(/|$)",
+    "(^|/)reference(/|$)",
+    "(^|/)\\.lsz(/|$)",
+    "(^|/)\\.git(/|$)",
+    "(^|/)\\.venv(/|$)",
+    "(^|/)node_modules(/|$)",
+    "(^|/)tests(/|$)",
+]
+
+exclude = [
+    "^https?://localhost\\b",
+    "^https?://127\\.0\\.0\\.1\\b",
+    "^https?://0\\.0\\.0\\.0\\b",
+    "^https?://\\[::1\\]\\b",
+    "^https?://asset\\.localhost\\b",
+    "^https?://[^/]+\\.localhost\\b",
+    "^https?://example\\.(com|org|net)(/|$)",
+    "[<>{}]",
+]
