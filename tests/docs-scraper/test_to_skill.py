@@ -85,6 +85,7 @@ class TestRunToSkill:
         brief = (tmp_path / "out" / "demo" / "GENERATION-BRIEF.md").read_text(encoding="utf-8")
         assert "compile.py validate-skill" in brief
         assert "compile.py validate-triggers" in brief
+        assert "--check-urls" in brief
         assert "skill-template.md" in brief
         assert "skill-authoring" in brief
 
@@ -165,6 +166,7 @@ class TestFoldInto:
         brief = (existing_skill / "UPDATE-BRIEF.md").read_text(encoding="utf-8")
         assert "Existing curated content wins" in brief
         assert "compile.py validate-skill" in brief
+        assert "--check-urls" in brief
 
     def test_original_structure_report_preserved(
         self, existing_skill: Path, new_docs: Path

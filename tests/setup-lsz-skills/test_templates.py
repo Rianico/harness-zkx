@@ -41,7 +41,18 @@ def _state(provider: str = "github", has_context_map: bool = False) -> dict[str,
     }
     toolchain: dict[str, dict[str, Any]] = {
         name: dict(tool)
-        for name in ("adr", "fd", "rg", "eza", "wt", "uv", "oxlint", "oxfmt", "basedpyright")
+        for name in (
+            "adr",
+            "fd",
+            "rg",
+            "eza",
+            "wt",
+            "uv",
+            "oxlint",
+            "oxfmt",
+            "basedpyright",
+            "lychee",
+        )
     }
     toolchain["rtk"] = {
         "detected": True,
@@ -184,7 +195,7 @@ def test_templates_honor_the_canonical_jinja_settings(
     # trim_blocks/lstrip_blocks: the toolchain table has no blank lines between rows.
     table = (tmp_repo / "docs" / "agents" / "toolchain.md").read_text()
     rows = [line for line in table.splitlines() if line.startswith("| `")]
-    assert len(rows) == 10
+    assert len(rows) == 11
 
 
 def test_toolchain_doc_renders_the_rtk_section(sd, tmp_repo: Path, templates_dir: Path) -> None:

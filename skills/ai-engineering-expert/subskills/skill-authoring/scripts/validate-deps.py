@@ -16,16 +16,26 @@ Supports:
 - sync: Generate agents/openai.yaml from SKILL.md canonical metadata
 - context-check: Enforce context-load policy (hard gates + soft warnings)
 - refs: Resolve paths referenced from skill docs (anchors and Markdown links);
-  --include-fences opts fenced code blocks in
+  --include-fences opts fenced code blocks in; --check-urls verifies external
+  HTTP(S) URLs (with --offline to skip network requests)
 """
 
 import argparse
+import http.client
+import ipaddress
 import json
 import re
+import shutil
+import subprocess
 import sys
+import urllib.error
+import urllib.parse
+import urllib.request
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 try:
     import frontmatter
@@ -205,10 +215,32 @@ LINK_KIND = "link"
 BARE_SKILL_PATH_KIND = "bare-skill-path"
 ABSOLUTE_PATH_KIND = "absolute-path"
 
+URL_KIND = "url"
+
 MISSING_TARGET = "missing target"
 ESCAPES_PACKAGE = "target escapes package root"
 BARE_SKILL_PATH_REASON = "bare skills/ path"
 ABSOLUTE_PATH_REASON = "absolute host path"
+LYCHEE_INSTALL_WARNING = (
+    "WARNING: 'lychee' is not installed — falling back to built-in Python URL checker. "
+    "Install with: brew install lychee (or cargo install lychee)"
+)
+
+URL_PATTERN = re.compile(r"https?://(?:\[[0-9A-Fa-f:]+\][^\s`'\"\])]*|[^\s`'\"\])]+)")
+"""External HTTP(S) URL in Markdown links or prose."""
+
+EXCLUDED_URL_HOSTS = frozenset(
+    {
+        "localhost",
+        "127.0.0.1",
+        "0.0.0.0",
+        "asset.localhost",
+        "example.com",
+        "example.org",
+        "example.net",
+    }
+)
+EXCLUDED_URL_MARKERS = ("<", ">", "${", "{{", "...", "…")
 
 
 @dataclass(frozen=True)
@@ -287,11 +319,27 @@ def _is_excluded_ref_path(relative: Path) -> bool:
     return any(part in EXCLUDED_REF_SEGMENTS or part.endswith("-raw") for part in relative.parts)
 
 
-def _iter_reference_docs(root_dir: Path, skill: str | None) -> list[Path]:
-    """In-scope documents: `skills/<pkg>/SKILL.md` and `skills/<pkg>/**/*.md`."""
+def _resolve_ref_base(root_dir: Path, skill: str | None) -> Path | None:
+    """Resolve the base directory for a skill name, subskill name, or relative path."""
     skills_dir = root_dir / "skills"
-    base = skills_dir / skill if skill else skills_dir
-    if not base.is_dir():
+    if skill is None:
+        return skills_dir
+    direct = skills_dir / skill
+    if not direct.resolve().is_relative_to(skills_dir.resolve()):
+        return None
+    if direct.is_dir():
+        return direct
+    skill_map, _ = _scan_skills_dir(skills_dir)
+    skill_file = skill_map.get(skill)
+    if skill_file is not None:
+        return skill_file.parent
+    return None
+
+
+def _iter_reference_docs(root_dir: Path, base: Path | None) -> list[Path]:
+    """In-scope documents: `SKILL.md` and non-excluded `**/*.md` under the resolved root."""
+    skills_dir = root_dir / "skills"
+    if base is None or not base.is_dir():
         return []
     return sorted(
         doc for doc in base.rglob("*.md") if not _is_excluded_ref_path(doc.relative_to(skills_dir))
@@ -374,11 +422,200 @@ def _scan_references(
     return failures, warnings, checked
 
 
+def _is_excluded_url(url: str) -> bool:
+    """True when URL targets local loopback, private IPs, example domains, or placeholders."""
+    if any(marker in url for marker in EXCLUDED_URL_MARKERS):
+        return True
+    try:
+        parsed = urllib.parse.urlparse(url)
+        host = (parsed.hostname or "").lower().strip("[]")
+    except ValueError:
+        return True
+    if not host or host in EXCLUDED_URL_HOSTS:
+        return True
+    if host.endswith(".localhost"):
+        return True
+    if host.endswith((".example.com", ".example.org", ".example.net")):
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_reserved
+        or ip.is_unspecified
+        or ip.is_multicast
+    )
+
+
+def _extract_urls(
+    root_dir: Path, doc: Path, include_fences: bool = False
+) -> list[tuple[str, int, str]]:
+    """Extract non-excluded external HTTP(S) URLs as `(relative_file, line, url)` tuples."""
+    relative = str(doc.relative_to(root_dir))
+    sites: list[tuple[str, int, str]] = []
+    for number, text in _iter_lines(doc.read_text(encoding="utf-8"), include_fences):
+        for match in URL_PATTERN.finditer(_mask_code_spans(text)):
+            url = match.group(0).rstrip(".,;:)>'\"")
+            if not _is_excluded_url(url):
+                sites.append((relative, number, url))
+    return sites
+
+
+def _int_field(mapping: dict[str, object], key: str, default: int = 0) -> int:
+    """Extract an integer value from a JSON mapping with safe fallback."""
+    raw = mapping.get(key, default)
+    return raw if isinstance(raw, int) and not isinstance(raw, bool) else default
+
+
+def _check_urls_lychee(
+    root_dir: Path, docs: list[Path], lychee_bin: str, offline: bool = False
+) -> tuple[list[RefFinding], int]:
+    """Validate external HTTP(S) URLs in `docs` using the `lychee` CLI."""
+    cmd = [
+        lychee_bin,
+        "--format",
+        "json",
+        "--no-progress",
+        "--exclude",
+        "^file://",
+        "--scheme",
+        "http",
+        "--scheme",
+        "https",
+    ]
+    config_file = root_dir / "lychee.toml"
+    if config_file.is_file():
+        cmd.extend(["--config", str(config_file)])
+    if offline:
+        cmd.append("--offline")
+    cmd.extend(str(doc) for doc in docs)
+
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=str(root_dir),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=60,
+        )
+    except (subprocess.TimeoutExpired, OSError) as err:
+        return [RefFinding("lychee", 0, URL_KIND, "lychee", str(err))], 0
+    try:
+        raw_payload = cast(object, json.loads(proc.stdout))
+    except json.JSONDecodeError:
+        detail = proc.stderr.strip() or f"lychee exited {proc.returncode}"
+        return [RefFinding("lychee", 0, URL_KIND, "lychee", detail)], 0
+
+    if not isinstance(raw_payload, dict):
+        return [RefFinding("lychee", 0, URL_KIND, "lychee", "unexpected JSON output")], 0
+
+    payload = cast(dict[str, object], raw_payload)
+    failures: list[RefFinding] = []
+    resolved_root = root_dir.resolve()
+
+    for section in ("error_map", "timeout_map"):
+        section_map = payload.get(section)
+        if not isinstance(section_map, dict):
+            continue
+        typed_map = cast(dict[str, object], section_map)
+        for raw_file, raw_items in typed_map.items():
+            try:
+                rel_file = str(Path(raw_file).resolve().relative_to(resolved_root))
+            except ValueError:
+                rel_file = raw_file
+            if not isinstance(raw_items, list):
+                continue
+            typed_items = cast(list[object], raw_items)
+            for raw_item in typed_items:
+                if not isinstance(raw_item, dict):
+                    continue
+                item = cast(dict[str, object], raw_item)
+                url = str(item.get("url", ""))
+                span_obj = item.get("span")
+                line = (
+                    _int_field(cast(dict[str, object], span_obj), "line", 1)
+                    if isinstance(span_obj, dict)
+                    else 1
+                )
+                status_obj = item.get("status")
+                if isinstance(status_obj, dict):
+                    status_dict = cast(dict[str, object], status_obj)
+                    reason = str(
+                        status_dict.get("text") or status_dict.get("details") or "URL check failed"
+                    )
+                else:
+                    reason = "URL check failed"
+                failures.append(RefFinding(rel_file, line, URL_KIND, url, reason))
+
+    if proc.returncode not in (0, 2) and not failures:
+        detail = proc.stderr.strip() or f"lychee exited {proc.returncode}"
+        failures.append(RefFinding("lychee", 0, URL_KIND, "lychee", detail))
+
+    total = _int_field(payload, "total", 0)
+    excludes = _int_field(payload, "excludes", 0)
+    checked = max(0, total - excludes)
+    return failures, checked
+
+
+def _probe_url(url: str, timeout: float = 10.0) -> str | None:
+    """Probe an HTTP(S) URL with HEAD and GET fallback; return error text or None."""
+    target = url.split("#", 1)[0]
+    headers = {"User-Agent": "lsz-validate-deps/1.0"}
+    methods: tuple[str, ...] = ("HEAD", "GET")
+    for method in methods:
+        try:
+            req = urllib.request.Request(target, method=method, headers=headers)
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                status = int(resp.status)
+                if 200 <= status < 400:
+                    return None
+                return f"HTTP {status}"
+        except urllib.error.HTTPError as err:
+            if method == "HEAD" and err.code in (403, 405, 501):
+                continue
+            return f"HTTP {err.code}"
+        except (urllib.error.URLError, http.client.HTTPException, ValueError, OSError) as err:
+            return f"Request error: {err}"
+    return "HTTP probe failed"
+
+
+def _check_urls_python(
+    root_dir: Path,
+    docs: list[Path],
+    include_fences: bool = False,
+    offline: bool = False,
+) -> tuple[list[RefFinding], int]:
+    """Fallback URL checker using stdlib urllib when `lychee` is unavailable."""
+    sites: list[tuple[str, int, str]] = []
+    for doc in docs:
+        sites.extend(_extract_urls(root_dir, doc, include_fences=include_fences))
+    if offline or not sites:
+        return [], 0
+
+    unique_urls = sorted({url for _, _, url in sites})
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        outcomes = dict(zip(unique_urls, pool.map(_probe_url, unique_urls), strict=True))
+
+    failures = [
+        RefFinding(rel_file, line, URL_KIND, url, reason)
+        for rel_file, line, url in sites
+        if (reason := outcomes.get(url)) is not None
+    ]
+    return failures, len(sites)
+
+
 def refs_check(
     root_dir: Path,
     skill: str | None = None,
     json_output: bool = False,
     include_fences: bool = False,
+    check_urls: bool = False,
+    offline: bool = False,
 ) -> bool:
     """Resolve every reference under skills/. Return True when a hard failure exists.
 
@@ -387,16 +624,19 @@ def refs_check(
     counted separately, so they never inflate the resolved total.
 
     `include_fences` scans fenced code blocks too. The `check` subcommand keeps the
-    fence-blind default.
+    fence-blind default. When `check_urls` is enabled, external HTTP(S) URLs are
+    validated via `lychee` when installed or via the built-in Python fallback.
     """
-    if skill is not None and not (root_dir / "skills" / skill).is_dir():
+    base = _resolve_ref_base(root_dir, skill)
+    if skill is not None and base is None:
         print(f"Error: Skill '{skill}' not found.", file=sys.stderr)
         return True
 
+    docs = _iter_reference_docs(root_dir, base)
     failures: list[RefFinding] = []
     warnings: list[RefFinding] = []
     checked = 0
-    for doc in _iter_reference_docs(root_dir, skill):
+    for doc in docs:
         doc_failures, doc_warnings, doc_checked = _scan_references(
             root_dir, doc, include_fences=include_fences
         )
@@ -404,15 +644,40 @@ def refs_check(
         warnings.extend(doc_warnings)
         checked += doc_checked
 
+    url_engine: str | None = None
+    if check_urls:
+        lychee_bin = shutil.which("lychee")
+        if lychee_bin is not None:
+            url_engine = "lychee"
+            if docs:
+                url_failures, url_checked = _check_urls_lychee(
+                    root_dir, docs, lychee_bin, offline=offline
+                )
+                failures.extend(url_failures)
+                checked += url_checked
+        else:
+            url_engine = "python-fallback"
+            print(LYCHEE_INSTALL_WARNING, file=sys.stderr)
+            if docs:
+                url_failures, url_checked = _check_urls_python(
+                    root_dir, docs, include_fences=include_fences, offline=offline
+                )
+                failures.extend(url_failures)
+                checked += url_checked
+
     if json_output:
         payload: dict[str, object] = {
             "checked": checked,
             "failures": [_finding_payload(finding) for finding in failures],
             "warnings": [_finding_payload(warning) for warning in warnings],
         }
+        if url_engine is not None:
+            payload["url_engine"] = url_engine
         print(json.dumps(payload, indent=2))
         return bool(failures)
 
+    if url_engine is not None:
+        print(f"URL check engine: {url_engine}")
     for failure in failures:
         print(f"REF FAIL: {failure.file}:{failure.line} — {failure.reason}: {failure.target}")
     for warning in warnings:
@@ -1179,12 +1444,12 @@ def main():
 
     refs_parser = subparsers.add_parser(
         "refs",
-        help="Resolve paths referenced from skill docs; --include-fences also scans fences",
+        help="Resolve paths referenced from skill docs; --check-urls verifies external HTTP(S) URLs",
     )
     _ = refs_parser.add_argument(
         "skill",
         nargs="?",
-        help="Target skill package (omit for all)",
+        help="Target skill or subskill name/path (omit for all)",
     )
     _ = refs_parser.add_argument(
         "--json",
@@ -1195,6 +1460,16 @@ def main():
         "--include-fences",
         action="store_true",
         help="Also scan fenced code blocks (default: skip them)",
+    )
+    _ = refs_parser.add_argument(
+        "--check-urls",
+        action="store_true",
+        help="Verify external HTTP(S) URLs via lychee (or Python fallback with install warning)",
+    )
+    _ = refs_parser.add_argument(
+        "--offline",
+        action="store_true",
+        help="Skip network requests during --check-urls",
     )
 
     args = parser.parse_args()
@@ -1244,6 +1519,8 @@ def main():
             skill=args.skill,
             json_output=args.json,
             include_fences=args.include_fences,
+            check_urls=args.check_urls,
+            offline=args.offline,
         )
         sys.exit(1 if refs_failed else 0)
 

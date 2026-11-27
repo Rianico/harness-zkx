@@ -14,6 +14,7 @@ Detected CLI toolchain for `harness-zkx`. Missing tools fall back to the listed 
 | `oxfmt` | missing | prettier |
 | `basedpyright` | found | pyright / mypy |
 | `rtk` | found | direct command execution |
+| `lychee` | found | `validate-deps.py refs --check-urls` Python fallback |
 
 Prefer the found tool. When a tool is missing, use its fallback and note the gap
 rather than silently changing the workflow.

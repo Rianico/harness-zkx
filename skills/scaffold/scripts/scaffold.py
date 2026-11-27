@@ -69,6 +69,7 @@ SHA_TABLE = {
     "rust-cache": "6323deb102c322ba6fcbdcafc7e3dddab59af2b6",  # Swatinem/rust-cache v2.9.2
     "setup-uv": "bec219d24cd3e171d82865faccec33120bb574f4",  # astral-sh/setup-uv v10.1.0
     "install-action": "3f74d7c16a4242f1c95561e98edc25d36adb4375",  # taiki-e/install-action v2.87.12
+    "lychee-action": "e7477775783ea5526144ba13e8db5eec57747ce8",  # lycheeverse/lychee-action v2.9.0
 }
 
 NODE_VERSION_NUM = "26"

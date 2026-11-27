@@ -188,6 +188,12 @@ Run both after generation. Each must exit 0 before user review:
 uv run $SKILL_DIR/scripts/compile.py validate-skill {skill_dir}
 uv run $SKILL_DIR/scripts/compile.py validate-triggers {skill_dir}/triggers.yaml
 ```
+
+### External URL Gate (when staged under `skills/`)
+
+```bash
+uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py refs {name} --check-urls
+```
 """
 
 
@@ -223,6 +229,12 @@ Run both after merging. Each must exit 0 before user review:
 ```bash
 uv run $SKILL_DIR/scripts/compile.py validate-skill {skill_dir}
 uv run $SKILL_DIR/scripts/compile.py validate-triggers {skill_dir}/triggers.yaml
+```
+
+### External URL Gate (for skills under `skills/`)
+
+```bash
+uv run skills/ai-engineering-expert/subskills/skill-authoring/scripts/validate-deps.py refs {skill_dir.name} --check-urls
 ```
 """
 
