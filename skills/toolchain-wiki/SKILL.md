@@ -1,7 +1,7 @@
 ---
 name: toolchain-wiki
 description: >-
-  Toolchain wiki router for Oxlint/Oxfmt, Basedpyright, Worktrunk (wt), Jinja, LSP 3.17, and Tauri 2.0. Use when fixing lint errors, configuring typecheckers, managing git worktrees with wt, troubleshooting LSP servers, or developing Tauri desktop and mobile apps.
+  Toolchain wiki router for Oxlint/Oxfmt, Basedpyright, Worktrunk (wt), Jinja, LSP 3.17, Tauri 2.0, and SketchyBar. Use when fixing lint/type errors, managing git worktrees, debugging LSP servers, building Tauri apps, or configuring SketchyBar.
 metadata:
   manage:
     - oxlint
@@ -11,6 +11,7 @@ metadata:
     - jinja
     - lsp
     - tauri
+    - sketchybar
   depends-on: [docs-scraper, scaffold]
 ---
 
@@ -33,6 +34,7 @@ Read the subskill that matches the task. Use `Read` (not `Skill` tool — subski
 | `jinja` | `$SKILL_DIR/subskills/jinja/SKILL.md` | Jinja 3.1 templates, `Environment`/loader config, filters/tests, autoescaping, extensions, sandbox — [jinja](subskills/jinja/SKILL.md) |
 | `lsp` | `$SKILL_DIR/subskills/lsp/SKILL.md` | LSP 3.17 server/client lifecycle, diagnostics pull/push, progress streaming, daemon process handling — [lsp](subskills/lsp/SKILL.md) |
 | `tauri` | `$SKILL_DIR/subskills/tauri/SKILL.md` | Tauri 2.0 architecture, IPC commands, state, Rust traits (Manager, Emitter, Listener), capabilities ACL, and plugins — [tauri](subskills/tauri/SKILL.md) |
+| `sketchybar` | `$SKILL_DIR/subskills/sketchybar/SKILL.md` | SketchyBar macOS status bar layout, items, components (space/bracket/alias/slider/graph), events, popups, animations, and querying — [sketchybar](subskills/sketchybar/SKILL.md) |
 
 Omitted domain loads only the spine above.
 
@@ -43,6 +45,7 @@ Omitted domain loads only the spine above.
 - **Templating:** `jinja2` ≥3.1 (Python) — one `Environment` per app, `select_autoescape()` for markup, loader-backed templates, sandbox for untrusted input. Gate: `Environment().parse(src)` + a render smoke test. See `$SKILL_DIR/subskills/jinja/SKILL.md`.
 - **LSP lifecycle:** sequence `initialize` → `initialized` → `shutdown` → `exit` → transport stop. Shutdown precedes exit, and both precede transport teardown. Keep daemons isolated per workspace, and stream progress with `$/progress` begin/report/end. See `$SKILL_DIR/subskills/lsp/SKILL.md`.
 - **Tauri desktop & mobile:** Tauri 2.0 (`tauri::Builder`, `tauri.conf.json`) with Rust backend (`Manager`, `Emitter`, `Listener`), webview frontend, and capabilities ACL. Gate: `pnpm tauri info && cargo check --manifest-path src-tauri/Cargo.toml && pnpm run typecheck`. See `$SKILL_DIR/subskills/tauri/SKILL.md`.
+- **SketchyBar status bar:** macOS command-driven bar configured by executable `~/.config/sketchybar/sketchybarrc`, event-subscribed plugins (`--subscribe`), five components (`space`, `bracket`, `alias`, `slider`, `graph`), and per-item `popup.<name>` menus. Gate: `bash -n ~/.config/sketchybar/sketchybarrc && sketchybar --query bar >/dev/null`. See `$SKILL_DIR/subskills/sketchybar/SKILL.md`.
 - **Performance goal:** native Rust/Go tooling — `oxlint` 50–100× ESLint, `oxfmt` 30× Prettier, `tsc v7` parallel, `basedpyright` tsgo, `wt hash_port` deterministic.
 
 ## Deterministic Gates
@@ -55,6 +58,7 @@ Tool owns bytes. Model proofreads intent.
 - `wt switch --create <branch> && wt merge` — worktree gate (see `worktrunk`)
 - LSP gate — assert shutdown before exit, no orphaned server process after teardown, and a closed `$/progress` stream (see `lsp`)
 - `pnpm tauri info && cargo check --manifest-path src-tauri/Cargo.toml && pnpm run typecheck` — Tauri gate (see `tauri`)
+- `bash -n ~/.config/sketchybar/sketchybarrc && (for f in ~/.config/sketchybar/plugins/*.sh; do [ -e "$f" ] || break; bash -n "$f" && test -x "$f" || exit 1; done) && sketchybar --query bar >/dev/null` — SketchyBar gate (see `sketchybar`)
 
 ## Trade-offs
 
@@ -70,3 +74,4 @@ Tool owns bytes. Model proofreads intent.
 - `jinja` is canonical via `toolchain-wiki/subskills/jinja/` — Jinja 3.1 language + API, raw snapshot in `references/jinja-raw/`.
 - `lsp` is canonical via `toolchain-wiki/subskills/lsp/` — LSP 3.17 protocol patterns, daemon lifecycle, diagnostics pull/push, and spec excerpts in `references/`.
 - `tauri` is canonical via `toolchain-wiki/subskills/tauri/` — Tauri 2.0 architecture, IPC commands, Rust traits, capabilities ACL, and plugins.
+- `sketchybar` is canonical via `toolchain-wiki/subskills/sketchybar/` — SketchyBar macOS status bar configuration, components, events, popups, animations, and querying.
