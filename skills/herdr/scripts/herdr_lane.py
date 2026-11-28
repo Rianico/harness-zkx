@@ -11,8 +11,8 @@ shell prompt the next `herdr-bootstrap --pane` needs.
 Every daemon call goes through the shared subprocess seam, and each agent start is delegated to
 `herdr_bootstrap.py` rather than re-implemented here, so the role invariant, the scoped agent
 name, and the `--cwd` worktree rule stay in one place. Ids are read back, never predicted: the
-tab from the creation response (or `tab list` when it is silent), its first pane from
-`pane list`, and the split pane from the split response.
+tab-create response carries both the tab and its root pane, and the split response carries the
+new pane, so no id is ever recovered from a re-list.
 """
 
 from __future__ import annotations
@@ -30,13 +30,12 @@ from herdr_cli import (
     HerdrError,
     UsageError,
     add_shared_argument,
+    create_tab,
     current_workspace_id,
     entrypoint,
     find_herdr,
-    payload_field,
     require_herdr_env,
-    run_herdr_checked,
-    text_field,
+    split_pane,
 )
 from herdr_pane import build_split_argv, lane_anchor_env_args, resolve_cwd
 
@@ -61,6 +60,8 @@ class Options:
     cwd_orch: str | None = None
     cwd_tm: str = ""
     cwd_impl: str = ""
+    tm_model: str | None = None
+    impl_model: str | None = None
     dry_run: bool = False
 
 
@@ -122,6 +123,18 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="DIR",
         help="Implementer worktree (required, same reason)",
     )
+    _ = up.add_argument(
+        "--tm-model",
+        default=None,
+        metavar="MODEL",
+        help="model for the Task Manager's agent (default: the agent kind's own)",
+    )
+    _ = up.add_argument(
+        "--impl-model",
+        default=None,
+        metavar="MODEL",
+        help="model for the Implementer's agent (default: the agent kind's own)",
+    )
     add_shared_argument(
         up,
         "dry_run",
@@ -178,7 +191,6 @@ def plan(options: Options, env: Mapping[str, str]) -> list[tuple[str, list[str]]
         extra_env=anchor,
         focus=False,
     )
-    bootstrap = [sys.executable, str(BOOTSTRAP_SCRIPT)]
     return [
         (
             "orch-tab",
@@ -188,28 +200,16 @@ def plan(options: Options, env: Mapping[str, str]) -> list[tuple[str, list[str]]
                 "create",
                 "--workspace",
                 workspace,
-                "--label",
-                prefix,
                 "--cwd",
                 orch_cwd,
+                "--label",
+                prefix,
                 "--no-focus",
             ],
         ),
         (
             "orch-agent",
-            [
-                *bootstrap,
-                "--pane",
-                "<orch-pane>",
-                "--kind",
-                options.orch_kind,
-                "--role",
-                "orch",
-                "--task-group",
-                prefix,
-                "--cwd",
-                orch_cwd,
-            ],
+            _bootstrap_argv(prefix, "<orch-pane>", options.orch_kind, "orch", orch_cwd, None),
         ),
         (
             "crew-tab",
@@ -219,82 +219,53 @@ def plan(options: Options, env: Mapping[str, str]) -> list[tuple[str, list[str]]
                 "create",
                 "--workspace",
                 workspace,
-                "--label",
-                crew_label(prefix, revision),
                 "--cwd",
                 tm_cwd,
+                "--label",
+                crew_label(prefix, revision),
                 "--no-focus",
             ],
         ),
         ("impl-split", split),
         (
             "tm-agent",
-            [
-                *bootstrap,
-                "--pane",
-                "<tm-pane>",
-                "--kind",
-                options.tm_kind,
-                "--role",
-                "tm",
-                "--task-group",
-                prefix,
-                "--cwd",
-                tm_cwd,
-            ],
+            _bootstrap_argv(prefix, "<tm-pane>", options.tm_kind, "tm", tm_cwd, options.tm_model),
         ),
         (
             "impl-agent",
-            [
-                *bootstrap,
-                "--pane",
-                "<impl-pane>",
-                "--kind",
-                options.impl_kind,
-                "--role",
-                "impl",
-                "--task-group",
-                prefix,
-                "--cwd",
-                impl_cwd,
-            ],
+            _bootstrap_argv(
+                prefix, "<impl-pane>", options.impl_kind, "impl", impl_cwd, options.impl_model
+            ),
         ),
     ]
 
 
-def _created_tab_id(lane: Lane, raw: str, label: str) -> str:
-    """The id of the tab just created: the response first, `tab list` as the fallback."""
-    for path in (("result", "tab", "tab_id"), ("result", "tab")):
-        try:
-            return text_field(raw, *path)
-        except HerdrError:
-            continue
-    listed = payload_field(
-        run_herdr_checked([lane.herdr, "tab", "list"], lane.env), "result", "tabs"
-    )
-    tabs = listed if isinstance(listed, list) else []
-    matches = [
-        entry.get("tab_id")
-        for entry in tabs
-        if isinstance(entry, dict) and entry.get("label") == label
+def _bootstrap_argv(
+    prefix: str,
+    pane_id: str,
+    kind: str,
+    role: str,
+    cwd: str,
+    model: str | None,
+) -> list[str]:
+    """The `herdr_bootstrap.py` argv for one role; `--model` rides only for a role that set one."""
+    argv = [
+        sys.executable,
+        str(BOOTSTRAP_SCRIPT),
+        "--pane",
+        pane_id,
+        "--kind",
+        kind,
+        "--role",
+        role,
+        "--task-group",
+        prefix,
+        "--cwd",
+        cwd,
     ]
-    if len(matches) == 1 and isinstance(matches[0], str):
-        return matches[0]
-    raise HerdrError(f"cannot identify the tab created for label {label!r}: {raw.strip()[:200]}")
-
-
-def _first_pane(lane: Lane, tab_id: str) -> str:
-    """The tab's first pane, read from `pane list` — the creation response names no pane."""
-    listed = payload_field(
-        run_herdr_checked([lane.herdr, "pane", "list"], lane.env), "result", "panes"
-    )
-    panes = listed if isinstance(listed, list) else []
-    for entry in panes:
-        if isinstance(entry, dict) and entry.get("tab_id") == tab_id:
-            pane_id = entry.get("pane_id")
-            if isinstance(pane_id, str) and pane_id:
-                return pane_id
-    raise HerdrError(f"tab {tab_id} reported no pane in `pane list`")
+    if model is not None:
+        argv += ["--model", model]
+    return argv
 
 
 def run_sibling(argv: Sequence[str], env: Mapping[str, str]) -> None:
@@ -313,60 +284,31 @@ def run_sibling(argv: Sequence[str], env: Mapping[str, str]) -> None:
 
 
 def _tab(lane: Lane, label: str, cwd: str, workspace: str) -> tuple[str, str]:
-    raw = run_herdr_checked(
-        [
-            lane.herdr,
-            "tab",
-            "create",
-            "--workspace",
-            workspace,
-            "--label",
-            label,
-            "--cwd",
-            cwd,
-            "--no-focus",
-        ],
-        lane.env,
+    created = create_tab(
+        lane.herdr, lane.env, workspace_id=workspace, label=label, cwd=cwd, focus=False
     )
-    tab_id = _created_tab_id(lane, raw, label)
-    pane_id = _first_pane(lane, tab_id)
+    tab_id = created.tab.tab_id
+    pane_id = created.root_pane.pane_id
     lane.created.append(f"tab {tab_id} ({label}) pane {pane_id}")
     return tab_id, pane_id
 
 
 def _split(lane: Lane, pane_id: str, cwd: str) -> str:
-    argv = build_split_argv(
+    pane = split_pane(
         lane.herdr,
-        pane_id,
-        "right",
+        lane.env,
+        pane_id=pane_id,
+        direction="right",
         cwd=cwd,
-        ratio=None,
-        extra_env=lane_anchor_env_args(lane.env, ()),
+        env_vars=lane_anchor_env_args(lane.env, ()),
         focus=False,
     )
-    new_pane = text_field(run_herdr_checked(argv, lane.env), "result", "pane", "pane_id")
-    lane.created.append(f"pane {new_pane} (split of {pane_id})")
-    return new_pane
+    lane.created.append(f"pane {pane.pane_id} (split of {pane_id})")
+    return pane.pane_id
 
 
-def _agent(lane: Lane, pane_id: str, kind: str, role: str, cwd: str) -> None:
-    run_sibling(
-        [
-            sys.executable,
-            str(BOOTSTRAP_SCRIPT),
-            "--pane",
-            pane_id,
-            "--kind",
-            kind,
-            "--role",
-            role,
-            "--task-group",
-            lane.options.prefix,
-            "--cwd",
-            cwd,
-        ],
-        lane.env,
-    )
+def _agent(lane: Lane, pane_id: str, kind: str, role: str, cwd: str, model: str | None) -> None:
+    run_sibling(_bootstrap_argv(lane.options.prefix, pane_id, kind, role, cwd, model), lane.env)
     lane.created.append(f"agent {role} ({kind}) in pane {pane_id}")
 
 
@@ -385,11 +327,11 @@ def _up(options: Options, env: Mapping[str, str]) -> int:
     workspace = resolve_workspace(options.workspace, lane.herdr, env)
     try:
         _, orch_pane = _tab(lane, options.prefix, orch_cwd, workspace)
-        _agent(lane, orch_pane, options.orch_kind, "orch", orch_cwd)
+        _agent(lane, orch_pane, options.orch_kind, "orch", orch_cwd, None)
         _, tm_pane = _tab(lane, crew_label(options.prefix, options.revision), tm_cwd, workspace)
         impl_pane = _split(lane, tm_pane, impl_cwd)
-        _agent(lane, tm_pane, options.tm_kind, "tm", tm_cwd)
-        _agent(lane, impl_pane, options.impl_kind, "impl", impl_cwd)
+        _agent(lane, tm_pane, options.tm_kind, "tm", tm_cwd, options.tm_model)
+        _agent(lane, impl_pane, options.impl_kind, "impl", impl_cwd, options.impl_model)
     except (HerdrError, UsageError) as exc:
         done = "; ".join(lane.created) if lane.created else "nothing"
         raise HerdrError(

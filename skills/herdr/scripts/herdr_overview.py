@@ -42,14 +42,17 @@ from typing import Any
 from herdr_cli import (
     EXIT_OK,
     METHOD_CONSTRAINT_EPILOG,
+    AgentInfo,
     UsageError,
+    WorkspaceInfo,
     add_shared_argument,
     entries,
     entry_optional_text,
     entry_text,
     entrypoint,
     find_herdr,
-    merged_inventory,
+    list_agents,
+    list_workspaces,
     require_herdr_env,
     run_herdr_checked,
 )
@@ -202,23 +205,14 @@ def build_parser() -> argparse.ArgumentParser:
 # ── admission: herdr JSON -> typed rows ──────────────────────────────────────────────
 
 
-def _optional_int(entry: Mapping[str, object], key: str) -> int | None:
-    value = entry.get(key)
-    if isinstance(value, bool) or not isinstance(value, int):
-        return None
-    return value
-
-
-def parse_workspaces(raw: str) -> dict[str, tuple[str | None, int | None]]:
-    """Read workspace label and number, keyed by workspace id."""
-    workspaces: dict[str, tuple[str | None, int | None]] = {}
-    for entry in entries(raw, "result", "workspaces"):
-        workspace_id = entry_text(entry, "workspace_id", where="workspace list entry")
-        workspaces[workspace_id] = (
-            entry_optional_text(entry, "label"),
-            _optional_int(entry, "number"),
-        )
-    return workspaces
+def workspace_index(
+    workspaces: Sequence[WorkspaceInfo],
+) -> dict[str, tuple[str | None, int | None]]:
+    """Key the workspace label and number by workspace id; `pane list` carries neither."""
+    indexed: dict[str, tuple[str | None, int | None]] = {}
+    for workspace in workspaces:
+        indexed[workspace.workspace_id] = (workspace.label, workspace.number)
+    return indexed
 
 
 def parse_tabs(raw: str) -> dict[str, str | None]:
@@ -230,28 +224,14 @@ def parse_tabs(raw: str) -> dict[str, str | None]:
     return tabs
 
 
-def parse_agent_names(raw: str) -> dict[str, str]:
+def agent_names(agents: Sequence[AgentInfo]) -> dict[str, str]:
     """Read the agent name herdr tracks per pane; `pane list` never carries it."""
-    names: dict[str, str] = {}
-    for entry in entries(raw, "result", "agents"):
-        pane_id = entry_optional_text(entry, "pane_id")
-        name = entry_optional_text(entry, "name")
-        if pane_id and name:
-            names[pane_id] = name
-    return names
+    return {agent.pane_id: agent.name for agent in agents if agent.name}
 
 
-def parse_agent_tokens(raw: str) -> dict[str, Mapping[str, str]]:
-    """Read agent tokens herdr tracks per pane, if present."""
-    tokens_by_pane: dict[str, Mapping[str, str]] = {}
-    for entry in entries(raw, "result", "agents"):
-        pane_id = entry_optional_text(entry, "pane_id")
-        raw_tokens = entry.get("tokens")
-        if pane_id and isinstance(raw_tokens, dict):
-            tokens_by_pane[pane_id] = {
-                str(k): str(v) for k, v in raw_tokens.items() if isinstance(v, str)
-            }
-    return tokens_by_pane
+def agent_tokens(agents: Sequence[AgentInfo]) -> dict[str, Mapping[str, str]]:
+    """Read agent tokens herdr tracks per pane, when present."""
+    return {agent.pane_id: agent.tokens for agent in agents if agent.tokens}
 
 
 def parse_panes(
@@ -673,18 +653,15 @@ def run(options: Options, env: Mapping[str, str]) -> int:
     # re-derives the same anchor on its own so it stays usable in isolation.
     _ = _scope_anchor(scope, env)
     herdr = find_herdr(env)
-    inventory = merged_inventory(herdr, env)
-    panes_raw = inventory.raw_panes
-    agents_raw = inventory.raw_agents
-    workspaces_raw = run_herdr_checked([herdr, "workspace", "list"], env)
+    # `pane list` and `tab list` have no typed wrapper yet, so those two stay raw; the agent and
+    # workspace wrappers own the admission that names a bad field. Still the same four queries.
+    panes_raw = run_herdr_checked([herdr, "pane", "list"], env)
+    agents = list_agents(herdr, env)
+    workspaces = workspace_index(list_workspaces(herdr, env))
     tabs_raw = run_herdr_checked([herdr, "tab", "list"], env)
 
     tabs = parse_tabs(tabs_raw)
-    panes = parse_panes(
-        panes_raw,
-        parse_agent_names(agents_raw),
-        parse_agent_tokens(agents_raw),
-    )
+    panes = parse_panes(panes_raw, agent_names(agents), agent_tokens(agents))
     tab_filter: frozenset[str] | None = None
     if filter_value is not None:
         tab_filter = resolve_tab_filter(
@@ -696,7 +673,7 @@ def run(options: Options, env: Mapping[str, str]) -> int:
 
     overview = build_overview(
         panes,
-        parse_workspaces(workspaces_raw),
+        workspaces,
         tabs,
         scope,
         env,

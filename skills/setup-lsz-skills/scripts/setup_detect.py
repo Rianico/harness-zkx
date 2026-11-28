@@ -45,6 +45,10 @@ TOOL_SPECS: dict[str, dict[str, str]] = {
         "purpose": "Token-optimized CLI proxy for shell commands",
         "fallback": "direct command execution",
     },
+    "lychee": {
+        "purpose": "Rust link checker for Markdown URLs and anchors",
+        "fallback": "validate-deps.py refs --check-urls Python fallback",
+    },
 }
 
 # Deprecated file -> canonical replacement. CONTEXT.md is the legacy name.

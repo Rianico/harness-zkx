@@ -403,6 +403,7 @@ ACTION_TO_TABLE_KEY = {
     "Swatinem/rust-cache": "rust-cache",
     "astral-sh/setup-uv": "setup-uv",
     "taiki-e/install-action": "install-action",
+    "lycheeverse/lychee-action": "lychee-action",
 }
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

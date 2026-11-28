@@ -13,6 +13,7 @@ Because that copy's durable branch (empty PR_NUMBER) only resolves on `main`, `t
 must keep its `push` trigger main-scoped.
 """
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,7 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 WORKFLOWS = ROOT / ".github" / "workflows"
 CHANGELOG_CHECK = WORKFLOWS / "changelog-check.yml"
+LINK_CHECK = WORKFLOWS / "link-check.yml"
 TESTS_YML = WORKFLOWS / "tests.yml"
 TWIN_CHANGELOG_CHECK = ROOT / "skills/scaffold/templates/git/.github/workflows/changelog-check.yml"
 
@@ -207,3 +209,40 @@ def test_the_comment_body_and_the_dedupe_probe_share_one_marker() -> None:
     assert "'Changelog ledger floor failed'" not in text, "the stale probe phrase survived"
     assert text.index("MARKER,") < text.index("c.body.includes(MARKER)")
     assert "const MARKER" in TWIN_CHANGELOG_CHECK.read_text(encoding="utf-8")
+
+
+# --- scheduled external link check ------------------------------------------------------------
+
+_PINNED_SHA_RE = re.compile(r"^[^@]+@[0-9a-f]{40}$")
+
+
+def test_link_check_triggers_on_schedule_and_dispatch_only() -> None:
+    """External link checking must not gate PRs where third-party flakiness blocks merges."""
+    triggers = _triggers(_doc(LINK_CHECK))
+    assert "schedule" in triggers
+    assert "workflow_dispatch" in triggers
+    assert "pull_request" not in triggers
+
+
+def test_link_check_permissions_are_read_only() -> None:
+    """Both workflow and job scopes must stay minimal (`contents: read`)."""
+    doc = _doc(LINK_CHECK)
+    assert doc["permissions"] == {"contents": "read"}
+    assert doc["jobs"]["links"]["permissions"] == {"contents": "read"}
+
+
+def test_link_check_pins_actions_and_hardens_checkout() -> None:
+    """Third-party actions must pin 40-char SHAs, disable credential persistence, and use lychee.toml."""
+    job = _doc(LINK_CHECK)["jobs"]["links"]
+    assert job["timeout-minutes"] == 10
+    steps: list[dict[Any, Any]] = job["steps"]
+    by_prefix = {str(step["uses"]).split("@", 1)[0]: step for step in steps if "uses" in step}
+    for action in ("actions/checkout", "lycheeverse/lychee-action"):
+        assert action in by_prefix, f"{action} missing from link-check.yml steps"
+        assert _PINNED_SHA_RE.match(str(by_prefix[action]["uses"])), (
+            f"{action} must be pinned to a 40-char hex SHA"
+        )
+    assert by_prefix["actions/checkout"]["with"]["persist-credentials"] is False
+    args = str(by_prefix["lycheeverse/lychee-action"]["with"]["args"])
+    assert "--config lychee.toml" in args
+    assert "--exclude '^file://'" in args

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Mapping, Sequence
+import shlex
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path
 
+import herdr_cli
 import herdr_lane
 import pytest
 from herdr_cli import EXIT_HERDR, EXIT_OK, EXIT_USAGE, HerdrError
@@ -15,9 +17,9 @@ Sibling = Callable[[Sequence[str], Mapping[str, str]], None]
 
 
 def lane_env(tmp_path: Path) -> dict[str, str]:
-    (tmp_path / "orch").mkdir()
-    (tmp_path / "tm").mkdir()
-    (tmp_path / "impl").mkdir()
+    (tmp_path / "orch").mkdir(exist_ok=True)
+    (tmp_path / "tm").mkdir(exist_ok=True)
+    (tmp_path / "impl").mkdir(exist_ok=True)
     return {
         "HERDR_ENV": "1",
         "HERDR_BIN_PATH": "/fake/herdr",
@@ -40,6 +42,57 @@ def up_args(tmp_path: Path, *extra: str) -> list[str]:
     ]
 
 
+def pane_json(pane_id: str, tab_id: str) -> dict[str, object]:
+    return {
+        "pane_id": pane_id,
+        "terminal_id": f"term-{pane_id}",
+        "workspace_id": "w9",
+        "tab_id": tab_id,
+        "focused": False,
+        "agent_status": "idle",
+        "revision": 1,
+    }
+
+
+def tab_json(tab_id: str, label: str) -> dict[str, object]:
+    return {
+        "tab_id": tab_id,
+        "workspace_id": "w9",
+        "number": 1,
+        "label": label,
+        "focused": False,
+        "pane_count": 1,
+        "agent_status": "idle",
+    }
+
+
+def created_tab_response(tab_id: str, pane_id: str, label: str) -> str:
+    return json.dumps(
+        {"result": {"tab": tab_json(tab_id, label), "root_pane": pane_json(pane_id, tab_id)}}
+    )
+
+
+def split_response(pane_id: str, tab_id: str) -> str:
+    return json.dumps({"result": {"pane": pane_json(pane_id, tab_id)}})
+
+
+class DaemonRecorder:
+    """Answers like herdr 0.9.5's `tab create` and `pane split`, recording every argv."""
+
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+        self._tabs: Iterator[tuple[str, str]] = iter([("w9:t1", "w9:p1"), ("w9:t2", "w9:p2")])
+
+    def __call__(self, argv: Sequence[str], _env: Mapping[str, str]) -> str:
+        self.calls.append(list(argv))
+        if list(argv[1:3]) == ["tab", "create"]:
+            tab_id, pane_id = next(self._tabs)
+            return created_tab_response(tab_id, pane_id, argv[argv.index("--label") + 1])
+        if list(argv[1:3]) == ["pane", "split"]:
+            return split_response("w9:p3", "w9:t2")
+        raise AssertionError(f"unexpected call: {argv}")
+
+
 def silent_daemon(_argv: Sequence[str], _env: Mapping[str, str]) -> str:
     return ""
 
@@ -55,16 +108,28 @@ def recorder(sink: list[list[str]]) -> Sibling:
     return record
 
 
+def explode(_argv: Sequence[str], _env: Mapping[str, str]) -> str:
+    raise AssertionError("dry run must not execute anything")
+
+
+def explode_sibling(_argv: Sequence[str], _env: Mapping[str, str]) -> None:
+    raise AssertionError("dry run must not execute anything")
+
+
+def planned_daemon_argvs(lines: Sequence[str]) -> list[list[str]]:
+    """The plan lines whose argv drives `herdr` itself, split back into tokens."""
+    found: list[list[str]] = []
+    for line in lines:
+        argv = shlex.split(line)
+        if argv[1:3] in (["tab", "create"], ["pane", "split"]):
+            found.append(argv)
+    return found
+
+
 def test_up_dry_run_prints_the_plan_and_executes_nothing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    def explode(_argv: Sequence[str], _env: Mapping[str, str]) -> str:
-        raise AssertionError("dry run must not execute anything")
-
-    def explode_sibling(_argv: Sequence[str], _env: Mapping[str, str]) -> None:
-        raise AssertionError("dry run must not execute anything")
-
-    monkeypatch.setattr(herdr_lane, "run_herdr_checked", explode)
+    monkeypatch.setattr(herdr_cli, "run_herdr_checked", explode)
     monkeypatch.setattr(herdr_lane, "run_sibling", explode_sibling)
 
     code = herdr_lane.main(up_args(tmp_path, "--dry-run"), lane_env(tmp_path))
@@ -72,116 +137,74 @@ def test_up_dry_run_prints_the_plan_and_executes_nothing(
 
     assert code == EXIT_OK
     assert len(lines) == herdr_lane.PLANNED_STEPS
-    assert "tab create --workspace w9 --label demo " in lines[0]
-    assert "tab create --workspace w9 --label demo-r1 " in lines[2]
+    orch_tab = shlex.split(lines[0])
+    assert orch_tab[1:3] == ["tab", "create"]
+    assert orch_tab[orch_tab.index("--workspace") + 1] == "w9"
+    assert orch_tab[orch_tab.index("--cwd") + 1] == str(tmp_path / "orch")
+    assert orch_tab[orch_tab.index("--label") + 1] == "demo"
+    crew_tab = shlex.split(lines[2])
+    assert crew_tab[crew_tab.index("--label") + 1] == "demo-r1"
+    assert crew_tab[crew_tab.index("--cwd") + 1] == str(tmp_path / "tm")
     assert "--direction right" in lines[3]
     assert f"--env HERDR_LANE_DIR={tmp_path / 'store'}" in lines[3]
     assert "--role orch" in lines[1] and "--role tm" in lines[4] and "--role impl" in lines[5]
 
 
+def test_dry_run_plan_matches_the_executed_argv_token_for_token(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    daemon = DaemonRecorder()
+    monkeypatch.setattr(herdr_cli, "run_herdr_checked", daemon)
+    monkeypatch.setattr(herdr_lane, "run_sibling", noop_sibling)
+
+    assert herdr_lane.main(up_args(tmp_path, "--dry-run"), lane_env(tmp_path)) == EXIT_OK
+    planned = planned_daemon_argvs(capsys.readouterr().out.strip().splitlines())
+    assert herdr_lane.main(up_args(tmp_path), lane_env(tmp_path)) == EXIT_OK
+
+    expected = [[token.replace("<tm-pane>", "w9:p2") for token in argv] for argv in planned]
+    assert daemon.calls == expected
+
+
 def test_up_creates_two_tabs_one_split_and_three_agents(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    daemon: list[list[str]] = []
+    daemon = DaemonRecorder()
     siblings: list[list[str]] = []
-    created = {"tabs": 0}
-
-    def dispatch(argv: Sequence[str], _env: Mapping[str, str]) -> str:
-        daemon.append(list(argv))
-        if argv[1] == "tab" and argv[2] == "create":
-            created["tabs"] += 1
-            return json.dumps({"result": {"tab": {"tab_id": f"w9:t{created['tabs']}"}}})
-        if argv[1] == "pane" and argv[2] == "list":
-            return json.dumps(
-                {
-                    "result": {
-                        "panes": [
-                            {"tab_id": "w9:t1", "pane_id": "w9:p1"},
-                            {"tab_id": "w9:t2", "pane_id": "w9:p2"},
-                        ]
-                    }
-                }
-            )
-        if argv[1] == "pane" and argv[2] == "split":
-            return json.dumps({"result": {"pane": {"pane_id": "w9:p3"}}})
-        raise AssertionError(f"unexpected call: {argv}")
-
-    monkeypatch.setattr(herdr_lane, "run_herdr_checked", dispatch)
+    monkeypatch.setattr(herdr_cli, "run_herdr_checked", daemon)
     monkeypatch.setattr(herdr_lane, "run_sibling", recorder(siblings))
 
     code = herdr_lane.main(up_args(tmp_path, "--revision", "2"), lane_env(tmp_path))
     out = capsys.readouterr().out
 
     assert code == EXIT_OK
-    labels = [argv[argv.index("--label") + 1] for argv in daemon if argv[1] == "tab"]
+    assert [call[1:3] for call in daemon.calls] == [
+        ["tab", "create"],
+        ["tab", "create"],
+        ["pane", "split"],
+    ]
+    labels = [argv[argv.index("--label") + 1] for argv in daemon.calls if argv[1] == "tab"]
     assert labels == ["demo", "demo-r2"]
-    workspaces = [argv[argv.index("--workspace") + 1] for argv in daemon if argv[1] == "tab"]
+    workspaces = [argv[argv.index("--workspace") + 1] for argv in daemon.calls if argv[1] == "tab"]
     assert workspaces == ["w9", "w9"]
     assert [argv[argv.index("--role") + 1] for argv in siblings] == ["orch", "tm", "impl"]
     assert [argv[argv.index("--pane") + 1] for argv in siblings] == ["w9:p1", "w9:p2", "w9:p3"]
     assert all(argv[argv.index("--task-group") + 1] == "demo" for argv in siblings)
-    split = [argv for argv in daemon if argv[2] == "split"][0]
+    split = [argv for argv in daemon.calls if argv[2] == "split"][0]
     assert split[split.index("--pane") + 1] == "w9:p2"
     assert "lane demo r2" in out
 
 
-def test_up_reads_the_tab_id_from_tab_list_when_the_response_is_silent(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_up_fails_loudly_when_tab_create_names_no_root_pane(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     calls: list[list[str]] = []
 
     def dispatch(argv: Sequence[str], _env: Mapping[str, str]) -> str:
         calls.append(list(argv))
-        if argv[1] == "tab" and argv[2] == "create":
-            return json.dumps({"result": {"tab": {"label": argv[argv.index("--label") + 1]}}})
-        if argv[1] == "tab" and argv[2] == "list":
-            return json.dumps(
-                {
-                    "result": {
-                        "tabs": [
-                            {"tab_id": "w9:t7", "label": "demo"},
-                            {"tab_id": "w9:t8", "label": "demo-r1"},
-                        ]
-                    }
-                }
-            )
-        if argv[1] == "pane" and argv[2] == "list":
-            return json.dumps(
-                {
-                    "result": {
-                        "panes": [
-                            {"tab_id": "w9:t7", "pane_id": "w9:p7"},
-                            {"tab_id": "w9:t8", "pane_id": "w9:p8"},
-                        ]
-                    }
-                }
-            )
-        if argv[1] == "pane" and argv[2] == "split":
-            return json.dumps({"result": {"pane": {"pane_id": "w9:p9"}}})
-        raise AssertionError(f"unexpected call: {argv}")
+        label = argv[argv.index("--label") + 1]
+        return json.dumps({"result": {"tab": tab_json("w9:t7", label)}})
 
-    siblings: list[list[str]] = []
-    monkeypatch.setattr(herdr_lane, "run_herdr_checked", dispatch)
-    monkeypatch.setattr(herdr_lane, "run_sibling", recorder(siblings))
-
-    code = herdr_lane.main(up_args(tmp_path), lane_env(tmp_path))
-
-    assert code == EXIT_OK
-    assert ("tab", "list") in [(argv[1], argv[2]) for argv in calls]
-    assert [argv[argv.index("--pane") + 1] for argv in siblings][0] == "w9:p7"
-
-
-def test_up_stops_at_the_first_failure_and_names_what_exists(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    def dispatch(argv: Sequence[str], _env: Mapping[str, str]) -> str:
-        if argv[1] == "tab":
-            return json.dumps({"result": {"tab": {"tab_id": "w9:t1"}}})
-        if argv[1] == "pane" and argv[2] == "list":
-            return json.dumps({"result": {"panes": [{"tab_id": "w9:t1", "pane_id": "w9:p1"}]}})
-        raise HerdrError("split refused")
-
-    monkeypatch.setattr(herdr_lane, "run_herdr_checked", dispatch)
+    monkeypatch.setattr(herdr_cli, "run_herdr_checked", dispatch)
     monkeypatch.setattr(herdr_lane, "run_sibling", noop_sibling)
 
     code = herdr_lane.main(up_args(tmp_path), lane_env(tmp_path))
@@ -189,9 +212,76 @@ def test_up_stops_at_the_first_failure_and_names_what_exists(
 
     assert code == EXIT_HERDR
     assert "bring-up stopped" in err
+    assert "result.root_pane" in err
+    assert "Created so far — nothing" in err
+    assert [argv[1:3] for argv in calls] == [["tab", "create"]]
+
+
+def test_up_stops_at_the_first_failure_and_names_what_exists(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    calls: list[list[str]] = []
+
+    def dispatch(argv: Sequence[str], _env: Mapping[str, str]) -> str:
+        calls.append(list(argv))
+        if argv[1:3] == ["tab", "create"]:
+            return created_tab_response("w9:t1", "w9:p1", argv[argv.index("--label") + 1])
+        raise HerdrError("split refused")
+
+    monkeypatch.setattr(herdr_cli, "run_herdr_checked", dispatch)
+    monkeypatch.setattr(herdr_lane, "run_sibling", noop_sibling)
+
+    code = herdr_lane.main(up_args(tmp_path), lane_env(tmp_path))
+    err = capsys.readouterr().err
+
+    assert code == EXIT_HERDR
+    assert [argv[1:3] for argv in calls] == [
+        ["tab", "create"],
+        ["tab", "create"],
+        ["pane", "split"],
+    ]
+    assert "bring-up stopped" in err
     assert "split refused" in err
     assert "w9:t1" in err
+    assert "w9:p1" in err
     assert "Close those panes before retrying" in err
+
+
+def test_up_forwards_each_model_to_its_own_agent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    daemon = DaemonRecorder()
+    siblings: list[list[str]] = []
+    monkeypatch.setattr(herdr_cli, "run_herdr_checked", daemon)
+    monkeypatch.setattr(herdr_lane, "run_sibling", recorder(siblings))
+    models = ("--tm-model", "tm-x", "--impl-model", "impl-y")
+
+    assert herdr_lane.main(up_args(tmp_path, "--dry-run", *models), lane_env(tmp_path)) == EXIT_OK
+    lines = capsys.readouterr().out.strip().splitlines()
+    orch_line, tm_line, impl_line = lines[1], lines[4], lines[5]
+    assert "--model tm-x" in tm_line
+    assert "--model impl-y" in impl_line
+    assert "impl-y" not in tm_line
+    assert "tm-x" not in impl_line
+    assert "--model" not in orch_line
+
+    assert herdr_lane.main(up_args(tmp_path, *models), lane_env(tmp_path)) == EXIT_OK
+    orch_argv, tm_argv, impl_argv = siblings
+    assert tm_argv[-2:] == ["--model", "tm-x"]
+    assert impl_argv[-2:] == ["--model", "impl-y"]
+    assert "--model" not in orch_argv
+
+
+def test_up_omits_the_model_flag_when_no_model_is_given(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(herdr_cli, "run_herdr_checked", explode)
+    monkeypatch.setattr(herdr_lane, "run_sibling", explode_sibling)
+
+    assert herdr_lane.main(up_args(tmp_path, "--dry-run"), lane_env(tmp_path)) == EXIT_OK
+    lines = capsys.readouterr().out.strip().splitlines()
+
+    assert all("--model" not in line for line in lines)
 
 
 def test_up_requires_the_crew_worktrees(tmp_path: Path) -> None:
@@ -206,7 +296,7 @@ def test_up_requires_the_crew_worktrees(tmp_path: Path) -> None:
 def test_up_rejects_a_revision_below_one(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr(herdr_lane, "run_herdr_checked", silent_daemon)
+    monkeypatch.setattr(herdr_cli, "run_herdr_checked", silent_daemon)
     monkeypatch.setattr(herdr_lane, "run_sibling", noop_sibling)
 
     code = herdr_lane.main(up_args(tmp_path, "--revision", "0"), lane_env(tmp_path))
@@ -219,7 +309,7 @@ def test_up_rejects_a_revision_below_one(
 def test_up_refuses_outside_a_herdr_pane(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr(herdr_lane, "run_herdr_checked", silent_daemon)
+    monkeypatch.setattr(herdr_cli, "run_herdr_checked", silent_daemon)
     monkeypatch.setattr(herdr_lane, "run_sibling", noop_sibling)
     env = {key: value for key, value in lane_env(tmp_path).items() if key != "HERDR_ENV"}
 
@@ -233,15 +323,13 @@ def test_up_refuses_outside_a_herdr_pane(
 def test_up_honors_explicit_workspace_override(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    def explode(_argv: Sequence[str], _env: Mapping[str, str]) -> str:
-        raise AssertionError("dry run must not execute anything")
-
-    monkeypatch.setattr(herdr_lane, "run_herdr_checked", explode)
+    monkeypatch.setattr(herdr_cli, "run_herdr_checked", explode)
     monkeypatch.setattr(herdr_lane, "run_sibling", noop_sibling)
 
     code = herdr_lane.main(up_args(tmp_path, "--dry-run", "--workspace", "w42"), lane_env(tmp_path))
     lines = capsys.readouterr().out.strip().splitlines()
 
     assert code == EXIT_OK
-    assert "tab create --workspace w42 --label demo " in lines[0]
-    assert "tab create --workspace w42 --label demo-r1 " in lines[2]
+    tabs = [shlex.split(line) for line in (lines[0], lines[2])]
+    assert [argv[argv.index("--workspace") + 1] for argv in tabs] == ["w42", "w42"]
+    assert [argv[argv.index("--label") + 1] for argv in tabs] == ["demo", "demo-r1"]
