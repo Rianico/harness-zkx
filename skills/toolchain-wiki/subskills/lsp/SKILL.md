@@ -6,6 +6,7 @@ metadata:
   managed-by: toolchain-wiki
 argument-hint: |-
   [implementation-area]
+disable-model-invocation: true
 ---
 
 # LSP
