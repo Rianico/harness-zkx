@@ -6,6 +6,7 @@ metadata:
   managed-by: toolchain-wiki
 argument-hint: |-
   '[topic]'
+disable-model-invocation: true
 ---
 
 # Jinja
