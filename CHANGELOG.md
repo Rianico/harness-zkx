@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Features
+* **toolchain-wiki:** add sketchybar subskill — macOS status bar setup, global `--bar` layout, item properties, five components (`space`, `bracket`, `alias`, `slider`, `graph`), popups, event-driven scripting, animations, and JSON querying (#377)
 * **skill-authoring:** add lychee markdown URL checking, weekly CI link-rot workflow, and Python fallback — add repo `lychee.toml` and `.github/workflows/link-check.yml`, register `lychee` in `setup_detect.py`, wire `--check-urls` into `docs-scraper` briefs, and extend `validate-deps.py refs` with `--check-urls`/`--offline` and subskill lookup, warning to install `lychee` when absent (#375)
 * **toolchain-wiki:** add aerospace subskill — macOS tiling window manager TOML config, tree layouts, virtual workspaces, 45 CLI commands, callbacks, Unix socket IPC, and integrations (#375)
 * **herdr:** synchronize toolchain with Herdr v0.9.5, harden safety and state concurrency, and add deep typed client wrappers — close state race in `herdr_lease.py` with advisory locks, sanitize `--cwd` against command injection in `herdr_bootstrap.py`, make bare shell pre-flight fail-closed, add typed wrappers in `herdr_cli.py`, consume synchronous `root_pane` in `herdr_lane.py`, decompose monolithic `reply_caller`, and update skill docs and test stubs (#374)
