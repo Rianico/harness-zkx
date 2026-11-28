@@ -124,7 +124,7 @@ Read the curated module matching your task, or use `$SKILL_DIR/references/<modul
 | Tree & Monitors | [tree-workspaces-monitors](references/tree-workspaces-monitors.md) | `references/aerospace-raw/001-guide.md` | Tree containers, layouts, normalizations, virtual workspaces, monitor force assignment |
 | CLI Commands | [cli-commands](references/cli-commands.md) | `references/aerospace-raw/002-commands.md` | All 45 subcommands, global options, context flags, interpolation vars |
 | Callbacks & IPC | [callbacks-scripting](references/callbacks-scripting.md) | `references/aerospace-raw/001-guide.md` | `on-window-detected`, focus callbacks, env forwarding, `subscribe`, socket protocol |
-| Goodies & Tweaks | [goodies-integrations](references/goodies-integrations.md) | `references/aerospace-raw/003-goodies.md` | SketchyBar, simple-bar, JankyBorders, macOS defaults, AppleScript, bundle IDs |
+| Goodies & Tweaks | [goodies-integrations](references/goodies-integrations.md) | `references/aerospace-raw/003-goodies.md` | SketchyBar (`subscribe` & monitor mapping), simple-bar, JankyBorders, macOS defaults, AppleScript, bundle IDs |
 | Cheatsheet | [cheatsheet](references/cheatsheet.md) | `references/aerospace-raw/` | Decision rules, CLI quick lookup, minimal TOML snippet, macOS checklist |
 | Raw Docs | [aerospace-raw](references/aerospace-raw/) | Converted Markdown & TOML | Complete uncurated guide, commands, goodies, and example configs |
 
